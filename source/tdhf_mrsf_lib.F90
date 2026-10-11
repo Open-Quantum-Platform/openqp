@@ -12,6 +12,7 @@ module tdhf_mrsf_lib
 
       ! Public result is also thread 1's density-dependent accumulator and
       ! the shared exchange image. It keeps one owner throughout every CAM pass.
+      ! Exchange updates synchronize only when multiple workers are active.
       real(kind=dp), allocatable :: f3(:,:,:,:,:)
       ! Workers 2..T own only their density-dependent channels (4 or 8).
       real(kind=dp), allocatable :: f3_private(:,:,:,:,:)
@@ -357,24 +358,37 @@ contains
             end do
             ! Exchange-only comps 5:7 retain FP32 operands and accumulation.
             do c = 5, 7
-              do v = 1, nf
-                !$omp atomic update
-                f3_exs(v,c-4,i,k) = f3_exs(v,c-4,i,k) - xs*d3_sp(v,c,j,l)
-                !$omp atomic update
-                f3_exs(v,c-4,k,i) = f3_exs(v,c-4,k,i) - xs*d3_sp(v,c,l,j)
-                !$omp atomic update
-                f3_exs(v,c-4,i,l) = f3_exs(v,c-4,i,l) - xs*d3_sp(v,c,j,k)
-                !$omp atomic update
-                f3_exs(v,c-4,l,i) = f3_exs(v,c-4,l,i) - xs*d3_sp(v,c,k,j)
-                !$omp atomic update
-                f3_exs(v,c-4,j,k) = f3_exs(v,c-4,j,k) - xs*d3_sp(v,c,i,l)
-                !$omp atomic update
-                f3_exs(v,c-4,k,j) = f3_exs(v,c-4,k,j) - xs*d3_sp(v,c,l,i)
-                !$omp atomic update
-                f3_exs(v,c-4,j,l) = f3_exs(v,c-4,j,l) - xs*d3_sp(v,c,i,k)
-                !$omp atomic update
-                f3_exs(v,c-4,l,j) = f3_exs(v,c-4,l,j) - xs*d3_sp(v,c,k,i)
-              end do
+              if (this%nthreads == 1) then
+                do v = 1, nf
+                  f3_exs(v,c-4,i,k) = f3_exs(v,c-4,i,k) - xs*d3_sp(v,c,j,l)
+                  f3_exs(v,c-4,k,i) = f3_exs(v,c-4,k,i) - xs*d3_sp(v,c,l,j)
+                  f3_exs(v,c-4,i,l) = f3_exs(v,c-4,i,l) - xs*d3_sp(v,c,j,k)
+                  f3_exs(v,c-4,l,i) = f3_exs(v,c-4,l,i) - xs*d3_sp(v,c,k,j)
+                  f3_exs(v,c-4,j,k) = f3_exs(v,c-4,j,k) - xs*d3_sp(v,c,i,l)
+                  f3_exs(v,c-4,k,j) = f3_exs(v,c-4,k,j) - xs*d3_sp(v,c,l,i)
+                  f3_exs(v,c-4,j,l) = f3_exs(v,c-4,j,l) - xs*d3_sp(v,c,i,k)
+                  f3_exs(v,c-4,l,j) = f3_exs(v,c-4,l,j) - xs*d3_sp(v,c,k,i)
+                end do
+              else
+                do v = 1, nf
+                  !$omp atomic update
+                  f3_exs(v,c-4,i,k) = f3_exs(v,c-4,i,k) - xs*d3_sp(v,c,j,l)
+                  !$omp atomic update
+                  f3_exs(v,c-4,k,i) = f3_exs(v,c-4,k,i) - xs*d3_sp(v,c,l,j)
+                  !$omp atomic update
+                  f3_exs(v,c-4,i,l) = f3_exs(v,c-4,i,l) - xs*d3_sp(v,c,j,k)
+                  !$omp atomic update
+                  f3_exs(v,c-4,l,i) = f3_exs(v,c-4,l,i) - xs*d3_sp(v,c,k,j)
+                  !$omp atomic update
+                  f3_exs(v,c-4,j,k) = f3_exs(v,c-4,j,k) - xs*d3_sp(v,c,i,l)
+                  !$omp atomic update
+                  f3_exs(v,c-4,k,j) = f3_exs(v,c-4,k,j) - xs*d3_sp(v,c,l,i)
+                  !$omp atomic update
+                  f3_exs(v,c-4,j,l) = f3_exs(v,c-4,j,l) - xs*d3_sp(v,c,i,k)
+                  !$omp atomic update
+                  f3_exs(v,c-4,l,j) = f3_exs(v,c-4,l,j) - xs*d3_sp(v,c,k,i)
+                end do
+              end if
             end do
           end do
           end associate
@@ -415,24 +429,37 @@ contains
           ! the SHARED buffer with ATOMIC updates.  These are exchange-only
           ! against the shared d3 density, so no per-thread replica is needed.
           do c = 5, 7
-            do v = 1, nf
-              !$omp atomic update
-              f3_ex(v,c-4,i,k) = f3_ex(v,c-4,i,k) - xval*d3(v,c,j,l)
-              !$omp atomic update
-              f3_ex(v,c-4,k,i) = f3_ex(v,c-4,k,i) - xval*d3(v,c,l,j)
-              !$omp atomic update
-              f3_ex(v,c-4,i,l) = f3_ex(v,c-4,i,l) - xval*d3(v,c,j,k)
-              !$omp atomic update
-              f3_ex(v,c-4,l,i) = f3_ex(v,c-4,l,i) - xval*d3(v,c,k,j)
-              !$omp atomic update
-              f3_ex(v,c-4,j,k) = f3_ex(v,c-4,j,k) - xval*d3(v,c,i,l)
-              !$omp atomic update
-              f3_ex(v,c-4,k,j) = f3_ex(v,c-4,k,j) - xval*d3(v,c,l,i)
-              !$omp atomic update
-              f3_ex(v,c-4,j,l) = f3_ex(v,c-4,j,l) - xval*d3(v,c,i,k)
-              !$omp atomic update
-              f3_ex(v,c-4,l,j) = f3_ex(v,c-4,l,j) - xval*d3(v,c,k,i)
-            end do
+            if (this%nthreads == 1) then
+              do v = 1, nf
+                f3_ex(v,c-4,i,k) = f3_ex(v,c-4,i,k) - xval*d3(v,c,j,l)
+                f3_ex(v,c-4,k,i) = f3_ex(v,c-4,k,i) - xval*d3(v,c,l,j)
+                f3_ex(v,c-4,i,l) = f3_ex(v,c-4,i,l) - xval*d3(v,c,j,k)
+                f3_ex(v,c-4,l,i) = f3_ex(v,c-4,l,i) - xval*d3(v,c,k,j)
+                f3_ex(v,c-4,j,k) = f3_ex(v,c-4,j,k) - xval*d3(v,c,i,l)
+                f3_ex(v,c-4,k,j) = f3_ex(v,c-4,k,j) - xval*d3(v,c,l,i)
+                f3_ex(v,c-4,j,l) = f3_ex(v,c-4,j,l) - xval*d3(v,c,i,k)
+                f3_ex(v,c-4,l,j) = f3_ex(v,c-4,l,j) - xval*d3(v,c,k,i)
+              end do
+            else
+              do v = 1, nf
+                !$omp atomic update
+                f3_ex(v,c-4,i,k) = f3_ex(v,c-4,i,k) - xval*d3(v,c,j,l)
+                !$omp atomic update
+                f3_ex(v,c-4,k,i) = f3_ex(v,c-4,k,i) - xval*d3(v,c,l,j)
+                !$omp atomic update
+                f3_ex(v,c-4,i,l) = f3_ex(v,c-4,i,l) - xval*d3(v,c,j,k)
+                !$omp atomic update
+                f3_ex(v,c-4,l,i) = f3_ex(v,c-4,l,i) - xval*d3(v,c,k,j)
+                !$omp atomic update
+                f3_ex(v,c-4,j,k) = f3_ex(v,c-4,j,k) - xval*d3(v,c,i,l)
+                !$omp atomic update
+                f3_ex(v,c-4,k,j) = f3_ex(v,c-4,k,j) - xval*d3(v,c,l,i)
+                !$omp atomic update
+                f3_ex(v,c-4,j,l) = f3_ex(v,c-4,j,l) - xval*d3(v,c,i,k)
+                !$omp atomic update
+                f3_ex(v,c-4,l,j) = f3_ex(v,c-4,l,j) - xval*d3(v,c,k,i)
+              end do
+            end if
           end do
         end do
 
@@ -442,24 +469,37 @@ contains
           xval = buf%ints(n) * this%scale_exchange
           ! Pass 2 updates only the general component agdlr (d3 channel 7,
           ! mapped to shared public channel 7). CAM short-range exchange.
-          do v = 1, nf
-            !$omp atomic update
-            f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,7,j,l)
-            !$omp atomic update
-            f3_ex(v,3,k,i) = f3_ex(v,3,k,i) - xval*d3(v,7,l,j)
-            !$omp atomic update
-            f3_ex(v,3,i,l) = f3_ex(v,3,i,l) - xval*d3(v,7,j,k)
-            !$omp atomic update
-            f3_ex(v,3,l,i) = f3_ex(v,3,l,i) - xval*d3(v,7,k,j)
-            !$omp atomic update
-            f3_ex(v,3,j,k) = f3_ex(v,3,j,k) - xval*d3(v,7,i,l)
-            !$omp atomic update
-            f3_ex(v,3,k,j) = f3_ex(v,3,k,j) - xval*d3(v,7,l,i)
-            !$omp atomic update
-            f3_ex(v,3,j,l) = f3_ex(v,3,j,l) - xval*d3(v,7,i,k)
-            !$omp atomic update
-            f3_ex(v,3,l,j) = f3_ex(v,3,l,j) - xval*d3(v,7,k,i)
-          end do
+          if (this%nthreads == 1) then
+            do v = 1, nf
+              f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,7,j,l)
+              f3_ex(v,3,k,i) = f3_ex(v,3,k,i) - xval*d3(v,7,l,j)
+              f3_ex(v,3,i,l) = f3_ex(v,3,i,l) - xval*d3(v,7,j,k)
+              f3_ex(v,3,l,i) = f3_ex(v,3,l,i) - xval*d3(v,7,k,j)
+              f3_ex(v,3,j,k) = f3_ex(v,3,j,k) - xval*d3(v,7,i,l)
+              f3_ex(v,3,k,j) = f3_ex(v,3,k,j) - xval*d3(v,7,l,i)
+              f3_ex(v,3,j,l) = f3_ex(v,3,j,l) - xval*d3(v,7,i,k)
+              f3_ex(v,3,l,j) = f3_ex(v,3,l,j) - xval*d3(v,7,k,i)
+            end do
+          else
+            do v = 1, nf
+              !$omp atomic update
+              f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,7,j,l)
+              !$omp atomic update
+              f3_ex(v,3,k,i) = f3_ex(v,3,k,i) - xval*d3(v,7,l,j)
+              !$omp atomic update
+              f3_ex(v,3,i,l) = f3_ex(v,3,i,l) - xval*d3(v,7,j,k)
+              !$omp atomic update
+              f3_ex(v,3,l,i) = f3_ex(v,3,l,i) - xval*d3(v,7,k,j)
+              !$omp atomic update
+              f3_ex(v,3,j,k) = f3_ex(v,3,j,k) - xval*d3(v,7,i,l)
+              !$omp atomic update
+              f3_ex(v,3,k,j) = f3_ex(v,3,k,j) - xval*d3(v,7,l,i)
+              !$omp atomic update
+              f3_ex(v,3,j,l) = f3_ex(v,3,j,l) - xval*d3(v,7,i,k)
+              !$omp atomic update
+              f3_ex(v,3,l,j) = f3_ex(v,3,l,j) - xval*d3(v,7,k,i)
+            end do
+          end if
         end do
       end if
 
@@ -544,45 +584,71 @@ contains
           end do
 
           ! Exchange-only channel 11 (agdlr) — shared atomic.
-          do v = 1, nf
-            !$omp atomic update
-            f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,11,j,l)
-            !$omp atomic update
-            f3_ex(v,3,k,i) = f3_ex(v,3,k,i) - xval*d3(v,11,l,j)
-            !$omp atomic update
-            f3_ex(v,3,i,l) = f3_ex(v,3,i,l) - xval*d3(v,11,j,k)
-            !$omp atomic update
-            f3_ex(v,3,l,i) = f3_ex(v,3,l,i) - xval*d3(v,11,k,j)
-            !$omp atomic update
-            f3_ex(v,3,j,k) = f3_ex(v,3,j,k) - xval*d3(v,11,i,l)
-            !$omp atomic update
-            f3_ex(v,3,k,j) = f3_ex(v,3,k,j) - xval*d3(v,11,l,i)
-            !$omp atomic update
-            f3_ex(v,3,j,l) = f3_ex(v,3,j,l) - xval*d3(v,11,i,k)
-            !$omp atomic update
-            f3_ex(v,3,l,j) = f3_ex(v,3,l,j) - xval*d3(v,11,k,i)
-          end do
+          if (this%nthreads == 1) then
+            do v = 1, nf
+              f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,11,j,l)
+              f3_ex(v,3,k,i) = f3_ex(v,3,k,i) - xval*d3(v,11,l,j)
+              f3_ex(v,3,i,l) = f3_ex(v,3,i,l) - xval*d3(v,11,j,k)
+              f3_ex(v,3,l,i) = f3_ex(v,3,l,i) - xval*d3(v,11,k,j)
+              f3_ex(v,3,j,k) = f3_ex(v,3,j,k) - xval*d3(v,11,i,l)
+              f3_ex(v,3,k,j) = f3_ex(v,3,k,j) - xval*d3(v,11,l,i)
+              f3_ex(v,3,j,l) = f3_ex(v,3,j,l) - xval*d3(v,11,i,k)
+              f3_ex(v,3,l,j) = f3_ex(v,3,l,j) - xval*d3(v,11,k,i)
+            end do
+          else
+            do v = 1, nf
+              !$omp atomic update
+              f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,11,j,l)
+              !$omp atomic update
+              f3_ex(v,3,k,i) = f3_ex(v,3,k,i) - xval*d3(v,11,l,j)
+              !$omp atomic update
+              f3_ex(v,3,i,l) = f3_ex(v,3,i,l) - xval*d3(v,11,j,k)
+              !$omp atomic update
+              f3_ex(v,3,l,i) = f3_ex(v,3,l,i) - xval*d3(v,11,k,j)
+              !$omp atomic update
+              f3_ex(v,3,j,k) = f3_ex(v,3,j,k) - xval*d3(v,11,i,l)
+              !$omp atomic update
+              f3_ex(v,3,k,j) = f3_ex(v,3,k,j) - xval*d3(v,11,l,i)
+              !$omp atomic update
+              f3_ex(v,3,j,l) = f3_ex(v,3,j,l) - xval*d3(v,11,i,k)
+              !$omp atomic update
+              f3_ex(v,3,l,j) = f3_ex(v,3,l,j) - xval*d3(v,11,k,i)
+            end do
+          end if
 
           ! Mixed alpha/beta spin-pair channels (9:10) — shared atomic.
           do c = 9, 10
-            do v = 1, nf
-              !$omp atomic update
-              f3_ex(v,c-8,i,l) = f3_ex(v,c-8,i,l) - xval*d3(v,c,k,j)
-              !$omp atomic update
-              f3_ex(v,c-8,l,i) = f3_ex(v,c-8,l,i) - xval*d3(v,c,j,k)
-              !$omp atomic update
-              f3_ex(v,c-8,k,j) = f3_ex(v,c-8,k,j) - xval*d3(v,c,i,l)
-              !$omp atomic update
-              f3_ex(v,c-8,j,k) = f3_ex(v,c-8,j,k) - xval*d3(v,c,l,i)
-              !$omp atomic update
-              f3_ex(v,c-8,i,k) = f3_ex(v,c-8,i,k) - xval*d3(v,c,l,j)
-              !$omp atomic update
-              f3_ex(v,c-8,k,i) = f3_ex(v,c-8,k,i) - xval*d3(v,c,j,l)
-              !$omp atomic update
-              f3_ex(v,c-8,l,j) = f3_ex(v,c-8,l,j) - xval*d3(v,c,i,k)
-              !$omp atomic update
-              f3_ex(v,c-8,j,l) = f3_ex(v,c-8,j,l) - xval*d3(v,c,k,i)
-            end do
+            if (this%nthreads == 1) then
+              do v = 1, nf
+                f3_ex(v,c-8,i,l) = f3_ex(v,c-8,i,l) - xval*d3(v,c,k,j)
+                f3_ex(v,c-8,l,i) = f3_ex(v,c-8,l,i) - xval*d3(v,c,j,k)
+                f3_ex(v,c-8,k,j) = f3_ex(v,c-8,k,j) - xval*d3(v,c,i,l)
+                f3_ex(v,c-8,j,k) = f3_ex(v,c-8,j,k) - xval*d3(v,c,l,i)
+                f3_ex(v,c-8,i,k) = f3_ex(v,c-8,i,k) - xval*d3(v,c,l,j)
+                f3_ex(v,c-8,k,i) = f3_ex(v,c-8,k,i) - xval*d3(v,c,j,l)
+                f3_ex(v,c-8,l,j) = f3_ex(v,c-8,l,j) - xval*d3(v,c,i,k)
+                f3_ex(v,c-8,j,l) = f3_ex(v,c-8,j,l) - xval*d3(v,c,k,i)
+              end do
+            else
+              do v = 1, nf
+                !$omp atomic update
+                f3_ex(v,c-8,i,l) = f3_ex(v,c-8,i,l) - xval*d3(v,c,k,j)
+                !$omp atomic update
+                f3_ex(v,c-8,l,i) = f3_ex(v,c-8,l,i) - xval*d3(v,c,j,k)
+                !$omp atomic update
+                f3_ex(v,c-8,k,j) = f3_ex(v,c-8,k,j) - xval*d3(v,c,i,l)
+                !$omp atomic update
+                f3_ex(v,c-8,j,k) = f3_ex(v,c-8,j,k) - xval*d3(v,c,l,i)
+                !$omp atomic update
+                f3_ex(v,c-8,i,k) = f3_ex(v,c-8,i,k) - xval*d3(v,c,l,j)
+                !$omp atomic update
+                f3_ex(v,c-8,k,i) = f3_ex(v,c-8,k,i) - xval*d3(v,c,j,l)
+                !$omp atomic update
+                f3_ex(v,c-8,l,j) = f3_ex(v,c-8,l,j) - xval*d3(v,c,i,k)
+                !$omp atomic update
+                f3_ex(v,c-8,j,l) = f3_ex(v,c-8,j,l) - xval*d3(v,c,k,i)
+              end do
+            end if
           end do
         end do
 
@@ -591,24 +657,37 @@ contains
         do n = 1, buf%ncur
           i = buf%ids(1,n); j = buf%ids(2,n); k = buf%ids(3,n); l = buf%ids(4,n)
           xval = buf%ints(n) * this%scale_exchange
-          do v = 1, nf
-            !$omp atomic update
-            f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,11,j,l)
-            !$omp atomic update
-            f3_ex(v,3,k,i) = f3_ex(v,3,k,i) - xval*d3(v,11,l,j)
-            !$omp atomic update
-            f3_ex(v,3,i,l) = f3_ex(v,3,i,l) - xval*d3(v,11,j,k)
-            !$omp atomic update
-            f3_ex(v,3,l,i) = f3_ex(v,3,l,i) - xval*d3(v,11,k,j)
-            !$omp atomic update
-            f3_ex(v,3,j,k) = f3_ex(v,3,j,k) - xval*d3(v,11,i,l)
-            !$omp atomic update
-            f3_ex(v,3,k,j) = f3_ex(v,3,k,j) - xval*d3(v,11,l,i)
-            !$omp atomic update
-            f3_ex(v,3,j,l) = f3_ex(v,3,j,l) - xval*d3(v,11,i,k)
-            !$omp atomic update
-            f3_ex(v,3,l,j) = f3_ex(v,3,l,j) - xval*d3(v,11,k,i)
-          end do
+          if (this%nthreads == 1) then
+            do v = 1, nf
+              f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,11,j,l)
+              f3_ex(v,3,k,i) = f3_ex(v,3,k,i) - xval*d3(v,11,l,j)
+              f3_ex(v,3,i,l) = f3_ex(v,3,i,l) - xval*d3(v,11,j,k)
+              f3_ex(v,3,l,i) = f3_ex(v,3,l,i) - xval*d3(v,11,k,j)
+              f3_ex(v,3,j,k) = f3_ex(v,3,j,k) - xval*d3(v,11,i,l)
+              f3_ex(v,3,k,j) = f3_ex(v,3,k,j) - xval*d3(v,11,l,i)
+              f3_ex(v,3,j,l) = f3_ex(v,3,j,l) - xval*d3(v,11,i,k)
+              f3_ex(v,3,l,j) = f3_ex(v,3,l,j) - xval*d3(v,11,k,i)
+            end do
+          else
+            do v = 1, nf
+              !$omp atomic update
+              f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,11,j,l)
+              !$omp atomic update
+              f3_ex(v,3,k,i) = f3_ex(v,3,k,i) - xval*d3(v,11,l,j)
+              !$omp atomic update
+              f3_ex(v,3,i,l) = f3_ex(v,3,i,l) - xval*d3(v,11,j,k)
+              !$omp atomic update
+              f3_ex(v,3,l,i) = f3_ex(v,3,l,i) - xval*d3(v,11,k,j)
+              !$omp atomic update
+              f3_ex(v,3,j,k) = f3_ex(v,3,j,k) - xval*d3(v,11,i,l)
+              !$omp atomic update
+              f3_ex(v,3,k,j) = f3_ex(v,3,k,j) - xval*d3(v,11,l,i)
+              !$omp atomic update
+              f3_ex(v,3,j,l) = f3_ex(v,3,j,l) - xval*d3(v,11,i,k)
+              !$omp atomic update
+              f3_ex(v,3,l,j) = f3_ex(v,3,l,j) - xval*d3(v,11,k,i)
+            end do
+          end if
         end do
       end if
 
@@ -4261,24 +4340,37 @@ contains
             end do
             ! Exchange-only comps 5:7 retain FP32 operands and accumulation.
             do c = 5, 7
-              do v = 1, nf
-                !$omp atomic update
-                f3_exs(v,c-4,i,k) = f3_exs(v,c-4,i,k) - xs*d3_sp(v,c,j,l)
-                !$omp atomic update
-                f3_exs(v,c-4,k,i) = f3_exs(v,c-4,k,i) - xs*d3_sp(v,c,l,j)
-                !$omp atomic update
-                f3_exs(v,c-4,i,l) = f3_exs(v,c-4,i,l) - xs*d3_sp(v,c,j,k)
-                !$omp atomic update
-                f3_exs(v,c-4,l,i) = f3_exs(v,c-4,l,i) - xs*d3_sp(v,c,k,j)
-                !$omp atomic update
-                f3_exs(v,c-4,j,k) = f3_exs(v,c-4,j,k) - xs*d3_sp(v,c,i,l)
-                !$omp atomic update
-                f3_exs(v,c-4,k,j) = f3_exs(v,c-4,k,j) - xs*d3_sp(v,c,l,i)
-                !$omp atomic update
-                f3_exs(v,c-4,j,l) = f3_exs(v,c-4,j,l) - xs*d3_sp(v,c,i,k)
-                !$omp atomic update
-                f3_exs(v,c-4,l,j) = f3_exs(v,c-4,l,j) - xs*d3_sp(v,c,k,i)
-              end do
+              if (this%nthreads == 1) then
+                do v = 1, nf
+                  f3_exs(v,c-4,i,k) = f3_exs(v,c-4,i,k) - xs*d3_sp(v,c,j,l)
+                  f3_exs(v,c-4,k,i) = f3_exs(v,c-4,k,i) - xs*d3_sp(v,c,l,j)
+                  f3_exs(v,c-4,i,l) = f3_exs(v,c-4,i,l) - xs*d3_sp(v,c,j,k)
+                  f3_exs(v,c-4,l,i) = f3_exs(v,c-4,l,i) - xs*d3_sp(v,c,k,j)
+                  f3_exs(v,c-4,j,k) = f3_exs(v,c-4,j,k) - xs*d3_sp(v,c,i,l)
+                  f3_exs(v,c-4,k,j) = f3_exs(v,c-4,k,j) - xs*d3_sp(v,c,l,i)
+                  f3_exs(v,c-4,j,l) = f3_exs(v,c-4,j,l) - xs*d3_sp(v,c,i,k)
+                  f3_exs(v,c-4,l,j) = f3_exs(v,c-4,l,j) - xs*d3_sp(v,c,k,i)
+                end do
+              else
+                do v = 1, nf
+                  !$omp atomic update
+                  f3_exs(v,c-4,i,k) = f3_exs(v,c-4,i,k) - xs*d3_sp(v,c,j,l)
+                  !$omp atomic update
+                  f3_exs(v,c-4,k,i) = f3_exs(v,c-4,k,i) - xs*d3_sp(v,c,l,j)
+                  !$omp atomic update
+                  f3_exs(v,c-4,i,l) = f3_exs(v,c-4,i,l) - xs*d3_sp(v,c,j,k)
+                  !$omp atomic update
+                  f3_exs(v,c-4,l,i) = f3_exs(v,c-4,l,i) - xs*d3_sp(v,c,k,j)
+                  !$omp atomic update
+                  f3_exs(v,c-4,j,k) = f3_exs(v,c-4,j,k) - xs*d3_sp(v,c,i,l)
+                  !$omp atomic update
+                  f3_exs(v,c-4,k,j) = f3_exs(v,c-4,k,j) - xs*d3_sp(v,c,l,i)
+                  !$omp atomic update
+                  f3_exs(v,c-4,j,l) = f3_exs(v,c-4,j,l) - xs*d3_sp(v,c,i,k)
+                  !$omp atomic update
+                  f3_exs(v,c-4,l,j) = f3_exs(v,c-4,l,j) - xs*d3_sp(v,c,k,i)
+                end do
+              end if
             end do
               end do
             end do
@@ -4354,24 +4446,37 @@ contains
           ! the SHARED buffer with ATOMIC updates.  These are exchange-only
           ! against the shared d3 density, so no per-thread replica is needed.
           do c = 5, 7
-            do v = 1, nf
-              !$omp atomic update
-              f3_ex(v,c-4,i,k) = f3_ex(v,c-4,i,k) - xval*d3(v,c,j,l)
-              !$omp atomic update
-              f3_ex(v,c-4,k,i) = f3_ex(v,c-4,k,i) - xval*d3(v,c,l,j)
-              !$omp atomic update
-              f3_ex(v,c-4,i,l) = f3_ex(v,c-4,i,l) - xval*d3(v,c,j,k)
-              !$omp atomic update
-              f3_ex(v,c-4,l,i) = f3_ex(v,c-4,l,i) - xval*d3(v,c,k,j)
-              !$omp atomic update
-              f3_ex(v,c-4,j,k) = f3_ex(v,c-4,j,k) - xval*d3(v,c,i,l)
-              !$omp atomic update
-              f3_ex(v,c-4,k,j) = f3_ex(v,c-4,k,j) - xval*d3(v,c,l,i)
-              !$omp atomic update
-              f3_ex(v,c-4,j,l) = f3_ex(v,c-4,j,l) - xval*d3(v,c,i,k)
-              !$omp atomic update
-              f3_ex(v,c-4,l,j) = f3_ex(v,c-4,l,j) - xval*d3(v,c,k,i)
-            end do
+            if (this%nthreads == 1) then
+              do v = 1, nf
+                f3_ex(v,c-4,i,k) = f3_ex(v,c-4,i,k) - xval*d3(v,c,j,l)
+                f3_ex(v,c-4,k,i) = f3_ex(v,c-4,k,i) - xval*d3(v,c,l,j)
+                f3_ex(v,c-4,i,l) = f3_ex(v,c-4,i,l) - xval*d3(v,c,j,k)
+                f3_ex(v,c-4,l,i) = f3_ex(v,c-4,l,i) - xval*d3(v,c,k,j)
+                f3_ex(v,c-4,j,k) = f3_ex(v,c-4,j,k) - xval*d3(v,c,i,l)
+                f3_ex(v,c-4,k,j) = f3_ex(v,c-4,k,j) - xval*d3(v,c,l,i)
+                f3_ex(v,c-4,j,l) = f3_ex(v,c-4,j,l) - xval*d3(v,c,i,k)
+                f3_ex(v,c-4,l,j) = f3_ex(v,c-4,l,j) - xval*d3(v,c,k,i)
+              end do
+            else
+              do v = 1, nf
+                !$omp atomic update
+                f3_ex(v,c-4,i,k) = f3_ex(v,c-4,i,k) - xval*d3(v,c,j,l)
+                !$omp atomic update
+                f3_ex(v,c-4,k,i) = f3_ex(v,c-4,k,i) - xval*d3(v,c,l,j)
+                !$omp atomic update
+                f3_ex(v,c-4,i,l) = f3_ex(v,c-4,i,l) - xval*d3(v,c,j,k)
+                !$omp atomic update
+                f3_ex(v,c-4,l,i) = f3_ex(v,c-4,l,i) - xval*d3(v,c,k,j)
+                !$omp atomic update
+                f3_ex(v,c-4,j,k) = f3_ex(v,c-4,j,k) - xval*d3(v,c,i,l)
+                !$omp atomic update
+                f3_ex(v,c-4,k,j) = f3_ex(v,c-4,k,j) - xval*d3(v,c,l,i)
+                !$omp atomic update
+                f3_ex(v,c-4,j,l) = f3_ex(v,c-4,j,l) - xval*d3(v,c,i,k)
+                !$omp atomic update
+                f3_ex(v,c-4,l,j) = f3_ex(v,c-4,l,j) - xval*d3(v,c,k,i)
+              end do
+            end if
           end do
               end do
             end do
@@ -4415,24 +4520,37 @@ contains
                 end if
 
           xval = val * this%scale_exchange
-          do v = 1, nf
-            !$omp atomic update
-            f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,7,j,l)
-            !$omp atomic update
-            f3_ex(v,3,k,i) = f3_ex(v,3,k,i) - xval*d3(v,7,l,j)
-            !$omp atomic update
-            f3_ex(v,3,i,l) = f3_ex(v,3,i,l) - xval*d3(v,7,j,k)
-            !$omp atomic update
-            f3_ex(v,3,l,i) = f3_ex(v,3,l,i) - xval*d3(v,7,k,j)
-            !$omp atomic update
-            f3_ex(v,3,j,k) = f3_ex(v,3,j,k) - xval*d3(v,7,i,l)
-            !$omp atomic update
-            f3_ex(v,3,k,j) = f3_ex(v,3,k,j) - xval*d3(v,7,l,i)
-            !$omp atomic update
-            f3_ex(v,3,j,l) = f3_ex(v,3,j,l) - xval*d3(v,7,i,k)
-            !$omp atomic update
-            f3_ex(v,3,l,j) = f3_ex(v,3,l,j) - xval*d3(v,7,k,i)
-          end do
+          if (this%nthreads == 1) then
+            do v = 1, nf
+              f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,7,j,l)
+              f3_ex(v,3,k,i) = f3_ex(v,3,k,i) - xval*d3(v,7,l,j)
+              f3_ex(v,3,i,l) = f3_ex(v,3,i,l) - xval*d3(v,7,j,k)
+              f3_ex(v,3,l,i) = f3_ex(v,3,l,i) - xval*d3(v,7,k,j)
+              f3_ex(v,3,j,k) = f3_ex(v,3,j,k) - xval*d3(v,7,i,l)
+              f3_ex(v,3,k,j) = f3_ex(v,3,k,j) - xval*d3(v,7,l,i)
+              f3_ex(v,3,j,l) = f3_ex(v,3,j,l) - xval*d3(v,7,i,k)
+              f3_ex(v,3,l,j) = f3_ex(v,3,l,j) - xval*d3(v,7,k,i)
+            end do
+          else
+            do v = 1, nf
+              !$omp atomic update
+              f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,7,j,l)
+              !$omp atomic update
+              f3_ex(v,3,k,i) = f3_ex(v,3,k,i) - xval*d3(v,7,l,j)
+              !$omp atomic update
+              f3_ex(v,3,i,l) = f3_ex(v,3,i,l) - xval*d3(v,7,j,k)
+              !$omp atomic update
+              f3_ex(v,3,l,i) = f3_ex(v,3,l,i) - xval*d3(v,7,k,j)
+              !$omp atomic update
+              f3_ex(v,3,j,k) = f3_ex(v,3,j,k) - xval*d3(v,7,i,l)
+              !$omp atomic update
+              f3_ex(v,3,k,j) = f3_ex(v,3,k,j) - xval*d3(v,7,l,i)
+              !$omp atomic update
+              f3_ex(v,3,j,l) = f3_ex(v,3,j,l) - xval*d3(v,7,i,k)
+              !$omp atomic update
+              f3_ex(v,3,l,j) = f3_ex(v,3,l,j) - xval*d3(v,7,k,i)
+            end do
+          end if
               end do
             end do
           end do
@@ -4558,45 +4676,71 @@ contains
           end do
 
           ! Exchange-only channel 11 (agdlr) — shared atomic.
-          do v = 1, nf
-            !$omp atomic update
-            f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,11,j,l)
-            !$omp atomic update
-            f3_ex(v,3,k,i) = f3_ex(v,3,k,i) - xval*d3(v,11,l,j)
-            !$omp atomic update
-            f3_ex(v,3,i,l) = f3_ex(v,3,i,l) - xval*d3(v,11,j,k)
-            !$omp atomic update
-            f3_ex(v,3,l,i) = f3_ex(v,3,l,i) - xval*d3(v,11,k,j)
-            !$omp atomic update
-            f3_ex(v,3,j,k) = f3_ex(v,3,j,k) - xval*d3(v,11,i,l)
-            !$omp atomic update
-            f3_ex(v,3,k,j) = f3_ex(v,3,k,j) - xval*d3(v,11,l,i)
-            !$omp atomic update
-            f3_ex(v,3,j,l) = f3_ex(v,3,j,l) - xval*d3(v,11,i,k)
-            !$omp atomic update
-            f3_ex(v,3,l,j) = f3_ex(v,3,l,j) - xval*d3(v,11,k,i)
-          end do
+          if (this%nthreads == 1) then
+            do v = 1, nf
+              f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,11,j,l)
+              f3_ex(v,3,k,i) = f3_ex(v,3,k,i) - xval*d3(v,11,l,j)
+              f3_ex(v,3,i,l) = f3_ex(v,3,i,l) - xval*d3(v,11,j,k)
+              f3_ex(v,3,l,i) = f3_ex(v,3,l,i) - xval*d3(v,11,k,j)
+              f3_ex(v,3,j,k) = f3_ex(v,3,j,k) - xval*d3(v,11,i,l)
+              f3_ex(v,3,k,j) = f3_ex(v,3,k,j) - xval*d3(v,11,l,i)
+              f3_ex(v,3,j,l) = f3_ex(v,3,j,l) - xval*d3(v,11,i,k)
+              f3_ex(v,3,l,j) = f3_ex(v,3,l,j) - xval*d3(v,11,k,i)
+            end do
+          else
+            do v = 1, nf
+              !$omp atomic update
+              f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,11,j,l)
+              !$omp atomic update
+              f3_ex(v,3,k,i) = f3_ex(v,3,k,i) - xval*d3(v,11,l,j)
+              !$omp atomic update
+              f3_ex(v,3,i,l) = f3_ex(v,3,i,l) - xval*d3(v,11,j,k)
+              !$omp atomic update
+              f3_ex(v,3,l,i) = f3_ex(v,3,l,i) - xval*d3(v,11,k,j)
+              !$omp atomic update
+              f3_ex(v,3,j,k) = f3_ex(v,3,j,k) - xval*d3(v,11,i,l)
+              !$omp atomic update
+              f3_ex(v,3,k,j) = f3_ex(v,3,k,j) - xval*d3(v,11,l,i)
+              !$omp atomic update
+              f3_ex(v,3,j,l) = f3_ex(v,3,j,l) - xval*d3(v,11,i,k)
+              !$omp atomic update
+              f3_ex(v,3,l,j) = f3_ex(v,3,l,j) - xval*d3(v,11,k,i)
+            end do
+          end if
 
           ! Mixed alpha/beta spin-pair channels (9:10) — shared atomic.
           do c = 9, 10
-            do v = 1, nf
-              !$omp atomic update
-              f3_ex(v,c-8,i,l) = f3_ex(v,c-8,i,l) - xval*d3(v,c,k,j)
-              !$omp atomic update
-              f3_ex(v,c-8,l,i) = f3_ex(v,c-8,l,i) - xval*d3(v,c,j,k)
-              !$omp atomic update
-              f3_ex(v,c-8,k,j) = f3_ex(v,c-8,k,j) - xval*d3(v,c,i,l)
-              !$omp atomic update
-              f3_ex(v,c-8,j,k) = f3_ex(v,c-8,j,k) - xval*d3(v,c,l,i)
-              !$omp atomic update
-              f3_ex(v,c-8,i,k) = f3_ex(v,c-8,i,k) - xval*d3(v,c,l,j)
-              !$omp atomic update
-              f3_ex(v,c-8,k,i) = f3_ex(v,c-8,k,i) - xval*d3(v,c,j,l)
-              !$omp atomic update
-              f3_ex(v,c-8,l,j) = f3_ex(v,c-8,l,j) - xval*d3(v,c,i,k)
-              !$omp atomic update
-              f3_ex(v,c-8,j,l) = f3_ex(v,c-8,j,l) - xval*d3(v,c,k,i)
-            end do
+            if (this%nthreads == 1) then
+              do v = 1, nf
+                f3_ex(v,c-8,i,l) = f3_ex(v,c-8,i,l) - xval*d3(v,c,k,j)
+                f3_ex(v,c-8,l,i) = f3_ex(v,c-8,l,i) - xval*d3(v,c,j,k)
+                f3_ex(v,c-8,k,j) = f3_ex(v,c-8,k,j) - xval*d3(v,c,i,l)
+                f3_ex(v,c-8,j,k) = f3_ex(v,c-8,j,k) - xval*d3(v,c,l,i)
+                f3_ex(v,c-8,i,k) = f3_ex(v,c-8,i,k) - xval*d3(v,c,l,j)
+                f3_ex(v,c-8,k,i) = f3_ex(v,c-8,k,i) - xval*d3(v,c,j,l)
+                f3_ex(v,c-8,l,j) = f3_ex(v,c-8,l,j) - xval*d3(v,c,i,k)
+                f3_ex(v,c-8,j,l) = f3_ex(v,c-8,j,l) - xval*d3(v,c,k,i)
+              end do
+            else
+              do v = 1, nf
+                !$omp atomic update
+                f3_ex(v,c-8,i,l) = f3_ex(v,c-8,i,l) - xval*d3(v,c,k,j)
+                !$omp atomic update
+                f3_ex(v,c-8,l,i) = f3_ex(v,c-8,l,i) - xval*d3(v,c,j,k)
+                !$omp atomic update
+                f3_ex(v,c-8,k,j) = f3_ex(v,c-8,k,j) - xval*d3(v,c,i,l)
+                !$omp atomic update
+                f3_ex(v,c-8,j,k) = f3_ex(v,c-8,j,k) - xval*d3(v,c,l,i)
+                !$omp atomic update
+                f3_ex(v,c-8,i,k) = f3_ex(v,c-8,i,k) - xval*d3(v,c,l,j)
+                !$omp atomic update
+                f3_ex(v,c-8,k,i) = f3_ex(v,c-8,k,i) - xval*d3(v,c,j,l)
+                !$omp atomic update
+                f3_ex(v,c-8,l,j) = f3_ex(v,c-8,l,j) - xval*d3(v,c,i,k)
+                !$omp atomic update
+                f3_ex(v,c-8,j,l) = f3_ex(v,c-8,j,l) - xval*d3(v,c,k,i)
+              end do
+            end if
           end do
               end do
             end do
@@ -4642,24 +4786,37 @@ contains
                 end if
 
           xval = val * this%scale_exchange
-          do v = 1, nf
-            !$omp atomic update
-            f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,11,j,l)
-            !$omp atomic update
-            f3_ex(v,3,k,i) = f3_ex(v,3,k,i) - xval*d3(v,11,l,j)
-            !$omp atomic update
-            f3_ex(v,3,i,l) = f3_ex(v,3,i,l) - xval*d3(v,11,j,k)
-            !$omp atomic update
-            f3_ex(v,3,l,i) = f3_ex(v,3,l,i) - xval*d3(v,11,k,j)
-            !$omp atomic update
-            f3_ex(v,3,j,k) = f3_ex(v,3,j,k) - xval*d3(v,11,i,l)
-            !$omp atomic update
-            f3_ex(v,3,k,j) = f3_ex(v,3,k,j) - xval*d3(v,11,l,i)
-            !$omp atomic update
-            f3_ex(v,3,j,l) = f3_ex(v,3,j,l) - xval*d3(v,11,i,k)
-            !$omp atomic update
-            f3_ex(v,3,l,j) = f3_ex(v,3,l,j) - xval*d3(v,11,k,i)
-          end do
+          if (this%nthreads == 1) then
+            do v = 1, nf
+              f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,11,j,l)
+              f3_ex(v,3,k,i) = f3_ex(v,3,k,i) - xval*d3(v,11,l,j)
+              f3_ex(v,3,i,l) = f3_ex(v,3,i,l) - xval*d3(v,11,j,k)
+              f3_ex(v,3,l,i) = f3_ex(v,3,l,i) - xval*d3(v,11,k,j)
+              f3_ex(v,3,j,k) = f3_ex(v,3,j,k) - xval*d3(v,11,i,l)
+              f3_ex(v,3,k,j) = f3_ex(v,3,k,j) - xval*d3(v,11,l,i)
+              f3_ex(v,3,j,l) = f3_ex(v,3,j,l) - xval*d3(v,11,i,k)
+              f3_ex(v,3,l,j) = f3_ex(v,3,l,j) - xval*d3(v,11,k,i)
+            end do
+          else
+            do v = 1, nf
+              !$omp atomic update
+              f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,11,j,l)
+              !$omp atomic update
+              f3_ex(v,3,k,i) = f3_ex(v,3,k,i) - xval*d3(v,11,l,j)
+              !$omp atomic update
+              f3_ex(v,3,i,l) = f3_ex(v,3,i,l) - xval*d3(v,11,j,k)
+              !$omp atomic update
+              f3_ex(v,3,l,i) = f3_ex(v,3,l,i) - xval*d3(v,11,k,j)
+              !$omp atomic update
+              f3_ex(v,3,j,k) = f3_ex(v,3,j,k) - xval*d3(v,11,i,l)
+              !$omp atomic update
+              f3_ex(v,3,k,j) = f3_ex(v,3,k,j) - xval*d3(v,11,l,i)
+              !$omp atomic update
+              f3_ex(v,3,j,l) = f3_ex(v,3,j,l) - xval*d3(v,11,i,k)
+              !$omp atomic update
+              f3_ex(v,3,l,j) = f3_ex(v,3,l,j) - xval*d3(v,11,k,i)
+            end do
+          end if
               end do
             end do
           end do

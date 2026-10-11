@@ -5,10 +5,40 @@ For a compiled MPI package also run with mpiexec -n 2 and
 OQP_SHARED_REQUIRE_MPI=1; a serial library fails that mode, rather than skipping.
 """
 import os
+import re
 import unittest
+from pathlib import Path
 
 
 class SharedMRSFFockTests(unittest.TestCase):
+    def test_single_thread_exchange_has_no_atomic_updates(self):
+        """Reject serial synchronization without timing-dependent assertions.
+
+        The signed native oracle separately executes both thread-count branches.
+        Here every atomic loop must have an identical ordinary serial branch.
+        """
+        source = (Path(__file__).resolve().parents[1] /
+                  "source" / "tdhf_mrsf_lib.F90").read_text()
+        for name in ("int2_mrsf_update_worker", "int2_umrsf_update_worker",
+                     "int2_mrsf_shell_worker", "int2_umrsf_shell_worker"):
+            with self.subTest(worker=name):
+                worker = re.search(r"(?ms)^  subroutine " + name +
+                                   r"\(.*?^  end subroutine[^\n]*", source).group()
+                dispatches = list(re.finditer(
+                    r"(?ms)^([ \t]*)if \(this%nthreads == 1\) then\n"
+                    r"(.*?)^\1else\n(.*?)^\1end if", worker))
+                self.assertTrue(dispatches, "serial exchange dispatch is absent")
+                covered = 0
+                for dispatch in dispatches:
+                    ordinary, atomic = dispatch.group(2), dispatch.group(3)
+                    self.assertNotIn("!$omp atomic", ordinary)
+                    covered += atomic.count("!$omp atomic update")
+                    stripped = "\n".join(line for line in atomic.splitlines()
+                                         if "!$omp atomic update" not in line)
+                    self.assertEqual(ordinary.rstrip(), stripped.rstrip())
+                self.assertEqual(covered, worker.count("!$omp atomic update"),
+                                 "atomic exchange can run without serial dispatch")
+
     def test_signed_channels_fp32_cam_resize_and_cleanup(self):
         import oqp
 
