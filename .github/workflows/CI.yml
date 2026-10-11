@@ -73,9 +73,10 @@ jobs:
            with:
             path: ~/.cache/openqp/externals
             # Debug (arm) keeps the original key, so it reuses the existing cache.
-            key: oqp-externals-${{ matrix.os }}-gcc${{ steps.toolchain.outputs.gcc }}-openblas64-${{ contains(matrix.os, 'arm') && '' || 'relwithdebinfo-' }}${{ hashFiles('external/CMakeLists.txt') }}
+            # (An empty string is falsy in expressions, so the empty branch goes last.)
+            key: oqp-externals-${{ matrix.os }}-gcc${{ steps.toolchain.outputs.gcc }}-openblas64-${{ !contains(matrix.os, 'arm') && 'relwithdebinfo-' || '' }}${{ hashFiles('external/CMakeLists.txt') }}
             restore-keys: |
-               oqp-externals-${{ matrix.os }}-gcc${{ steps.toolchain.outputs.gcc }}-openblas64-${{ contains(matrix.os, 'arm') && '' || 'relwithdebinfo-' }}
+               oqp-externals-${{ matrix.os }}-gcc${{ steps.toolchain.outputs.gcc }}-openblas64-${{ !contains(matrix.os, 'arm') && 'relwithdebinfo-' || '' }}
          - name: Install OpenBLAS (ubuntu-latest)
            if: ${{ matrix.os == 'ubuntu-latest' || contains(matrix.os, 'ubuntu-24.04') }}
            run: |
