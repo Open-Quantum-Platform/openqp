@@ -96,10 +96,11 @@ contains
     end if
     call tagarray_get_data(infos%dat,OQP_TD_XPY,xpy); call tagarray_get_data(infos%dat,OQP_TD_XMY,xmy)
     call tagarray_get_data(infos%dat,OQP_TD_Z,zstore); call tagarray_get_data(infos%dat,OQP_TD_ENERGIES,energies)
-    if(.not.tdhf_hessian_lowest_root_is_isolated(energies,1.0e-10_dp)) then
-      call show_message('Analytic TD Hessian requires at least two computed excited '// &
-                        'roots and an isolated lowest root; use tdhf.nstate>=2 or a '// &
-                        'numerical Hessian.',WITH_ABORT)
+    if(.not.tdhf_hessian_lowest_root_is_isolated(energies,1.0e-10_dp,nexc)) then
+      call show_message('Analytic TD Hessian requires an isolated lowest root: '// &
+                        'compute at least two excited roots (tdhf.nstate>=2) unless '// &
+                        'the response space holds a single root, or use a numerical Hessian.', &
+                        WITH_ABORT)
     end if
     ! The coupled solver stores its first block in the A-B channel and its
     ! second block in the A+B channel.  OpenQP tags these as X-Y and X+Y,

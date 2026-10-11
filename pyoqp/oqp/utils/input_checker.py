@@ -7297,7 +7297,6 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
     scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
     td_multiplicity = _get(config, "tdhf", "multiplicity", 1)
-    td_nstate = int(_get(config, "tdhf", "nstate", 1))
     functional = _as_lower(_get(config, "input", "functional", ""))
     state = _get(config, "hess", "state", 0)
     try:
@@ -7331,7 +7330,7 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
         if td_type == "sf":
             return "unsupported_tdhf_type", "SF-TDDFT analytic Hessian is not implemented; use type=numerical until the SF gradient/Z-vector finite-difference baseline is validated."
         if (td_type == "rpa" and scf_type == "rhf"
-                and td_multiplicity == 1 and state == 1 and td_nstate >= 2):
+                and td_multiplicity == 1 and state == 1):
             # Keep this list synchronized with
             # tdhf_hessian_functional_is_verified.  Pure TDHF is selected by
             # an empty functional and remains valid.
@@ -7379,13 +7378,6 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
                     "Analytic RPA Hessians currently support only the lowest "
                     "excited root (hess.state=1); higher roots require an "
                     "indefinite-safe projected amplitude-response solver.",
-                )
-            if td_nstate < 2:
-                return (
-                    "unsupported_feature",
-                    "Analytic RPA Hessians require tdhf.nstate>=2 so the "
-                    "lowest excited root can be verified as isolated from "
-                    "the next computed root.",
                 )
             return "unsupported_feature", "The requested RPA Hessian functional is not in the verified analytic set."
         if td_type == "tda":

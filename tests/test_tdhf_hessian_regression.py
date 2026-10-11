@@ -15,6 +15,8 @@ does not depend on the machine on which pytest happens to run.
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -218,3 +220,29 @@ def test_live_tdhf_analytic_hessian_matches_numerical(name, tmp_path, monkeypatc
     difference = analytic - numerical
     assert np.max(np.abs(difference)) < MAX_ABS_TOL
     assert np.sqrt(np.mean(difference * difference)) < RMS_TOL
+
+
+@pytest.mark.skipif(
+    not RUNTIME_AVAILABLE,
+    reason=(
+        "set OPENQP_RUN_TDHF_HESSIAN_REGRESSION=1 and use a built OpenQP "
+        "runtime to run TDHF Hessians"
+    ),
+)
+def test_live_analytic_hessian_refuses_one_root_of_a_larger_space(tmp_path):
+    """nstate=1 is enough only when the response space holds one root.
+
+    H2O/STO-3G has 10 occupied-virtual pairs; with one computed root the
+    isolation of the lowest root cannot be checked, so the run must abort
+    (it aborts the process, hence the subprocess).
+    """
+    inp = tmp_path / "h2o.inp"
+    inp.write_text(INPUT.format(system=CASES["h2o"].system, charge=0, nstate=1,
+                                hess_type="analytical"))
+    env = dict(os.environ, OMP_NUM_THREADS="1")
+    env.setdefault("OPENQP_ROOT", str(ROOT))
+    proc = subprocess.run([sys.executable, "-m", "oqp.pyoqp", str(inp)], cwd=tmp_path,
+                          env=env, capture_output=True, text=True, timeout=600)
+    log = (tmp_path / "h2o.log").read_text() if (tmp_path / "h2o.log").exists() else ""
+    assert proc.returncode != 0, log[-2000:]
+    assert "requires an isolated lowest root" in log + proc.stdout + proc.stderr

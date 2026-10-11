@@ -454,7 +454,12 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
         self.assertFalse(report.ok)
         self.assertIn("only the lowest excited root", report.to_text())
 
-    def test_excited_state_analytic_hessian_requires_two_computed_roots(self):
+    def test_one_root_analytic_rpa_hessian_is_left_to_the_runtime_check(self):
+        # Root isolation needs a second computed root only when the response
+        # space has one (nocc*nvir > 1), which the input does not determine:
+        # H2/STO-3G has a single root.  The runtime check
+        # (tdhf_hessian_lowest_root_is_isolated) decides; see
+        # tests/test_tdhf_hessian_regression.py for both outcomes.
         config = {
             "input": {"method": "tdhf", "runtype": "hess",
                       "system": "\nH 0 0 -0.37\nH 0 0 0.37",
@@ -469,8 +474,8 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
             config, raise_error=False, emit=False,
         )
 
-        self.assertFalse(report.ok)
-        self.assertIn("tdhf.nstate>=2", report.to_text())
+        self.assertNotIn("tdhf.nstate", report.to_text())
+        self.assertNotIn("hess.type", {issue.path for issue in report.errors})
 
     def test_mrsf_analytical_hessian_is_rejected_explicitly_not_silently_numerical(self):
         config = {
