@@ -222,7 +222,8 @@ for name in ("input-recovery1", "input-recovery2", "eigen-recovery1", "eigen-rec
     assert energies[name].tobytes() == energies["baseline"].tobytes(), (name, energies)
 # Existing native/Python orbital-optimizer agreement bound; no tolerance changes.
 assert np.max(np.abs(energies["baseline"]-energies["python-control"])) < 1.0e-7, energies
-print("INPUT/EIGEN producers reached; actual Python Hessian retries and two native recoveries passed")
+print("INPUT/EIGEN producers reached; actual Python Hessian retries and two native recoveries passed",
+      "threads=", requested_threads, "statuses=", statuses, "retries=", retries)
 '''
     env = os.environ.copy()
     env["OMP_NUM_THREADS"] = str(threads)
@@ -231,3 +232,4 @@ print("INPUT/EIGEN producers reached; actual Python Hessian retries and two nati
                             env=env, capture_output=True, text=True, timeout=180)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "actual Python Hessian retries and two native recoveries passed" in result.stdout
+    print(result.stdout)

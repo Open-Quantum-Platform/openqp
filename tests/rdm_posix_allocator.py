@@ -131,6 +131,7 @@ finally:
                             capture_output=True, text=True, timeout=60)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "two recoveries per allocation passed" in result.stdout
+    print(result.stdout)
 
 
 
@@ -266,7 +267,9 @@ finally:
     cs._optimize = real_optimize
 assert seen == [0] + [-2, 0, 0]*(3 if failure_target == "transform" else 1), seen
 assert all(value == native_energies[0] for value in native_energies), native_energies
-print("native CASSCF status -2 propagated; persistent top-level recoveries compared")
+print("native CASSCF status -2 propagated; persistent top-level recoveries compared",
+      "target=", failure_target, "threads=", requested_threads,
+      "ordinals=", failure_ordinals, "statuses=", seen)
 '''
     env["OMP_NUM_THREADS"] = str(threads)
     env["OQP_FCI_THREADS"] = str(threads)
@@ -275,3 +278,4 @@ print("native CASSCF status -2 propagated; persistent top-level recoveries compa
                             env=env, capture_output=True, text=True, timeout=90)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "persistent top-level recoveries compared" in result.stdout
+    print(result.stdout)

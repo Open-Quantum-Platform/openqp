@@ -336,7 +336,11 @@ jobs:
             # The portable suite uses synthetic allocation-site failures on
             # all platforms. This explicit supported-platform lane also makes
             # the compiler allocator itself fail, with same-process recovery.
-            python -m pytest -q -p no:cacheprovider tests/rdm_posix_allocator.py
+            # Keep the actual Hessian producer/retry and malloc regressions
+            # together in both collection orders, without --forked. Report
+            # each width/site/status so the successful routes have log evidence.
+            python -m pytest -v -rP -p no:cacheprovider tests/test_casscf_status.py tests/rdm_posix_allocator.py
+            python -m pytest -v -rP -p no:cacheprovider tests/rdm_posix_allocator.py tests/test_casscf_status.py
 
    # Intel oneAPI leg: ifx + icx/icpx + MKL ILP64 on Linux x86_64. This is the
    # LINALG_LIB=auto source-build mandate for Linux x86_64 (Intel MKL ILP64),
