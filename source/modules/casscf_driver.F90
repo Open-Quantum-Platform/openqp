@@ -128,8 +128,9 @@ module casscf_driver_mod
   use casscf_ah_mod, only: casscf_ah_model_step, casscf_lowest_mode_step, &
                            casscf_diis_coeffs
   use casscf_anhess_mod, only: cas_anhess_ctx_t, cas_anhess_init, &
-                               cas_anhess_build, CAS_HESS_ERR_DEGEN, &
-                               CAS_HESS_ERR_STACK
+                               cas_anhess_build, CAS_HESS_OK, CAS_HESS_ERR_INPUT, &
+                               CAS_HESS_ERR_ALLOC, CAS_HESS_ERR_EIGEN, &
+                               CAS_HESS_ERR_DEGEN, CAS_HESS_ERR_STACK
   use rdm_kernel_mod, only: rdm1_spatial, rdm2_spatial
   use trah_core_mod, only: trah_provider_t, trah_params_t, trah_result_t, trah_run
   ! DGEMM/DGEMV through the ILP64 wrapper layer (AGENTS.md rule 1); see the
@@ -151,6 +152,7 @@ module casscf_driver_mod
   !> conventions.  Exporting the three pieces it needs is what keeps the
   !> gradient from re-deriving any of that and drifting from the energy.
   public :: cas_ctx_t, cas_context_init, cas_evaluate
+  public :: cas_hessian_driver_status
 
   ! ------------------------------------------------------------------ schema
   ! AUTHORITATIVE OPTION SCHEMA -- mirrored in include/oqp.h and in
@@ -206,8 +208,8 @@ module casscf_driver_mod
   integer, parameter :: CAS_D_AH_SADE   = 15  ! AH strict gain to accept an escape
   integer, parameter :: CAS_NDOPT       = 16
 
-  ! Status codes.  Success is 0; every negative value means "the caller should
-  ! run the Python optimizer", which owns the user-facing messages.
+  ! Status codes. Success is 0. Allocation failure raises MemoryError; other
+  ! negative values defer to the Python optimizer and its user-facing messages.
   integer(i8), parameter :: CAS_ERR_INPUT       = -1_i8  ! unsupported/invalid sizes
   integer(i8), parameter :: CAS_ERR_ALLOC       = -2_i8  ! out of memory
   integer(i8), parameter :: CAS_ERR_TAGS        = -3_i8  ! handle is missing a record
@@ -404,6 +406,31 @@ module casscf_driver_mod
 
 contains
 
+  !> Preserve the cause of an analytic-Hessian refusal at the driver boundary.
+  !> Only the allocator status may enter Python's no-fallback MemoryError path.
+  pure function cas_hessian_driver_status(rc) result(status) &
+      bind(C, name="cas_hessian_driver_status")
+    integer(i8), value, intent(in) :: rc
+    integer(i8) :: status
+
+    select case (rc)
+    case (CAS_HESS_OK)
+      status = 0_i8
+    case (CAS_HESS_ERR_INPUT)
+      status = CAS_ERR_INPUT
+    case (CAS_HESS_ERR_ALLOC)
+      status = CAS_ERR_ALLOC
+    case (CAS_HESS_ERR_EIGEN)
+      status = CAS_ERR_EIGEN
+    case (CAS_HESS_ERR_DEGEN)
+      status = CAS_ERR_DEGEN
+    case (CAS_HESS_ERR_STACK)
+      status = CAS_ERR_STACK
+    case default
+      status = CAS_ERR_INPUT
+    end select
+  end function cas_hessian_driver_status
+
   !> C-bound entry point: one call per CASSCF run.
   !>
   !> @param[in]     c_handle  the OQP handle (`OQP::Hcore`, `OQP::AO_ERI` and
@@ -544,9 +571,8 @@ contains
                                int(iopt(CAS_I_NBETA)), ctx%npar, nstate, &
                                ctx%nthreads, ctx%ndet, ctx%dets)
       if (status < 0_i8) then
-        ! The 2 GiB excitation-stack guard and the encoding limit are refusals,
-        ! not fallbacks: hand them back so Python raises its own message.
-        if (status == CAS_HESS_ERR_STACK) status = CAS_ERR_STACK
+        ! Keep allocation failures distinct from encoding and stack refusals.
+        status = cas_hessian_driver_status(status)
         return
       end if
     end if
@@ -1687,14 +1713,9 @@ contains
     rc = cas_anhess_build(ctx%ah, ctx%pairs, ctx%weights, ctx%roots, ctx%nroot, &
                           ctx%dets, ctx%h1e_h, ctx%eri_h, ctx%civ_ref, hess)
     if (rc < 0_i8) then
-      ! A degeneracy refusal must NOT become a number.  It comes back as its
-      ! own status so the Python path re-raises the message that explains the
-      ! objective is not smooth there.
-      if (rc == CAS_HESS_ERR_DEGEN) then
-        status = CAS_ERR_DEGEN
-      else
-        status = CAS_ERR_ALLOC
-      end if
+      ! Preserve input/eigensolver/refusal statuses so they retain the Python
+      ! fallback. A genuine allocation failure alone must prohibit a retry.
+      status = cas_hessian_driver_status(rc)
       return
     end if
     ! The CI-relaxation half closes with a GEMM, so the two triangles agree

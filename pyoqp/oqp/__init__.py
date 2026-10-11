@@ -86,6 +86,7 @@ for attr_name in dir(lib):
             'oqp_maximum_overlap_assignment', 'oqp_diagonal_phase_tracking',
             'oqp_simplex_qp_solve', 'oqp_simplex_qp_solve_avoid',
             'oqp_ecp_selftest',
+            'cas_hessian_driver_status',
             'oqp_rpa_residual_selftest',
             'oqp_rdm_test_alloc_begin', 'oqp_rdm_test_alloc_end',
             'oqp_rdm_test_alloc_active', 'oqp_rdm_test_alloc_request',

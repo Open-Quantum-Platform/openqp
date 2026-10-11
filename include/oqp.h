@@ -12,6 +12,9 @@ void oqp_simplex_qp_solve_avoid(int64_t n, const double *h, const double *g,
 /* Internal ECP-integral self-test: err[0..9] (see tests/fortran/ecp_selftest.F90). */
 void oqp_ecp_selftest(double *err);
 
+/* Internal analytic-Hessian status conversion, also pinned by native tests. */
+int64_t cas_hessian_driver_status(int64_t hessian_status);
+
 /* Internal TDHF Davidson residual self-test (tests/fortran/rpa_residual_selftest.F90).
    Arrays are column-major: w_l, w_r, v_l, v_r (n, ndsr); q (n, ndsr, 2). */
 void oqp_rpa_residual_selftest(int64_t n, int64_t ndsr, int64_t imax,
