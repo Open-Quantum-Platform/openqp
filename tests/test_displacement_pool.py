@@ -396,7 +396,6 @@ STOP_ORDER_DRIVER = textwrap.dedent('''
 
     events = []
     real_signal_pids = single_point._signal_pids
-    real_wait = subprocess.Popen.wait
 
     stopped = set()
     violations = []
@@ -428,13 +427,23 @@ STOP_ORDER_DRIVER = textwrap.dedent('''
             stopped.update(pids)
         return real_signal_pids(pids, sig)
 
-    def recording_wait(self, timeout=None):
-        if timeout is not None:
-            events.append(("grace-wait", None))
-        return real_wait(self, timeout=timeout)
+    real_await_exit = single_point._ExternalJobs._await_exit
+    real_freeze_tree = single_point._ExternalJobs._freeze_tree
+
+    def recording_await_exit(self, procs, grace):
+        events.append(("grace-wait", None))
+        return real_await_exit(self, procs, grace)
+
+    def recording_freeze_tree(proc):
+        # The child must not be reapable (by the worker's poll) while its
+        # tree is frozen and signalled, or its PID could be reused meanwhile.
+        if not jobs._lock.locked():
+            violations.append(("freeze without the reap lock", proc.pid))
+        return real_freeze_tree(proc)
 
     single_point._signal_pids = recording_signal_pids
-    subprocess.Popen.wait = recording_wait
+    single_point._ExternalJobs._await_exit = recording_await_exit
+    single_point._ExternalJobs._freeze_tree = staticmethod(recording_freeze_tree)
 
     jobs = single_point._ExternalJobs()
     worker = threading.Thread(target=jobs.run, args=(

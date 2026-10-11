@@ -2697,6 +2697,13 @@ def _signal_pids(pids, sig):
             pass
 
 
+def _process_state(pid):
+    """First letter of ``ps`` STAT for ``pid`` (R, S, T, Z, ...), or None."""
+    out = subprocess.run(['ps', '-o', 'stat=', '-p', str(pid)],
+                         capture_output=True, text=True).stdout.split()
+    return out[0][0] if out else None
+
+
 class _ExternalJobs:
     """Child OpenQP processes started by one finite-difference driver.
 
@@ -2713,7 +2720,15 @@ class _ExternalJobs:
     child's process tree instead, because a displaced job can start processes
     of its own (``[dftb] backend=probe`` runs an external executable) that
     would otherwise be orphaned.
+
+    PID identity: a child is reaped only under ``_lock`` (``run`` polls rather
+    than blocking in ``wait``), and ``stop`` holds ``_lock`` for its whole
+    raw-signal phase, so a child's PID cannot be released and reused while it
+    is being signalled.  Its descendants are signalled only while their parent
+    is observed stopped (see ``_freeze_tree``).
     """
+
+    _POLL = 0.05
 
     def __init__(self):
         self._lock = threading.Lock()
@@ -2726,28 +2741,31 @@ class _ExternalJobs:
                 return
             proc = subprocess.Popen(cmd, env=env)
             self._procs.add(proc)
-        try:
-            proc.wait()
-        finally:
+        while True:
             with self._lock:
-                self._procs.discard(proc)
+                if proc.poll() is not None:
+                    self._procs.discard(proc)
+                    return
+            time.sleep(self._POLL)
 
     @staticmethod
     def _freeze_tree(proc):
         """SIGSTOP ``proc`` and all its descendants, one generation at a time;
-        return the descendants, or None when ``proc`` has already been reaped.
+        return the descendants, or None when ``proc`` has already exited.
 
+        Called with ``_lock`` held, so ``proc`` cannot be reaped meanwhile.
         Only direct children of processes observed in the stopped state are
-        ever signalled.
-        A stopped process cannot reap its children, so each such child -- alive
-        or a zombie -- keeps its PID until its parent is resumed, and signalling
-        it cannot reach a recycled PID.  Deeper generations are discovered only
-        after their parents are stopped.
+        ever signalled.  A stopped process cannot reap its children, so each
+        such child -- alive or a zombie -- keeps its PID until its parent is
+        resumed, and signalling it cannot reach a recycled PID.  Deeper
+        generations are discovered only after their parents are stopped.
         """
-        proc.send_signal(signal.SIGSTOP)  # a no-op once proc is reaped
-        if proc.poll() is not None:
+        if proc.returncode is not None or _process_state(proc.pid) in (None, 'Z'):
             return None
+        os.kill(proc.pid, signal.SIGSTOP)
         _wait_until_stopped([proc.pid])
+        if _process_state(proc.pid) not in ('T', 't'):
+            return None  # exited before it stopped: nothing left to traverse
         frozen = {proc.pid}
         while True:
             new = [pid for pid in _direct_children(frozen) if pid not in frozen]
@@ -2758,34 +2776,42 @@ class _ExternalJobs:
             _wait_until_stopped(new)
             frozen.update(new)
 
+    def _signal_trees(self, procs):
+        """Raw-signal phase; must run with ``_lock`` held."""
+        for proc in procs:
+            if os.name != 'posix':
+                subprocess.run(['taskkill', '/T', '/F', '/PID', str(proc.pid)],
+                               capture_output=True)
+                continue
+            descendants = self._freeze_tree(proc)
+            if descendants is None:
+                continue
+            # Descendants (e.g. a [dftb] backend=probe executable) die while
+            # frozen; only the direct child gets SIGTERM and a grace period.
+            _signal_pids(descendants, signal.SIGKILL)
+            os.kill(proc.pid, signal.SIGTERM)
+            os.kill(proc.pid, signal.SIGCONT)
+
+    def _await_exit(self, procs, grace):
+        """Grace phase: no raw PID is signalled here, only Popen handles."""
+        deadline = time.time() + grace
+        for proc in procs:
+            while True:
+                with self._lock:
+                    if proc.poll() is not None:
+                        break
+                if time.time() > deadline:
+                    proc.kill()  # Popen never signals a process it has reaped
+                    proc.wait()
+                    break
+                time.sleep(self._POLL)
+
     def stop(self, grace=10.0):
         with self._lock:
             self._stopped = True
             procs = list(self._procs)
-        if os.name != 'posix':
-            for proc in procs:
-                subprocess.run(['taskkill', '/T', '/F', '/PID', str(proc.pid)],
-                               capture_output=True)
-                proc.wait()
-            return
-        # Descendants (e.g. a [dftb] backend=probe executable) are killed while
-        # the tree is frozen, so no raw PID is ever signalled after it could
-        # have been reaped and reused.  Only the direct child gets SIGTERM and
-        # a grace period, and it is signalled through its Popen handle, which
-        # never signals a process it has already reaped.
-        for proc in procs:
-            descendants = self._freeze_tree(proc)
-            if descendants is None:
-                continue
-            _signal_pids(descendants, signal.SIGKILL)
-            proc.send_signal(signal.SIGTERM)
-            proc.send_signal(signal.SIGCONT)
-        for proc in procs:
-            try:
-                proc.wait(timeout=grace)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
+            self._signal_trees(procs)
+        self._await_exit(procs, grace)
 
 
 def _abort_displacements(pool, jobs):
