@@ -227,7 +227,7 @@ void *calloc(size_t n, size_t width) {
 import ctypes, os, runpy
 import numpy as np
 t=runpy.run_path(os.environ['CASSCF_TEST_SOURCE'])
-dets,stack,f,g,w,v,nd,ci=t['_case'](3,1,1,7,509)
+dets,stack,f,g,w,v,nd,ci=t['_case'](4,2,2,7,509)
 lib,ffi=t['_hess_amp_backend']()
 keys=np.asarray(dets,dtype=np.int64)
 sorted_keys=np.sort(keys)
@@ -240,15 +240,17 @@ fault=ctypes.CDLL(os.environ['LD_PRELOAD'])
 fault.arm.argtypes=[ctypes.c_size_t]
 fault.disarm.restype=ctypes.c_int
 reference=t['_mf_hess_amp'](dets,f,g,w,v)
-for size in [nd*7*8, nd*3*3*7*8, 3*3*7*8]:
+sizes=[nd*7*8, nd*4*4*7*8, 4*4*7*8]
+assert len(set(sizes))==3, 'Each native allocation needs a distinct failure size'
+for size in sizes:
     amp.fill(123.0)
     fault.arm(size)
-    status=lib.casscf_hess_amp_mf(3,nd,7,*pointers)
+    status=lib.casscf_hess_amp_mf(4,nd,7,*pointers)
     failures=fault.disarm()
     assert failures==1, (size,failures)
     assert status==-1, (size,status)
     np.testing.assert_array_equal(amp,np.full_like(amp,123.0))
-    assert lib.casscf_hess_amp_mf(3,nd,7,*pointers)==0
+    assert lib.casscf_hess_amp_mf(4,nd,7,*pointers)==0
     np.testing.assert_array_equal(amp,reference)
 print('three allocation failures and recoveries passed')
 ''')
