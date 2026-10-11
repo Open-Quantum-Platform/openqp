@@ -4,6 +4,8 @@ import types
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import isolate_modules
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -30,6 +32,7 @@ def install_minimal_oqp_stubs():
 
 class TestAdvancedGuessConfig(unittest.TestCase):
     def setUp(self):
+        self.addCleanup(isolate_modules())
         install_minimal_oqp_stubs()
 
     def test_input_checker_accepts_native_guess_modes(self):

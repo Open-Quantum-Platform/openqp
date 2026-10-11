@@ -4,6 +4,8 @@ import types
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import isolate_modules
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -48,6 +50,7 @@ class TestConventionalTDHFMultiplicity(unittest.TestCase):
     """
 
     def setUp(self):
+        self.addCleanup(isolate_modules())
         install_minimal_oqp_stubs()
         self.input_checker = load_input_checker("input_checker_tdhf_mult_under_test")
 

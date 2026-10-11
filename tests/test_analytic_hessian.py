@@ -6,25 +6,9 @@ from pathlib import Path
 
 import numpy as np
 
+from oqp_module_isolation import isolate_modules
+
 ROOT = Path(__file__).resolve().parents[1]
-
-def _in_oqp_namespace(name):
-    return name == "oqp" or name.startswith("oqp.")
-
-
-def snapshot_modules():
-    # Snapshot the whole oqp namespace rather than a list of stubbed names: a
-    # hand-kept list drifted from the stubs (state_tracking, nac_utils and
-    # tb_backends were installed but never restored), and any real oqp module
-    # imported under a stub parent would leak in the same way.
-    return {name: module for name, module in sys.modules.items() if _in_oqp_namespace(name)}
-
-
-def restore_modules(snapshot):
-    for name in [name for name in sys.modules if _in_oqp_namespace(name)]:
-        if name not in snapshot:
-            del sys.modules[name]
-    sys.modules.update(snapshot)
 
 
 def load_module(name, relative_path):
@@ -37,7 +21,7 @@ def load_module(name, relative_path):
 
 class AnalyticHessianNativeDispatchTests(unittest.TestCase):
     def setUp(self):
-        self._module_snapshot = snapshot_modules()
+        self.addCleanup(isolate_modules())
         oqp_stub = types.ModuleType("oqp")
         self.native_calls = []
 
@@ -111,7 +95,6 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
 
     def tearDown(self):
         sys.modules.pop("single_point_analytic_hess_dispatch", None)
-        restore_modules(self._module_snapshot)
 
     def test_hf_analytical_hessian_reads_native_fortran_hessian_without_external_backend(self):
         class Mol:
@@ -196,7 +179,7 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
 
 class AnalyticHessianInputValidationTests(unittest.TestCase):
     def setUp(self):
-        self._module_snapshot = snapshot_modules()
+        self.addCleanup(isolate_modules())
         sys.modules.setdefault("oqp", types.ModuleType("oqp"))
         sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
         mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
@@ -211,7 +194,6 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
 
     def tearDown(self):
         sys.modules.pop("input_checker_analytic_hess", None)
-        restore_modules(self._module_snapshot)
 
     def test_hf_analytical_hessian_is_allowed_by_capability_matrix(self):
         config = {

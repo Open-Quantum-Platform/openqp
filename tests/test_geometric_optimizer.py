@@ -8,6 +8,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
 
+from oqp_module_isolation import isolate_modules
+
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES_OPT = ROOT / "examples" / "OPT"
@@ -225,6 +227,7 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
         )
 
     def setUp(self):
+        self.addCleanup(isolate_modules())
         install_minimal_oqp_stubs()
 
     def test_constrained_optimization_is_now_a_native_example(self):

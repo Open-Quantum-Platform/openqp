@@ -6,6 +6,8 @@ import types
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import isolate_modules
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -103,6 +105,7 @@ class FakeMol:
 
 class TestNEBDispatchScaffold(unittest.TestCase):
     def setUp(self):
+        self.addCleanup(isolate_modules("geometric"))
         install_geometric_stubs()
 
     def test_geometric_neb_scaffold_plans_isolated_image_directories(self):

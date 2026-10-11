@@ -4,6 +4,8 @@ import types
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import isolate_modules
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -33,6 +35,7 @@ def install_minimal_oqp_stubs():
 
 class TestMP2InputChecker(unittest.TestCase):
     def setUp(self):
+        self.addCleanup(isolate_modules())
         install_minimal_oqp_stubs()
 
     def test_mp2_rejects_dft_functional(self):

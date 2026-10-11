@@ -6,6 +6,8 @@ import types
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import isolate_modules
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -32,9 +34,9 @@ def load_input_checker():
 
 
 class D4InputCheckerTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.checker = load_input_checker()
+    def setUp(self):
+        self.addCleanup(isolate_modules())
+        self.checker = load_input_checker()
 
     def check(self, section):
         report = self.checker.CheckReport()

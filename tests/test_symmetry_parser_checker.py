@@ -5,6 +5,8 @@ import types
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import isolate_modules
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -34,6 +36,7 @@ def load_input_checker():
 
 class TestSymmetryParserAndMetadataGates(unittest.TestCase):
     def setUp(self):
+        self.addCleanup(isolate_modules())
         self.input_checker = load_input_checker()
 
     def test_schema_file_declares_symmetry_section_with_safe_defaults(self):

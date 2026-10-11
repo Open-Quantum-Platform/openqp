@@ -5,6 +5,8 @@ import types
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import isolate_modules
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -56,6 +58,9 @@ def load_input_checker():
 
 
 class TestMRSFEKTScaffold(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(isolate_modules())
+
     def test_c_header_declares_mrsf_ekt_entry_points(self):
         header = read("include/oqp.h")
 

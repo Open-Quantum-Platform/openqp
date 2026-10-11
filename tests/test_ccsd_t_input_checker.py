@@ -10,6 +10,8 @@ import types
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import isolate_modules
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -39,6 +41,7 @@ def install_minimal_oqp_stubs():
 
 class TestCCSDTInputChecker(unittest.TestCase):
     def setUp(self):
+        self.addCleanup(isolate_modules())
         install_minimal_oqp_stubs()
         self.checker = load_input_checker("input_checker_cc_under_test")
 

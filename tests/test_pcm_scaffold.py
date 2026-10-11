@@ -6,6 +6,8 @@ import sys
 import types
 import unittest
 
+from oqp_module_isolation import isolate_modules
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -20,8 +22,12 @@ def load_module(module_name, relative_path):
     return module
 
 
-def install_minimal_oqp_stubs():
-    numpy_stub = sys.modules.setdefault("numpy", types.ModuleType("numpy"))
+def install_numpy_stub_if_missing():
+    # Setting these attributes on the real numpy would replace numpy.dtype
+    # and its scalar types for every later test.
+    if "numpy" in sys.modules or importlib.util.find_spec("numpy") is not None:
+        return
+    numpy_stub = types.ModuleType("numpy")
     for name in (
         "void",
         "int8",
@@ -39,7 +45,11 @@ def install_minimal_oqp_stubs():
     ):
         setattr(numpy_stub, name, type(name, (), {}))
     setattr(numpy_stub, "dtype", lambda value: value)
+    sys.modules["numpy"] = numpy_stub
 
+
+def install_minimal_oqp_stubs():
+    install_numpy_stub_if_missing()
     oqp = sys.modules.setdefault("oqp", types.ModuleType("oqp"))
     setattr(oqp, "ffi", object())
     setattr(oqp, "lib", object())
@@ -66,6 +76,7 @@ def install_minimal_oqp_stubs():
 
 class PCMScaffoldTests(unittest.TestCase):
     def setUp(self):
+        self.addCleanup(isolate_modules())
         install_minimal_oqp_stubs()
 
     def test_schema_accepts_pcm_section_defaults(self):

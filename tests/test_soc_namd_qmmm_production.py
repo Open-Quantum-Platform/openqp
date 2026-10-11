@@ -17,6 +17,8 @@ from pathlib import Path
 
 import numpy as np
 
+from oqp_module_isolation import isolate_modules
+
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNFUNC = ROOT / "pyoqp" / "oqp" / "library" / "runfunc.py"
@@ -114,15 +116,8 @@ def load_runfunc_with_namd_stubs():
         for name in names:
             setattr(modules[module_name], name, noop)
 
-    saved = {name: sys.modules.get(name) for name in modules}
+    cleanup = isolate_modules()
     sys.modules.update(modules)
-
-    def cleanup():
-        for name, value in saved.items():
-            if value is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = value
 
     spec = importlib.util.spec_from_file_location("runfunc_soc_namd_under_test", RUNFUNC)
     assert spec is not None and spec.loader is not None
@@ -177,15 +172,8 @@ def load_namd_with_stubs():
         "oqp.utils.file_utils": file_utils,
         "oqp.utils.tb_backends": tb_backends,
     }
-    saved = {name: sys.modules.get(name) for name in modules}
+    cleanup = isolate_modules()
     sys.modules.update(modules)
-
-    def cleanup():
-        for name, value in saved.items():
-            if value is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = value
 
     spec = importlib.util.spec_from_file_location("namd_state_map_under_test", NAMD)
     assert spec is not None and spec.loader is not None
@@ -229,15 +217,8 @@ def load_pyoqp_with_stubs():
         "oqp.utils.mpi_utils": mpi_utils,
         "oqp.molecule": molecule,
     }
-    saved = {name: sys.modules.get(name) for name in modules}
+    cleanup = isolate_modules()
     sys.modules.update(modules)
-
-    def cleanup():
-        for name, value in saved.items():
-            if value is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = value
 
     spec = importlib.util.spec_from_file_location("pyoqp_runner_under_test", PYOQP)
     assert spec is not None and spec.loader is not None
@@ -255,6 +236,9 @@ class DummyMol:
 
 
 class SOCNAMDQMMMProductionTests(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(isolate_modules())
+
     def test_rank_zero_io_failure_is_broadcast_to_every_mpi_rank(self):
         namd, _logs, cleanup = load_namd_with_stubs()
         try:

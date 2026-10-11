@@ -6,6 +6,8 @@ from pathlib import Path
 import numpy as np
 import unittest
 
+from oqp_module_isolation import isolate_modules
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -116,6 +118,9 @@ class TestAssignStateIrreps(unittest.TestCase):
 
 
 class TestMoleculeStateLabelWiring(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(isolate_modules())
+
     def _build_molecule(self, td_type, na, nb):
         symmetry, _detection, u, labels = water_salcs()
         detect = sys.modules["openqp_symmetry_detect_state_helper"]
