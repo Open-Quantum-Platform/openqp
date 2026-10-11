@@ -33,8 +33,16 @@ Two guards:
   mocked to report ``basis_set_issue`` and asserts a ``RuntimeError``, not a
   ``SystemExit``.
 
-The QM/MM Z-vector and link-atom branches need OpenMM and are covered by the
-source scan only.
+* ``QMMMFailureTests`` (needs OpenMM): an ``OpenQpQMMM`` driver on a TIP3P
+  water dimer (QM = one water, electrostatic embedding) whose MRSF Z-vector
+  cannot converge must raise the RuntimeError from ``compute_force``; a retry
+  on the SAME driver with good settings must equal a fresh driver bit for bit
+  (one thread).  ``utils.qmmm.openmm_system`` must raise ValueError when a QM
+  atom is bonded to an MM hydrogen (link-atom scaling factor exactly 1) and
+  must succeed for a whole-molecule QM region.
+
+Without OpenMM the QM/MM tests are skipped (CI does not install it); with
+``OQP_REQUIRE_OPENMM_TESTS=1`` a missing OpenMM is a failure instead.
 """
 import ast
 import os
@@ -179,6 +187,81 @@ for overrides in steps:
         mol = op.run()
         rec["energies"] = [float(e) for e in np.ravel(mol.energies)]
         rec["grads"] = [float(g) for g in np.ravel(mol.grads)]
+        rec["error"] = None
+    except Exception as exc:
+        rec["error"] = f"{type(exc).__name__}: {exc}"
+        rec["trace"] = traceback.format_exc()[-2000:]
+    out.append(rec)
+print("RESULT " + json.dumps(out))
+"""
+
+
+try:
+    import openmm  # noqa: F401
+    HAVE_OPENMM = True
+except Exception:  # optional dependency
+    HAVE_OPENMM = False
+OPENMM_REQUIRED = os.getenv("OQP_REQUIRE_OPENMM_TESTS") == "1"
+
+
+def _water_dimer():
+    """TIP3P water dimer as an in-memory OpenMM topology (positions in nm)."""
+    import openmm.app as app
+    import openmm.unit as unit
+    from openmm import Vec3
+    top = app.Topology()
+    chain = top.addChain()
+    pos = []
+    for shift in (0.0, 0.30):
+        res = top.addResidue("HOH", chain)
+        o = top.addAtom("O", app.element.oxygen, res)
+        h1 = top.addAtom("H1", app.element.hydrogen, res)
+        h2 = top.addAtom("H2", app.element.hydrogen, res)
+        top.addBond(o, h1)
+        top.addBond(o, h2)
+        pos += [Vec3(0.0, 0.0, shift), Vec3(0.09572, 0.0, shift),
+                Vec3(-0.02400, 0.09267, shift)]
+    return top, unit.Quantity(pos, unit.nanometer)
+
+
+# MRSF, as in every QM/MM excited-state example: the QM/MM excited-state ESPF
+# gradient (grad_esp_qmmm_excited) reads OQP::td_abxc, which the RPA/TDA
+# response does not create.
+QMMM_TDHF_CFG = {
+    "input.method": "tdhf", "input.runtype": "grad", "input.basis": "sto-3g",
+    "input.functional": "", "input.charge": 0, "input.d4": "False",
+    "guess.type": "huckel", "scf.type": "rohf", "scf.multiplicity": 3,
+    "scf.conv": "1.0e-8", "properties.grad": "1",
+    "tdhf.type": "mrsf", "tdhf.multiplicity": 1, "tdhf.nstate": 3,
+    "tdhf.conv": "1.0e-8", "tdhf.maxit_zv": "50", "tdhf.zvconv": "1.0e-10",
+}
+
+# Driver executed in a fresh interpreter: one OpenQpQMMM driver, each step
+# updates its oqp_cfg_base and calls compute_force; prints one JSON line.
+_QMMM_DRIVER = r"""
+import json, sys, traceback
+import numpy as np
+import openmm.app as app
+import openmm.unit as unit
+from oqp.library.qmmm_driver import OpenQpQMMM
+exec(sys.argv[1])            # defines _water_dimer()
+cfg0, steps = json.loads(sys.argv[2]), json.loads(sys.argv[3])
+top, pos = _water_dimer()
+ff = app.ForceField("tip3p.xml")
+drv = OpenQpQMMM(pos, top, ff, [0, 1, 2], oqp_cfg=dict(cfg0),
+                 Cutoff=app.NoCutoff, Embedding="electrostatic")
+out = []
+for overrides in steps:
+    rec = {"overrides": overrides}
+    try:
+        drv.oqp_cfg_base.update(overrides)
+        drv.mm_systems["sim0"].context.setPositions(pos)
+        e, f = drv.compute_force(pos, top, drv.mm_systems, [0, 1, 2])
+        rec["energy"] = float(e.value_in_unit(unit.kilojoule_per_mole)
+                              if hasattr(e, "value_in_unit") else e)
+        fv = (f.value_in_unit(unit.kilojoule_per_mole / unit.nanometer)
+              if hasattr(f, "value_in_unit") else f)
+        rec["forces"] = [float(x) for x in np.ravel(np.asarray(fv, dtype=float))]
         rec["error"] = None
     except Exception as exc:
         rec["error"] = f"{type(exc).__name__}: {exc}"
@@ -402,6 +485,77 @@ class SameObjectRetryTests(unittest.TestCase):
                 self.assertEqual(got, want,
                                  f"step {i} {key} after a caught failure on the same "
                                  f"object: not bit-identical, max |diff| = {diff:.3e}")
+
+
+class OpenMMBuildGate(unittest.TestCase):
+    @unittest.skipUnless(OPENMM_REQUIRED, "set OQP_REQUIRE_OPENMM_TESTS=1 where OpenMM is installed")
+    def test_required_openmm(self):
+        self.assertTrue(HAVE_OPENMM, "OpenMM is required (OQP_REQUIRE_OPENMM_TESTS=1)")
+
+
+@unittest.skipUnless(RUNTIME_AVAILABLE and HAVE_OPENMM,
+                     "compiled OpenQP runtime or OpenMM not available")
+class QMMMFailureTests(unittest.TestCase):
+    ZV_FAIL = {"tdhf.maxit_zv": "1", "tdhf.zvconv": "1.0e-30"}
+    ZV_GOOD = {"tdhf.maxit_zv": "50", "tdhf.zvconv": "1.0e-10"}
+
+    def _drive(self, steps):
+        import inspect
+        import json
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        env = dict(os.environ)
+        env["OMP_NUM_THREADS"] = "1"   # bit identity; see SameProcessRecoveryTests
+        proc = subprocess.run(
+            [sys.executable, "-c", _QMMM_DRIVER, inspect.getsource(_water_dimer),
+             json.dumps(QMMM_TDHF_CFG), json.dumps(steps)],
+            cwd=tmp.name, env=env, capture_output=True, text=True, timeout=900)
+        lines = [l for l in proc.stdout.splitlines() if l.startswith("RESULT ")]
+        detail = (f"returncode={proc.returncode}\n--- stdout ---\n{proc.stdout[-3000:]}"
+                  f"\n--- stderr ---\n{proc.stderr[-3000:]}")
+        self.assertEqual(proc.returncode, 0, detail)
+        self.assertEqual(len(lines), 1, detail)
+        return json.loads(lines[0][7:])
+
+    def test_qmmm_zvector_failure_raises_and_driver_is_reusable(self):
+        ref = self._drive([{}])[0]
+        self.assertIsNone(ref["error"], ref.get("trace"))
+        res = self._drive([self.ZV_FAIL, self.ZV_GOOD])
+        self.assertIn("RuntimeError: TD Z-vector did not converge", res[0]["error"] or "",
+                      res[0].get("trace"))
+        self.assertIsNone(res[1]["error"], res[1].get("trace"))
+        self.assertEqual(res[1]["energy"], ref["energy"])
+        self.assertEqual(len(res[1]["forces"]), len(ref["forces"]))
+        diff = max(abs(a - b) for a, b in zip(res[1]["forces"], ref["forces"]))
+        self.assertEqual(res[1]["forces"], ref["forces"],
+                         f"retry on the same QM/MM driver: max |dF| = {diff:.3e}")
+
+    def _openmm_system(self, qm):
+        import importlib
+        from types import SimpleNamespace
+        from unittest import mock
+        import numpy as np
+        import openmm.app as app
+        Q = importlib.import_module("oqp.utils.qmmm")
+        top, pos = _water_dimer()
+        ff = app.ForceField("tip3p.xml")
+        system = ff.createSystem(top, nonbondedMethod=app.NoCutoff,
+                                 constraints=None, rigidWater=False)
+        with mock.patch.multiple(Q, pdb0=SimpleNamespace(topology=top, positions=pos),
+                                 forcefield0=ff, system0=system,
+                                 qm_atoms=np.array(qm, dtype=np.uint64),
+                                 bonded_info=[]):
+            return Q.openmm_system()
+
+    def test_link_atom_on_mm_hydrogen_raises_value_error(self):
+        # QM = the first oxygen only: both O-H bonds are cut at MM hydrogens,
+        # so g = (r_H + r_O) / (r_O + r_H) = 1, outside (0, 1).
+        with self.assertRaisesRegex(ValueError, "link-atom scaling factor outside"):
+            self._openmm_system([0])
+
+    def test_whole_molecule_qm_region_has_no_link_atoms(self):
+        num_atoms = self._openmm_system([0, 1, 2])[0]
+        self.assertEqual(num_atoms, 3)
 
 
 @unittest.skipUnless(RUNTIME_AVAILABLE, "compiled OpenQP runtime not available")
