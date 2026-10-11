@@ -127,3 +127,123 @@ end program
                     str(consumer), str(library), '-Wl,-rpath,' + str(library.parent),
                     '-o', str(executable)], cwd=tmp_path, check=True, capture_output=True, text=True)
     subprocess.run([str(executable)], cwd=tmp_path, check=True, capture_output=True, text=True)
+
+
+def _production_routine(path, name):
+    source = path.read_text()
+    match = re.search(r'^\s*subroutine ' + name + r'\(.*?^\s*end subroutine(?: ' + name + r')?\s*$',
+                      source, re.I | re.M | re.S)
+    assert match, name
+    return match.group()
+
+
+@pytest.mark.parametrize('width', ['1', '4'])
+def test_production_response_matrix_storage(compiled_consumer, tmp_path, width):
+    """Execute complete changed routines, with strided parents and sentinels.
+
+    Only their surrounding data types/diagnostic service are reduced. Small
+    matrices pin array association; molecular validation remains separate.
+    """
+    import os
+    from oqp.runtime import library_path, resolve_oqp_root
+    root, suffix = resolve_oqp_root()
+    library = library_path(root, suffix)
+    assert library, 'installed native OpenQP required'
+    compiler, _ = compiled_consumer
+    support = tmp_path / 'support.f90'
+    support.write_text('''module types
+ type basis_t
+  integer :: nbf
+ end type
+ type prop_t
+  integer :: nelec_a,nelec_b
+ end type
+ type tddft_t
+  integer :: mult
+  logical :: debug_mode
+ end type
+ type information
+  type(basis_t) :: basis
+  type(prop_t) :: mol_prop
+  type(tddft_t) :: tddft
+ end type
+end module
+module io_constants
+ integer,parameter :: iw=6
+end module
+module mathlib
+ use precision,only: dp
+ implicit none
+contains
+ subroutine orthogonal_transform(trans,n,u,a,b,wrk)
+  character :: trans
+  integer :: n
+  real(dp) :: u(n,n),a(n,n),b(n,n),wrk(n,n)
+  if(trans/='t') error stop 'unexpected transform in contract test'
+  b=matmul(matmul(u,a),transpose(u))
+ end subroutine
+ subroutine pack_matrix(a,ap)
+  real(dp) :: a(:,:),ap(:)
+  integer :: i,j,k
+  k=0
+  do j=1,size(a,2)
+   do i=1,j
+    k=k+1;ap(k)=a(i,j)
+   end do
+  end do
+ end subroutine
+ subroutine triangular_to_full(a,n,uplo)
+  integer :: n,i
+  character :: uplo
+  real(dp) :: a(n,n)
+  if(uplo/='u') error stop 'unexpected triangle in contract test'
+  do i=1,n
+   a(i+1:,i)=a(i,i+1:)
+  end do
+ end subroutine
+end module
+''')
+    mrsf = ROOT / 'source/tdhf_mrsf_lib.F90'
+    routines = [_production_routine(mrsf, name) for name in
+                ('mrsfcbc', 'umrsfcbc', 'mrsfmntoia', 'umrsfmntoia', 'mrsfesum')]
+    routines += [_production_routine(ROOT / 'source/tdhf_lib.F90', 'tdhf_unrelaxed_density'),
+                 _production_routine(ROOT / 'source/modules/tdhf_z_vector.F90', 'compute_w_mo')]
+    # The same unchanged ILP64 DSYR2K wrapper pins the output offset too;
+    # the package build separately executes production's registered raw alias.
+    first = routines[0]
+    ov = re.search(r'    tmp\(:,1\) = 0\.0_dp\n    if \(nbf > nocca\) then\n.*?    end if',
+                   first, re.S).group()
+    matrices = tmp_path / 'matrices.f90'
+    matrices.write_text('''module matrix_contracts
+ use precision,only: dp
+ use oqp_linalg,only: dgemm
+ use blas_wrap,only: dsyr2k=>oqp_dsyr2k_i64
+ implicit none
+contains
+''' + '\n'.join(routines) + '''
+ subroutine ov_contract(vb,bvec,tmp,nbf,nocca,lr2)
+  integer :: nbf,nocca,lr2
+  real(dp),target,intent(in) :: vb(nbf,nbf),bvec(nbf,nbf)
+  real(dp) :: tmp(nbf,1)
+  real(dp),contiguous,pointer :: vb_storage(:),bvec_storage(:)
+  vb_storage(1:size(vb))=>vb
+  bvec_storage(1:size(bvec))=>bvec
+''' + ov + '''
+ end subroutine
+end module
+''')
+    executable = tmp_path / 'matrix_views'
+    result = subprocess.run([compiler, '-fdefault-integer-8', '-fcheck=all',
+                             '-ffree-line-length-none', str(support), str(matrices),
+                             str(tmp_path / 'messages.o'),
+                             str(ROOT / 'tests/native/linalg_matrix_views.F90'), str(library),
+                             '-Wl,-rpath,' + str(library.parent), '-o', str(executable)],
+                            cwd=tmp_path, capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    env = os.environ.copy()
+    env.update(OMP_NUM_THREADS=width, OPENBLAS_NUM_THREADS='1', MKL_NUM_THREADS='1',
+               VECLIB_MAXIMUM_THREADS='1')
+    result = subprocess.run([str(executable)], env=env, cwd=tmp_path,
+                            capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert 'MATRIX_STORAGE_CONTRACT_PASS' in result.stdout

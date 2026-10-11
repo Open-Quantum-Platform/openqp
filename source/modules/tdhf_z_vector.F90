@@ -521,13 +521,15 @@ contains
     real(kind=dp), intent(in) :: xpy(nocc,*), xmy(nocc,*), z(nocc,*), e_mo(*), hpt(:,:), hpp(:,:), hmm(:,:)
     real(kind=dp), optional, intent(in) :: gxp(:,:)
     real(kind=dp), intent(in) :: e_state
-    real(kind=dp), intent(out) :: wmo(:,:)
+    real(kind=dp), target, intent(out) :: wmo(size(hpt,1),size(hpt,1))
     integer, intent(in) :: nocc
 
     real(kind=dp), allocatable, target :: wrk1(:,:), wrk_ia(:,:)
 
+    real(kind=dp), contiguous, pointer :: wmo_storage(:)
     integer :: nbf, nvir, i
 
+    wmo_storage(1:size(wmo)) => wmo
     nbf = ubound(wmo,1)
     nvir = nbf-nocc
 
@@ -565,11 +567,12 @@ contains
       wmo(:nocc,:nocc) = wmo(:nocc,:nocc) + 2*gxp(:nocc,:nocc)
     end if
 
+    if (nvir > 0) then
     ! W_ab (vir x vir)
     call dsyr2k('u','t',nvir,nocc, &
             e_state, xpy, nocc, &
                      xmy, nocc, &
-            1.0d0,   wmo(nocc+1:,nocc+1), nbf)
+            1.0d0,   wmo_storage(nocc*nbf+nocc+1:), nbf)
 
     do i = 1, nocc
       wrk_ia(i,:) = xpy(i,:nvir) * e_mo(i)
@@ -577,7 +580,7 @@ contains
     call dgemm('t', 'n', nvir, nvir, nocc, &
             1.0d0, xpy,    nocc, &
                    wrk_ia, nocc, &
-            1.0d0, wmo(nocc+1:,nocc+1), nbf)
+            1.0d0, wmo_storage(nocc*nbf+nocc+1:), nbf)
 
     do i = 1, nocc
       wrk_ia(i,:) = xmy(i,:nvir) * e_mo(i)
@@ -585,22 +588,24 @@ contains
     call dgemm('t', 'n', nvir, nvir, nocc, &
             1.0d0, xmy,    nocc, &
                    wrk_ia, nocc, &
-            1.0d0, wmo(nocc+1:,nocc+1), nbf)
+            1.0d0, wmo_storage(nocc*nbf+nocc+1:), nbf)
 
     ! W_ia (occ x vir)
     call dgemm('t', 'n', nocc, nvir, nocc,  &
                1.0_dp, hpp, nbf, &
                        xpy, nocc, &
-               1.0_dp, wmo(:,nocc+1), nbf)
+               1.0_dp, wmo_storage(nocc*nbf+1:), nbf)
 
     call dgemm('t', 'n', nocc, nvir, nocc,  &
                1.0_dp, hmm, nbf, &
                        xmy, nocc, &
-               1.0_dp, wmo(:,nocc+1), nbf)
+               1.0_dp, wmo_storage(nocc*nbf+1:), nbf)
 
     do i = 1, nocc
       wmo(i,nocc+1:) = wmo(i,nocc+1:) + z(i,:nvir)*e_mo(i)
     end do
+
+    end if
 
     call triangular_to_full(wmo,nbf,'u')
 

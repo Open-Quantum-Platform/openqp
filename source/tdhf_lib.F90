@@ -1059,10 +1059,12 @@ contains
 
     if (tda) then
       ! vir->vib block
+      if (nvir > 0) then
       call dgemm('t', 'n', nvir, nvir, nocc, &
                   1.0d0, xpy, nocc, &
                          xpy, nocc, &
-                  0.0d0, t_mo(nocc+1:,nocc+1), nbf)
+                  0.0d0, t_mo(nocc+1,nocc+1), nbf)
+      end if
 
       ! occ->occ block
       call dgemm('n', 't', nocc, nocc, nvir,  &
@@ -1071,14 +1073,18 @@ contains
                   0.0d0, t_mo,  nbf)
     else
       ! vir->vib block
+      if (nvir > 0) then
       call dgemm('t', 'n', nvir, nvir, nocc, &
                  0.5d0, xpy, nocc, &
                         xpy, nocc,  &
-                 0.0d0, t_mo(nocc+1:, nocc+1), nbf)
+                 0.0d0, t_mo(nocc+1,nocc+1), nbf)
+      end if
+      if (nvir > 0) then
       call dgemm('t', 'n', nvir, nvir, nocc,  &
                  0.5d0, xmy, nocc, &
                         xmy, nocc,  &
-                 1.0d0, t_mo(nocc+1:, nocc+1), nbf)
+                 1.0d0, t_mo(nocc+1,nocc+1), nbf)
+      end if
 
       ! occ->occ block
       call dgemm('n', 't', nocc, nocc, nvir,  &
