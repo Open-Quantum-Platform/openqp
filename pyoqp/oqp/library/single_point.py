@@ -1260,6 +1260,10 @@ class SinglePoint(Calculator):
         if getattr(self.mol, 'symmetry_metadata', None):
             self.mol.stage_response_symmetry()
 
+        # Clear the previous solve's imaginary-root flags first: a TD solve
+        # that raises or exhausts its retries returns before they are set
+        # again, and get_results() would mask energies with stale flags.
+        self.mol.td_imaginary_states = ()
         self.tddft()
 
         # Check convergence before reading the TD output tags: a Davidson
@@ -1281,7 +1285,6 @@ class SinglePoint(Calculator):
         # RPA roots with omega^2 < 0 (unstable reference): td_energies holds
         # |omega|, so the state energy above is not a physical state.  Only
         # the conventional RPA driver writes this tag.
-        self.mol.td_imaginary_states = ()
         if str(self.mol.config.get('tdhf', {}).get('type', 'rpa')).lower() == 'rpa':
             try:
                 flags = self.mol.data['OQP::td_imaginary']
