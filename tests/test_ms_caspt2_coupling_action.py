@@ -29,7 +29,9 @@ def test_action_pins_original_signed_contraction(ndet):
 
 
 @pytest.mark.parametrize("frozen", [0, 1])
-def test_multiset_reaches_action_and_pins_old_cross_terms(tmp_path, monkeypatch, frozen):
+@pytest.mark.parametrize("asymmetric", [False, True], ids=["symmetric", "asymmetric"])
+def test_multiset_reaches_action_and_pins_old_cross_terms(
+        tmp_path, monkeypatch, frozen, asymmetric):
     import oqp
     from oqp.pyoqp import Runner
 
@@ -55,7 +57,8 @@ def test_multiset_reaches_action_and_pins_old_cross_terms(tmp_path, monkeypatch,
         rotations.append(result.copy())
         return result
 
-    def driver(*args, **kwargs):
+    def run_and_pin(args, kwargs):
+        actions.clear()
         rotations.clear()
         result = original_driver(*args, **kwargs)
         nstate = len(actions)
@@ -79,17 +82,47 @@ def test_multiset_reaches_action_and_pins_old_cross_terms(tmp_path, monkeypatch,
         # Snapshots are owned by the test; the production matrix itself must
         # no longer be retained after each state's action has been formed.
         assert all(ref() is None for _, _, ref in actions)
+        return result
+
+    def driver(*args, **kwargs):
+        result = run_and_pin(args, kwargs)
+        # The old contraction pin copies the returned diagonal, so it cannot
+        # by itself check which root owns each diagonal correction. Reorder
+        # the roots on exactly the same integral/orbital inputs and require
+        # the signed matrix and state-specific outputs to follow that order.
+        roots = args[10]
+        assert list(roots) == [0, 1, 2]
+        permutation = np.array([2, 0, 1])
+        reordered_args = (*args[:10], [roots[i] for i in permutation], *args[11:])
+        reordered = run_and_pin(reordered_args, kwargs)
+        assert np.ptp(result["ref_energies"]) > 1e-4
+        if asymmetric:
+            # In the uniform chain these two couplings vanish by symmetry,
+            # which makes their sign unobservable. This input must exercise
+            # them before the signed comparison can establish coverage.
+            assert abs(result["heff"][0, 1]) > 1e-8
+            assert abs(result["heff"][1, 2]) > 1e-8
+        np.testing.assert_allclose(
+            reordered["heff"], result["heff"][np.ix_(permutation, permutation)],
+            rtol=0, atol=1e-12)
+        for key in ("ref_energies", "ss_energies", "e2"):
+            np.testing.assert_allclose(reordered[key], result[key][permutation],
+                                       rtol=0, atol=1e-12)
+        np.testing.assert_allclose(reordered["ms_energies"], result["ms_energies"],
+                                   rtol=0, atol=1e-12)
         references.extend(result["ms_energies"])
         return result
 
     monkeypatch.setattr(cp, "_multiset_coupling_action", action)
     monkeypatch.setattr(cp, "_rotate_det_vector", rotate)
     monkeypatch.setattr(cp, "_multistate_multiset", driver)
-    runner = Runner(project=f"ms_action_{frozen}", input_file=None,
+    system = ("\nH 0 0 0\nH 0 0 0.74\nH 0.13 0.07 1.55\nH -0.08 0.02 2.27"
+              if asymmetric else "\nH 0 0 0\nH 0 0 0.74\nH 0 0 1.48\nH 0 0 2.22")
+    runner = Runner(project=f"ms_action_{frozen}_{asymmetric}", input_file=None,
                     log=str(tmp_path / "ms.log"), silent=1, usempi=False,
                     input_dict={
         "input": {"method": "ms-caspt2", "runtype": "energy", "basis": "sto-3g",
-                  "system": "\nH 0 0 0\nH 0 0 0.74\nH 0 0 1.48\nH 0 0 2.22"},
+                  "system": system},
         "guess": {"type": "hcore"},
         "scf": {"type": "rhf", "multiplicity": "1", "conv": "1e-10",
                 "maxit": "80", "forced_attempt": "3", "save_molden": "false"},
