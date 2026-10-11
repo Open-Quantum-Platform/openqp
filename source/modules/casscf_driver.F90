@@ -518,7 +518,7 @@ contains
     integer(i8) :: status
 
     type(cas_ctx_t), target :: ctx
-    real(dp), contiguous, pointer :: mo_p(:,:) => null()
+    real(dp), contiguous, pointer :: mo_p(:,:)
     real(dp), allocatable :: cbuf(:,:), curv_w(:), curv_u(:,:)
     integer :: n, nc, na, nstate, nroot, maxmacro, optimizer, canonical
     integer :: maxescape, maxhist, ierr, k, i, j, nhist, niter
@@ -529,6 +529,7 @@ contains
     type(cas_ah_par_t) :: ahpar
     integer :: n_used, n_extrap, auto_code, auto_it
 
+    nullify(mo_p)
     status = 0_i8
     do k = 0, CAS_NSTATS - 1
       stats(k) = 0_c_int32_t
@@ -744,12 +745,13 @@ contains
     integer(i8), intent(out) :: status
     logical, intent(in), optional :: allow_zero_rotations
 
-    real(dp), contiguous, pointer :: hcore_p(:) => null()
-    real(dp), contiguous, pointer :: eri_p(:) => null()
-    real(dp), contiguous, pointer :: mo_p(:,:) => null()
+    real(dp), contiguous, pointer :: hcore_p(:)
+    real(dp), contiguous, pointer :: eri_p(:)
+    real(dp), contiguous, pointer :: mo_p(:,:)
     integer :: n, nc, na, nstate, nroot, nvirt, ierr, idx, i, j, k, p, q
     logical :: zero_rotations_ok
 
+    nullify(hcore_p, eri_p, mo_p)
     status = 0_i8
     zero_rotations_ok = .false.
     if (present(allow_zero_rotations)) zero_rotations_ok = allow_zero_rotations
