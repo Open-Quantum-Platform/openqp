@@ -2370,24 +2370,6 @@ def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
                    "with an ROHF triplet reference for other triplet workflows.",
             wiki=WIKI_HELP["tdhf.type"],
         )
-    # The triplet gradient uses the spin-resolved f_xc / g_xc contractions
-    # with a spin-antisymmetric X+Y; their meta-GGA (tau) terms do not
-    # reproduce finite differences for that case (M06-2X: 1.8e-4 Eh/bohr),
-    # while the singlet meta-GGA gradient does.  Same boundary as UMRSF.
-    td_functional = _as_lower(_get(config, "input", "functional", ""))
-    if (td_type in {"rpa", "tda"} and int(td_mult) == 3 and runtype in {"grad", "optimize"}
-            and td_functional in _UMRSF_META_GGA_FUNCTIONALS):
-        report.add(
-            "ERROR",
-            "input.functional",
-            "Closed-shell triplet RPA/TDA gradients do not support meta-GGA functionals.",
-            value=td_functional,
-            expected="LDA, GGA, global-hybrid or range-separated (CAM) functional, or HF",
-            action="Use a non-meta-GGA functional for triplet gradients; meta-GGA triplet "
-                   "energies remain available with runtype=energy.",
-            wiki=WIKI_HELP["tdhf.type"],
-        )
-
     # MECPOpt evaluates its two surfaces by switching [tdhf] multiplicity to
     # optimize.imult and optimize.jmult, so tdhf.multiplicity=1 does not keep a
     # conventional RPA/TDA MECP away from the missing triplet path: the

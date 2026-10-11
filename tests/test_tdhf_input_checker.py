@@ -69,20 +69,14 @@ class TestConventionalTDHFMultiplicity(unittest.TestCase):
                     self.input_checker._check_tdhf(tdhf_config(td_type, 3, runtype), report)
                     self.assertTrue(report.ok, report.to_text())
 
-    def test_triplet_gradient_rejects_meta_gga(self):
-        for runtype in ("grad", "optimize"):
+    def test_triplet_gradient_accepts_meta_gga(self):
+        for runtype in ("energy", "grad", "optimize"):
             with self.subTest(runtype=runtype):
                 config = tdhf_config("rpa", 3, runtype)
                 config["input"]["functional"] = "m06-2x"
                 report = self.input_checker.CheckReport()
                 self.input_checker._check_tdhf(config, report)
-                self.assertFalse(report.ok)
-                self.assertIn("meta-GGA", report.to_text())
-        config = tdhf_config("rpa", 3, "energy")
-        config["input"]["functional"] = "m06-2x"
-        report = self.input_checker.CheckReport()
-        self.input_checker._check_tdhf(config, report)
-        self.assertTrue(report.ok, report.to_text())
+                self.assertTrue(report.ok, report.to_text())
 
     def test_rpa_and_tda_reject_triplet_hessian_and_nac(self):
         for td_type in ("rpa", "tda"):

@@ -10,10 +10,9 @@ derivative.  Checks:
   dxb = +dxa) equals the restricted singlet gradient: pins the normalization
   of the spin-resolved paths the triplet uses;
 * triplet gradient == central finite differences of the triplet energy
-  (C1 H2O/6-31G*, HF, SVWN, PBE, B3LYP, CAM-B3LYP; TDA and RPA).
-Meta-GGA triplet gradients are rejected by the input checker (their
-spin-antisymmetric tau terms do not reproduce finite differences); the
-singlet identity above still covers M06-2X.
+  (C1 H2O/6-31G*, HF, SVWN, PBE, B3LYP, CAM-B3LYP, TPSS, M06-2X; TDA and RPA).
+  The meta-GGA cases pin the rho_beta tau-tau third-derivative term of
+  xc_der3_contr, whose index error cancels for spin-symmetric input only.
 """
 import json
 import os
@@ -113,7 +112,7 @@ class TestTripletGradient(unittest.TestCase):
                         self.assertAlmostEqual(a, b, delta=1e-7)
 
     def test_triplet_gradient_equals_finite_differences(self):
-        for func in (None, "svwn", "pbe", "b3lypv5", "cam-b3lyp"):
+        for func in (None, "svwn", "pbe", "b3lypv5", "cam-b3lyp", "tpss", "m06-2x"):
             for td in ("tda", "rpa"):
                 with self.subTest(functional=func or "hf", td=td):
                     rc, grad, dlog = _gradient(func, td, 3)
