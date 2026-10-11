@@ -312,6 +312,9 @@ class MPIPool:
         # no queue of not-yet-started work to drop.
         pass
 
+    def join(self):
+        pass
+
 class MPIMap(Iterator):
 
     def __init__(self, func, var, processes):

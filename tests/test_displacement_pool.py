@@ -231,6 +231,80 @@ TERMINATE_DRIVER = textwrap.dedent('''
 ''')
 
 
+STOP_RUNNING_DRIVER = textwrap.dedent('''
+    import os
+    import pathlib
+    import sys
+    import time
+
+    from oqp.pyoqp import Runner
+    from oqp.library import single_point
+
+    work = pathlib.Path(sys.argv[1])
+    inp = work / "h2.inp"
+    inp.write_text("""[input]
+    system=
+       1   0.000000000   0.000000000   0.000000000
+       1   0.000000000   0.000000000   0.740000000
+    charge=0
+    runtype=energy
+    basis=sto-3g
+    method=hf
+    [guess]
+    type=huckel
+    [scf]
+    multiplicity=1
+    type=rhf
+    [hess]
+    type=numerical
+    nproc=2
+    """)
+    runner = Runner(project="h2", input_file=str(inp), log=str(work / "h2.log"))
+    runner.run()
+
+    pid_file = work / "child.pid"
+    returned = work / "worker1.returned"
+    child = ("import os, pathlib, sys, time; "
+             "pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(120)")
+
+    def worker(task):
+        if task["idx"] == 1:
+            # Stands in for a displaced OpenQP job: a long-running child
+            # started through the driver's job registry.
+            task["jobs"].run([sys.executable, "-c", child, str(pid_file)], dict(os.environ))
+            returned.touch()
+            return task["idx"], None, "failed", None
+        if task["idx"] == 0:
+            deadline = time.time() + 60
+            while not pid_file.exists() and time.time() < deadline:
+                time.sleep(0.05)
+            raise RuntimeError("displacement worker failure")
+        return task["idx"], None, "computed", None
+
+    single_point.grad_wrapper = worker
+    start = time.time()
+    try:
+        single_point.Hessian(runner.mol).numerical_hess()
+    except RuntimeError as exc:
+        assert "displacement worker failure" in str(exc)
+    else:
+        raise AssertionError("worker exception did not reach numerical_hess")
+    elapsed = time.time() - start
+    pid = int(pid_file.read_text())
+    try:
+        os.kill(pid, 0)
+        alive = True
+    except ProcessLookupError:
+        alive = False
+    # The child sleeps 120 s: an un-stopped job is still alive here, and a
+    # driver that does not wait for its workers raises before they return.
+    assert not alive, f"displacement child {pid} outlived the failed driver"
+    assert returned.exists(), "driver raised before its active worker returned"
+    assert elapsed < 60, elapsed
+    print("DISPLACEMENT_POOL_OK")
+''')
+
+
 @unittest.skipUnless(RUNTIME, "compiled OpenQP runtime not available")
 class DisplacementPoolTests(unittest.TestCase):
     def _run(self, driver, timeout):
@@ -260,6 +334,9 @@ class DisplacementPoolTests(unittest.TestCase):
 
     def test_failed_worker_stops_queued_displacements(self):
         self._run(TERMINATE_DRIVER, timeout=120)
+
+    def test_failed_worker_stops_running_displacement_jobs(self):
+        self._run(STOP_RUNNING_DRIVER, timeout=180)
 
 
 if __name__ == "__main__":

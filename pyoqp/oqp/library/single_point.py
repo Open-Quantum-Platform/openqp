@@ -9,6 +9,7 @@ import shutil
 import hashlib
 import platform
 import subprocess
+import threading
 import numpy as np
 from multiprocessing.pool import ThreadPool
 from numpy import linalg as la
@@ -2514,6 +2515,7 @@ class Hessian(Calculator):
         run_signature = _displacement_run_signature(
             origin_coord, atoms, dx,
             self.mol._hessian_request_signature(self.state))
+        jobs = _ExternalJobs()
         variables_wrapper = [
             {
                 'idx': idx,
@@ -2532,6 +2534,7 @@ class Hessian(Calculator):
                 'guess_file': guess_file,
                 'state': self.state,
                 'restart': self.restart,
+                'jobs': jobs,
             }
             for idx, coord in enumerate(shifted_coord)
         ]
@@ -2558,7 +2561,7 @@ class Hessian(Calculator):
                     dump_log(self.mol, title=None, section='hess_worker', info=[n, idx, flag, timing])
                     dump_data(self.mol, (n, idx, np.sum(grad ** 2) ** 2, timing), title='NUM_HESS', fpath=self.mol.log_path)
         except BaseException:
-            pool.terminate()
+            _abort_displacements(pool, jobs)
             raise
 
         pool.close()
@@ -2637,8 +2640,9 @@ def _displacement_pool(mpi_manager, ntask, nproc):
     already-imported modules, need no pickling, and an exception in a worker
     reaches the caller instead of being swallowed.
 
-    Callers must ``terminate()`` the pool when that exception propagates, so
-    queued displacements are not started after the driver has failed.
+    When that exception propagates, callers must call ``_abort_displacements``
+    so that no queued displacement starts and no running one outlives the
+    driver.
     """
     if mpi_manager.use_mpi:
         ncpu = int(min(ntask, mpi_manager.comm.size))
@@ -2647,7 +2651,56 @@ def _displacement_pool(mpi_manager, ntask, nproc):
     return ThreadPool(processes=ncpu), ncpu
 
 
-def _run_oqp_external(inp, env_overrides=None):
+class _ExternalJobs:
+    """Child OpenQP processes started by one finite-difference driver.
+
+    ``ThreadPool.terminate()`` only drops queued tasks: a worker thread already
+    blocked on its child keeps waiting, and the child keeps writing into the
+    driver's scratch directory after the driver has raised.  The driver passes
+    one of these to every worker so that, on failure, it can stop the children
+    that are running and refuse to start new ones.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._procs = set()
+        self._stopped = False
+
+    def run(self, cmd, env):
+        with self._lock:
+            if self._stopped:
+                return
+            proc = subprocess.Popen(cmd, env=env)
+            self._procs.add(proc)
+        try:
+            proc.wait()
+        finally:
+            with self._lock:
+                self._procs.discard(proc)
+
+    def stop(self, grace=10.0):
+        with self._lock:
+            self._stopped = True
+            procs = list(self._procs)
+        for proc in procs:
+            proc.terminate()
+        for proc in procs:
+            try:
+                proc.wait(timeout=grace)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+
+
+def _abort_displacements(pool, jobs):
+    """Stop a displacement driver after a worker raised: drop queued tasks,
+    stop running child jobs, and wait for every worker to return."""
+    pool.terminate()
+    jobs.stop()
+    pool.join()
+
+
+def _run_oqp_external(inp, env_overrides=None, jobs=None):
     # Run a calculation in a fresh process. Prefer the installed `openqp`
     # console script; fall back to invoking the same entry point
     # (oqp.pyoqp:main) via the current interpreter so this works when OpenQP
@@ -2669,7 +2722,10 @@ def _run_oqp_external(inp, env_overrides=None):
     env = os.environ.copy()
     if env_overrides:
         env.update(env_overrides)
-    subprocess.run(cmd, env=env)
+    if jobs is None:
+        subprocess.run(cmd, env=env)
+    else:
+        jobs.run(cmd, env)
 
 
 def grad_wrapper(key_dict):
@@ -2748,7 +2804,7 @@ def grad_wrapper(key_dict):
 
         if not MPIManager().use_mpi:
             # run grad calculation externally
-            _run_oqp_external(inp)
+            _run_oqp_external(inp, jobs=key_dict.get('jobs'))
         else:
             # run grad calculation internally
             start_time = time.time()
@@ -3591,6 +3647,7 @@ class NAC(Calculator):
         self.mpi_manager.barrier()
         atoms = self.mol.get_atoms()
         guess_file = self.mol.log.replace('.log', '.json')
+        jobs = _ExternalJobs()
         variables_wrapper = [
             {
                 'idx': idx,
@@ -3603,6 +3660,7 @@ class NAC(Calculator):
                 'config': copy.deepcopy(self.mol.config),
                 'guess_file': guess_file,
                 'restart': self.restart,
+                'jobs': jobs,
             }
             for idx, coord in enumerate(shifted_coord)
         ]
@@ -3629,7 +3687,7 @@ class NAC(Calculator):
                     dump_log(self.mol, title=None, section='nacv_worker', info=[n, idx, flag, timing])
                     dump_data(self.mol, (n, idx, np.sum(dcme ** 2) ** 2, timing), title='NUM_NACV', fpath=self.mol.log_path)
         except BaseException:
-            pool.terminate()
+            _abort_displacements(pool, jobs)
             raise
 
         pool.close()
@@ -3726,7 +3784,7 @@ def nacme_wrapper(key_dict):
 
         if not MPIManager().use_mpi:
             # run nac calculation externally
-            _run_oqp_external(inp, {'OQP_NUM_NAC_WORKER': '1'})
+            _run_oqp_external(inp, {'OQP_NUM_NAC_WORKER': '1'}, jobs=key_dict.get('jobs'))
         else:
             # run nac calculation internally
             start_time = time.time()
