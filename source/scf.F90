@@ -1387,8 +1387,21 @@ contains
         call int2_driver%pe%bcast(mo_energy_b, size(mo_energy_b))
     end if
     if (scf_type == scf_uhf) then
-        call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
-        call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
+      ! Publish canonical orbitals of the final Fock. get_ab_initio_orbital
+      ! fills by aufbau, so for a MOM or restricted-MO (rstctmo) solution with
+      ! a non-aufbau occupation the published occupied orbitals would no
+      ! longer span the converged density in pdmat (e.g. a core hole: the 1s
+      ! comes back occupied and the excited electron's orbital is published
+      ! as a virtual). Occupy, per spin, the eigenvectors that carry the
+      ! converged density (largest c^T S D S c). The density, not the orbitals
+      ! in hand, is the reference: after a first-iteration exit from a
+      ! supplied guess those orbitals need not be the ones that built it.
+      call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
+      call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
+      if (do_mom .or. do_rstctmo) then
+        call rohf_fix(mo_a, mo_energy_a, pdmat(:,1), smat_full, nelec_a, nbf, nbf)
+        call rohf_fix(mo_b, mo_energy_b, pdmat(:,2), smat_full, nelec_b, nbf, nbf)
+      end if
     endif
 
     !----------------------------------------------------------------------------
@@ -1530,8 +1543,15 @@ contains
     ! locals
     integer :: i
     real(dp) :: delta_dens_a, delta_dens_b
+    logical :: keep_occ
 
     if (.not.(use_soscf .or. use_trah)) return
+
+    ! The aufbau fill below loses a non-aufbau occupation selected by MOM or
+    ! by restricted-MO reordering (rstctmo), which SOSCF and TRAH converge by
+    ! rotations. RHF/UHF: occupy the eigenvectors that carry the converged
+    ! density pdmat (ROHF has its own density check below).
+    keep_occ = (infos%control%mom .or. infos%control%rstctmo) .and. scf_type /= scf_rohf
 
     if (scf_type == scf_rohf) then
       rohf_bak(:,1) = pfock(:,1)
@@ -1544,6 +1564,8 @@ contains
 
     ! Diagonalize alpha Fock
     call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
+    ! RHF: pdmat(:,1) is the total density; the weights only rank orbitals.
+    if (keep_occ) call rohf_fix(mo_a, mo_energy_a, pdmat(:,1), smat_full, nelec_a, nbf, nbf)
 
     ! Spin treatment
     if (scf_type == scf_rohf) then
@@ -1551,6 +1573,7 @@ contains
       mo_energy_b = mo_energy_a
     else if (scf_type == scf_uhf) then
       call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
+      if (keep_occ) call rohf_fix(mo_b, mo_energy_b, pdmat(:,2), smat_full, nelec_b, nbf, nbf)
     end if
 
     ! Build densities from MOs (both spins)
