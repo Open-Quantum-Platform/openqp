@@ -328,6 +328,22 @@ def test_response_spin_is_selected_only_by_physical_state():
         with pytest.raises(OQPInputError, match="singlet labels only"):
             oqp_input.parse_canonical_oqp('%s geom="h2o.xyz" grad(T0)' % route)
 
+    # Closed-shell triplet RPA/TDA energies: energy(T0) keeps the RHF singlet
+    # reference and selects [tdhf] multiplicity=3.
+    for route, td_type in (("tddft(nstate=4)/pbe0/def2-svp", "rpa"),
+                           ("tda(nstate=4)/pbe0/def2-svp", "tda"),
+                           ("tdhf(nstate=4)/def2-svp", "rpa")):
+        _, triplet = _parse('%s geom="h2o.xyz" energy(T0)' % route)
+        assert triplet["input"]["runtype"] == "energy"
+        assert triplet["scf"]["type"] == "rhf"
+        assert triplet["scf"]["multiplicity"] == "1"
+        assert triplet["tdhf"]["type"] == td_type
+        assert triplet["tdhf"]["multiplicity"] == "3"
+        assert triplet["tdhf"]["nstate"] == "4"
+    for route in ("tddftb(nstate=4)/def2-svp",):
+        with pytest.raises(OQPInputError):
+            oqp_input.parse_canonical_oqp('%s geom="h2o.xyz" energy(T0)' % route)
+
     with pytest.raises(OQPInputError, match="does not take spin"):
         oqp_input.parse_canonical_oqp(
             'mrsf(nstate=4,spin=triplet)/bhhlyp/6-31g* geom="h2o.xyz" grad(S1)'
