@@ -2664,6 +2664,31 @@ def _direct_children(parents):
     return found
 
 
+def _wait_until_stopped(pids, timeout=5.0):
+    """Wait until every PID in ``pids`` is observed stopped, a zombie, or gone.
+
+    SIGSTOP is delivered asynchronously: until ``ps`` reports the process in
+    state T (or Z, or no longer present) it may still fork or reap, so its
+    children cannot yet be treated as pinned.
+    """
+    pending = set(pids)
+    deadline = time.time() + timeout
+    while pending:
+        out = subprocess.run(['ps', '-o', 'pid=,stat=', '-p',
+                              ','.join(str(pid) for pid in sorted(pending))],
+                             capture_output=True, text=True).stdout
+        running = set()
+        for line in out.splitlines():
+            fields = line.split()
+            if len(fields) == 2 and fields[1][0] not in 'TtZ':
+                running.add(int(fields[0]))
+        pending = running
+        if not pending or time.time() > deadline:
+            return not pending
+        time.sleep(0.01)
+    return True
+
+
 def _signal_pids(pids, sig):
     for pid in pids:
         try:
@@ -2712,7 +2737,8 @@ class _ExternalJobs:
         """SIGSTOP ``proc`` and all its descendants, one generation at a time;
         return the descendants, or None when ``proc`` has already been reaped.
 
-        Only direct children of already-stopped processes are ever signalled.
+        Only direct children of processes observed in the stopped state are
+        ever signalled.
         A stopped process cannot reap its children, so each such child -- alive
         or a zombie -- keeps its PID until its parent is resumed, and signalling
         it cannot reach a recycled PID.  Deeper generations are discovered only
@@ -2721,12 +2747,15 @@ class _ExternalJobs:
         proc.send_signal(signal.SIGSTOP)  # a no-op once proc is reaped
         if proc.poll() is not None:
             return None
+        _wait_until_stopped([proc.pid])
         frozen = {proc.pid}
         while True:
             new = [pid for pid in _direct_children(frozen) if pid not in frozen]
             if not new:
                 return sorted(frozen - {proc.pid})
             _signal_pids(new, signal.SIGSTOP)
+            # Only list their children once they are observed stopped.
+            _wait_until_stopped(new)
             frozen.update(new)
 
     def stop(self, grace=10.0):

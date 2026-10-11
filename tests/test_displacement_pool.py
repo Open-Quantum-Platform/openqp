@@ -406,6 +406,11 @@ STOP_ORDER_DRIVER = textwrap.dedent('''
                              capture_output=True, text=True).stdout.split()
         return int(out[0]) if out else None
 
+    def state_of(pid):
+        out = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)],
+                             capture_output=True, text=True).stdout.split()
+        return out[0][0] if out else None
+
     def recording_signal_pids(pids, sig):
         events.append(("raw-signal", sig))
         if sig == signal.SIGSTOP:
@@ -413,8 +418,13 @@ STOP_ORDER_DRIVER = textwrap.dedent('''
             # which cannot reap it, so the PID cannot have been recycled.
             # Recorded rather than raised, so stop() still finishes its cleanup.
             for pid in pids:
-                if parent_of(pid) not in stopped:
+                parent = parent_of(pid)
+                if parent not in stopped:
                     violations.append(("parent not frozen", pid, sorted(stopped)))
+                elif state_of(parent) not in ("T", "t"):
+                    # Signalled, but not yet observed stopped: it could
+                    # still fork or reap.
+                    violations.append(("parent not yet stopped", pid, parent))
             stopped.update(pids)
         return real_signal_pids(pids, sig)
 
