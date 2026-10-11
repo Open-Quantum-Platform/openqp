@@ -1260,10 +1260,19 @@ class SinglePoint(Calculator):
         if getattr(self.mol, 'symmetry_metadata', None):
             self.mol.stage_response_symmetry()
 
+        # Clear the previous solve's imaginary-root flags first: a TD solve
+        # that raises or exhausts its retries returns before they are set
+        # again, and get_results() would mask energies with stale flags.
+        self.mol.td_imaginary_states = ()
+        # Invalidate the previous TD outputs as well: if this solve raises or
+        # breaks down, get_results() must not publish the earlier run's
+        # excitation energies as the current result.
+        self.mol.energies = list(ref_energy)
+        self.mol.td_output_valid = False
         self.tddft()
-        energies = ref_energy + [ex + ref_energy[0] for ex in self.mol.data['OQP::td_energies']]
 
-        # check convergence
+        # Check convergence before reading the TD output tags: a Davidson
+        # breakdown returns before OQP::td_energies is written.
         td_flag = self.mol.mol_energy.Davidson_converged
 
         if self.method != 'hf' and not td_flag:
@@ -1275,7 +1284,28 @@ class SinglePoint(Calculator):
             # so a failed Davidson looked like a successful run.
             raise RuntimeError("TD Davidson did not converge — stopping current run.")
 
+
+        energies = ref_energy + [ex + ref_energy[0] for ex in self.mol.data['OQP::td_energies']]
+
+        # RPA roots with omega^2 < 0 (unstable reference): td_energies holds
+        # |omega|, so the state energy above is not a physical state.  Only
+        # the conventional RPA driver writes this tag.
+        if str(self.mol.config.get('tdhf', {}).get('type', 'rpa')).lower() == 'rpa':
+            try:
+                flags = self.mol.data['OQP::td_imaginary']
+            except AttributeError:
+                flags = ()
+            self.mol.td_imaginary_states = tuple(
+                n + 1 for n, flag in enumerate(flags) if flag > 0.5)
+        # The solver never converges an imaginary root and has no energy for
+        # it: keep the unconverged |omega| out of the state energies (NaN), and
+        # let get_results() publish the per-root status.
+        for n in self.mol.td_imaginary_states:
+            if n < len(energies):
+                energies[n] = float('nan')
+
         self.mol.energies = energies
+        self.mol.td_output_valid = True
 
         # Metadata-only state irrep labels (no-op unless symmetry enabled).
         if getattr(self.mol, 'symmetry_metadata', None):
@@ -1813,6 +1843,13 @@ class Gradient(Calculator):
 
         if self.nstate < max(self.grads):
             raise ValueError(f'Gradient requested state {max(self.grads)} > the highest computed state {self.nstate}')
+
+        imaginary = set(getattr(self.mol, 'td_imaginary_states', ()) or ())
+        if self.td == 'rpa' and imaginary.intersection(self.grads):
+            raise RuntimeError(
+                'Gradient requested for RPA root(s) %s with omega^2 < 0 (imaginary, '
+                'not converged; the SCF reference is unstable).'
+                % ', '.join(str(i) for i in sorted(imaginary.intersection(self.grads))))
 
         grads = np.zeros((self.nstate + 1, self.natom, 3))
         for i in self.grads:
