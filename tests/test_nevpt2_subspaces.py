@@ -108,14 +108,14 @@ def test_available_native_backend_error_is_not_silenced(monkeypatch):
                            np.ones(4) / 2)
 
 
-@pytest.mark.parametrize('norb', [-1, 0, 32])
-def test_fused_native_rejects_invalid_dimensions_before_allocation(norb):
+@pytest.mark.parametrize('norb,ndet', [(-1, 1), (0, 1), (32, 1), (1, 0), (1, -1)])
+def test_fused_native_rejects_invalid_dimensions_before_allocation(norb, ndet):
     backend = sc._koopmans_lib()
     assert backend is not None
     lib, ffi = backend
     assert hasattr(lib, 'nevpt2_make_f3')
     # Invalid dimensions must be rejected before dereferencing any operand.
-    status = lib.nevpt2_make_f3(norb, 0, *(ffi.NULL for _ in range(8)))
+    status = lib.nevpt2_make_f3(norb, ndet, *(ffi.NULL for _ in range(8)))
     assert int(status) == -2
 
 
@@ -144,3 +144,44 @@ def test_memory_guard_precedes_native_allocation(monkeypatch):
 def test_unsupported_encoding_uses_explicit_fallback():
     # The wrapper must decline >31 without allocating a 32^8 tensor.
     assert sc._lib_make_f3([], 32, [], np.empty(0)) is None
+
+
+@pytest.mark.parametrize('name', SUBSPACES)
+@pytest.mark.parametrize('strided', [False, True])
+def test_float32_inputs_are_promoted_at_native_boundary(monkeypatch, name, strided):
+    assert sc._koopmans_lib() is not None
+    monkeypatch.setattr(sc, '_norm_to_energy',
+                        lambda norm, h, diff: (norm.copy(), h.copy()))
+    B, dms = _subspace_inputs(2, 3, 4, 90470)
+    def convert(x):
+        if isinstance(x, tuple):
+            return tuple(convert(v) for v in x)
+        arr = np.asarray(x, dtype=np.float32)
+        if strided:
+            storage = np.empty((*arr.shape[:-1], 2*arr.shape[-1]), dtype=np.float32)
+            storage[..., ::2] = arr
+            arr = storage[..., ::2]
+        return arr
+    B = {key: convert(x) for key, x in B.items()}
+    dms = convert(dms)
+    native = _call_subspace(name, B, dms)
+    def promote(x):
+        if isinstance(x, tuple):
+            return tuple(promote(v) for v in x)
+        return np.asarray(x, dtype=np.float64)
+    reference = _python(monkeypatch, lambda: _call_subspace(
+        name, {key: promote(x) for key, x in B.items()}, promote(dms)))
+    for actual, expected in zip(native, reference):
+        np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-11)
+
+
+def test_external_workspace_is_admitted_before_packing(monkeypatch):
+    # Use a zero-stride view to describe a large external space without
+    # allocating the full integral tensor; admission must happen first.
+    from numpy.lib.stride_tricks import as_strided
+    h = as_strided(np.zeros(1), shape=(202, 202), strides=(0, 0))
+    def should_not_run(*args):
+        pytest.fail('integral packing reached before memory admission')
+    monkeypatch.setattr(sc, '_blocks', should_not_run)
+    with pytest.raises(ValueError, match='above the'):
+        sc.sc_nevpt2_energy(h, None, None, 100, 2, (1, 1), None, max_memory=16)

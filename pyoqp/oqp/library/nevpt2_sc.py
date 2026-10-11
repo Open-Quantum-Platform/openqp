@@ -315,8 +315,8 @@ def _fold_h1e(h1e, h2e):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_fold_h1e"):
             n = int(h1e.shape[0])
-            h1e_c = np.ascontiguousarray(h1e)
-            h2e_c = np.ascontiguousarray(h2e)
+            h1e_c = _as_f64c(h1e)
+            h2e_c = _as_f64c(h2e)
             out = np.empty((n, n), dtype=np.float64)
             lib.nevpt2_fold_h1e(n,
                 ffi.cast("double *", h1e_c.ctypes.data),
@@ -336,11 +336,11 @@ def _a16(h1e, h2e, dm3, f3ca, f3ac):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_a16"):
             n = int(h1e.shape[0])
-            h1e_c = np.ascontiguousarray(h1e)
-            h2e_c = np.ascontiguousarray(h2e)
-            dm3_c = np.ascontiguousarray(dm3)
-            f3ca_c = np.ascontiguousarray(f3ca)
-            f3ac_c = np.ascontiguousarray(f3ac)
+            h1e_c = _as_f64c(h1e)
+            h2e_c = _as_f64c(h2e)
+            dm3_c = _as_f64c(dm3)
+            f3ca_c = _as_f64c(f3ca)
+            f3ac_c = _as_f64c(f3ac)
             out = np.zeros((n,) * 6, dtype=np.float64)
             lib.nevpt2_a16(n,
                 ffi.cast("double *", h1e_c.ctypes.data),
@@ -378,12 +378,12 @@ def _a22(h1e, h2e, dm2, dm3, f3ca, f3ac):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_a22"):
             n = int(h1e.shape[0])
-            h1e_c = np.ascontiguousarray(h1e)
-            h2e_c = np.ascontiguousarray(h2e)
-            dm2_c = np.ascontiguousarray(dm2)
-            dm3_c = np.ascontiguousarray(dm3)
-            f3ca_c = np.ascontiguousarray(f3ca)
-            f3ac_c = np.ascontiguousarray(f3ac)
+            h1e_c = _as_f64c(h1e)
+            h2e_c = _as_f64c(h2e)
+            dm2_c = _as_f64c(dm2)
+            dm3_c = _as_f64c(dm3)
+            f3ca_c = _as_f64c(f3ca)
+            f3ac_c = _as_f64c(f3ac)
             out = np.zeros((n,) * 6, dtype=np.float64)
             lib.nevpt2_a22(n,
                 ffi.cast("double *", h1e_c.ctypes.data),
@@ -431,10 +431,10 @@ def _a17(h1e, h2e, dm2, dm3):
         if hasattr(lib, "nevpt2_a17"):
             n = int(h1e.shape[0])
             h1e_folded = _fold_h1e(h1e, h2e)
-            h1e_folded_c = np.ascontiguousarray(h1e_folded)
-            h2e_c = np.ascontiguousarray(h2e)
-            dm2_c = np.ascontiguousarray(dm2)
-            dm3_c = np.ascontiguousarray(dm3)
+            h1e_folded_c = _as_f64c(h1e_folded)
+            h2e_c = _as_f64c(h2e)
+            dm2_c = _as_f64c(dm2)
+            dm3_c = _as_f64c(dm3)
             out = np.zeros((n,) * 4, dtype=np.float64)
             lib.nevpt2_a17(n,
                 ffi.cast("double *", h1e_folded_c.ctypes.data),
@@ -458,10 +458,10 @@ def _a19(h1e, h2e, dm1, dm2):
         if hasattr(lib, "nevpt2_a19"):
             n = int(h1e.shape[0])
             h1e_folded = _fold_h1e(h1e, h2e)
-            h1e_folded_c = np.ascontiguousarray(h1e_folded)
-            h2e_c = np.ascontiguousarray(h2e)
-            dm1_c = np.ascontiguousarray(dm1)
-            dm2_c = np.ascontiguousarray(dm2)
+            h1e_folded_c = _as_f64c(h1e_folded)
+            h2e_c = _as_f64c(h2e)
+            dm1_c = _as_f64c(dm1)
+            dm2_c = _as_f64c(dm2)
             out = np.zeros((n, n), dtype=np.float64)
             lib.nevpt2_a19(n,
                 ffi.cast("double *", h1e_folded_c.ctypes.data),
@@ -484,11 +484,11 @@ def _a23(h1e, h2e, dm1, dm2, dm3):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_a23"):
             n = int(h1e.shape[0])
-            h1e_c = np.ascontiguousarray(h1e)
-            h2e_c = np.ascontiguousarray(h2e)
-            dm1_c = np.ascontiguousarray(dm1)
-            dm2_c = np.ascontiguousarray(dm2)
-            dm3_c = np.ascontiguousarray(dm3)
+            h1e_c = _as_f64c(h1e)
+            h2e_c = _as_f64c(h2e)
+            dm1_c = _as_f64c(dm1)
+            dm2_c = _as_f64c(dm2)
+            dm3_c = _as_f64c(dm3)
             out = np.zeros((n,) * 4, dtype=np.float64)
             lib.nevpt2_a23(n,
                 ffi.cast("double *", h1e_c.ctypes.data),
@@ -513,10 +513,10 @@ def _a25(h1e, h2e, dm1, dm2):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_a25"):
             n = int(h1e.shape[0])
-            h1e_c = np.ascontiguousarray(h1e)
-            h2e_c = np.ascontiguousarray(h2e)
-            dm1_c = np.ascontiguousarray(dm1)
-            dm2_c = np.ascontiguousarray(dm2)
+            h1e_c = _as_f64c(h1e)
+            h2e_c = _as_f64c(h2e)
+            dm1_c = _as_f64c(dm1)
+            dm2_c = _as_f64c(dm2)
             out = np.zeros((n, n), dtype=np.float64)
             lib.nevpt2_a25(n,
                 ffi.cast("double *", h1e_c.ctypes.data),
@@ -540,7 +540,7 @@ def _hdm1(dm1):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_hdm1"):
             n = int(dm1.shape[0])
-            dm1_c = np.ascontiguousarray(dm1)
+            dm1_c = _as_f64c(dm1)
             out = np.zeros((n, n), dtype=np.float64)
             lib.nevpt2_hdm1(n,
                 ffi.cast("double *", dm1_c.ctypes.data),
@@ -558,8 +558,8 @@ def _hdm2(dm1, dm2):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_hdm2"):
             n = int(dm1.shape[0])
-            dm1_c = np.ascontiguousarray(dm1)
-            dm2_c = np.ascontiguousarray(dm2)
+            dm1_c = _as_f64c(dm1)
+            dm2_c = _as_f64c(dm2)
             out = np.zeros((n, n, n, n), dtype=np.float64)
             lib.nevpt2_hdm2(n,
                 ffi.cast("double *", dm1_c.ctypes.data),
@@ -589,10 +589,10 @@ def _hdm3(dm1, dm2, dm3, hdm1, hdm2):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_hdm3"):
             n = int(dm1.shape[0])
-            dm1_c = np.ascontiguousarray(dm1)
-            dm2_c = np.ascontiguousarray(dm2)
-            dm3_c = np.ascontiguousarray(dm3)
-            hdm2_c = np.ascontiguousarray(hdm2)
+            dm1_c = _as_f64c(dm1)
+            dm2_c = _as_f64c(dm2)
+            dm3_c = _as_f64c(dm3)
+            hdm2_c = _as_f64c(hdm2)
             out = np.zeros((n,) * 6, dtype=np.float64)
             lib.nevpt2_hdm3(n,
                 ffi.cast("double *", dm1_c.ctypes.data),
@@ -622,11 +622,11 @@ def _a3(h1e, h2e, dm1, dm2, hdm1):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_a3"):
             n = int(h1e.shape[0])
-            h1e_c = np.ascontiguousarray(h1e)
-            h2e_c = np.ascontiguousarray(h2e)
-            dm1_c = np.ascontiguousarray(dm1)
-            dm2_c = np.ascontiguousarray(dm2)
-            hdm1_c = np.ascontiguousarray(hdm1)
+            h1e_c = _as_f64c(h1e)
+            h2e_c = _as_f64c(h2e)
+            dm1_c = _as_f64c(dm1)
+            dm2_c = _as_f64c(dm2)
+            hdm1_c = _as_f64c(hdm1)
             out = np.zeros((n, n), dtype=np.float64)
             lib.nevpt2_a3(n,
                 ffi.cast("double *", h1e_c.ctypes.data),
@@ -651,10 +651,10 @@ def _k27(h1e, h2e, dm1, dm2):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_k27"):
             n = int(h1e.shape[0])
-            h1e_c = np.ascontiguousarray(h1e)
-            h2e_c = np.ascontiguousarray(h2e)
-            dm1_c = np.ascontiguousarray(dm1)
-            dm2_c = np.ascontiguousarray(dm2)
+            h1e_c = _as_f64c(h1e)
+            h2e_c = _as_f64c(h2e)
+            dm1_c = _as_f64c(dm1)
+            dm2_c = _as_f64c(dm2)
             out = np.zeros((n, n), dtype=np.float64)
             lib.nevpt2_k27(n,
                 ffi.cast("double *", h1e_c.ctypes.data),
@@ -678,11 +678,11 @@ def _a7(h1e, h2e, dm1, dm2, dm3):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_a7"):
             n = int(h1e.shape[0])
-            h1e_c = np.ascontiguousarray(h1e)
-            h2e_c = np.ascontiguousarray(h2e)
-            dm1_c = np.ascontiguousarray(dm1)
-            dm2_c = np.ascontiguousarray(dm2)
-            dm3_c = np.ascontiguousarray(dm3)
+            h1e_c = _as_f64c(h1e)
+            h2e_c = _as_f64c(h2e)
+            dm1_c = _as_f64c(dm1)
+            dm2_c = _as_f64c(dm2)
+            dm3_c = _as_f64c(dm3)
             rm2 = np.zeros((n,) * 4, dtype=np.float64)
             a7_out = np.zeros((n,) * 4, dtype=np.float64)
             lib.nevpt2_a7(n,
@@ -719,10 +719,10 @@ def _a9(h1e, h2e, hdm1, hdm2, hdm3):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_a9"):
             n = int(h1e.shape[0])
-            h1e_c = np.ascontiguousarray(h1e)
-            h2e_c = np.ascontiguousarray(h2e)
-            hdm2_c = np.ascontiguousarray(hdm2)
-            hdm3_c = np.ascontiguousarray(hdm3)
+            h1e_c = _as_f64c(h1e)
+            h2e_c = _as_f64c(h2e)
+            hdm2_c = _as_f64c(hdm2)
+            hdm3_c = _as_f64c(hdm3)
             out = np.zeros((n,) * 4, dtype=np.float64)
             lib.nevpt2_a9(n,
                 ffi.cast("double *", h1e_c.ctypes.data),
@@ -753,10 +753,10 @@ def _a12(h1e, h2e, dm1, dm2, dm3):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_a12"):
             n = int(h1e.shape[0])
-            h1e_c = np.ascontiguousarray(h1e)
-            h2e_c = np.ascontiguousarray(h2e)
-            dm2_c = np.ascontiguousarray(dm2)
-            dm3_c = np.ascontiguousarray(dm3)
+            h1e_c = _as_f64c(h1e)
+            h2e_c = _as_f64c(h2e)
+            dm2_c = _as_f64c(dm2)
+            dm3_c = _as_f64c(dm3)
             out = np.zeros((n,) * 4, dtype=np.float64)
             lib.nevpt2_a12(n,
                 ffi.cast("double *", h1e_c.ctypes.data),
@@ -783,11 +783,11 @@ def _a13(h1e, h2e, dm1, dm2, dm3):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_a13"):
             n = int(h1e.shape[0])
-            h1e_c = np.ascontiguousarray(h1e)
-            h2e_c = np.ascontiguousarray(h2e)
-            dm1_c = np.ascontiguousarray(dm1)
-            dm2_c = np.ascontiguousarray(dm2)
-            dm3_c = np.ascontiguousarray(dm3)
+            h1e_c = _as_f64c(h1e)
+            h2e_c = _as_f64c(h2e)
+            dm1_c = _as_f64c(dm1)
+            dm2_c = _as_f64c(dm2)
+            dm3_c = _as_f64c(dm3)
             out = np.zeros((n,) * 4, dtype=np.float64)
             lib.nevpt2_a13(n,
                 ffi.cast("double *", h1e_c.ctypes.data),
@@ -1029,9 +1029,9 @@ def _sijrs_lib(e_core, e_virt, g_cvcv):
         return None, None
     nc = int(len(e_core))
     nv = int(len(e_virt))
-    g_contig = np.ascontiguousarray(g_cvcv)
-    e_core_contig = np.ascontiguousarray(e_core)
-    e_virt_contig = np.ascontiguousarray(e_virt)
+    g_contig = _as_f64c(g_cvcv)
+    e_core_contig = _as_f64c(e_core)
+    e_virt_contig = _as_f64c(e_virt)
     norm_ptr = ffi.new("double *")
     energy_ptr = ffi.new("double *")
     lib.nevpt2_sijrs(nc, nv,
@@ -1059,9 +1059,9 @@ def _srs_lib(h2e_v, rm2, a7, e_virt):
     energy_ptr = ffi.new("double[%d]" % nv2)
     # h2e_v has phys'd layout [nvirt, nvirt, nact, nact] from _blocks;
     # Fortran expects [nvirt, nact, nvirt, nact] (undo phys)
-    h2e_v_contig = np.ascontiguousarray(h2e_v.transpose(0, 2, 1, 3))
-    rm2_contig = np.ascontiguousarray(rm2)
-    a7_contig = np.ascontiguousarray(a7)
+    h2e_v_contig = _as_f64c(h2e_v.transpose(0, 2, 1, 3))
+    rm2_contig = _as_f64c(rm2)
+    a7_contig = _as_f64c(a7)
     lib.nevpt2_srs(nact, nvirt,
                    ffi.cast("double *", h2e_v_contig.ctypes.data),
                    ffi.cast("double *", rm2_contig.ctypes.data),
@@ -1089,9 +1089,9 @@ def _sij_lib(h2e_v, hdm2, a9, e_core):
     energy_ptr = ffi.new("double[%d]" % nc2)
     # h2e_v has phys'd layout [nact, nact, ncore, ncore] from _blocks;
     # Fortran expects [nact, ncore, nact, ncore] (undo phys)
-    h2e_v_contig = np.ascontiguousarray(h2e_v.transpose(0, 2, 1, 3))
-    hdm2_contig = np.ascontiguousarray(hdm2)
-    a9_contig = np.ascontiguousarray(a9)
+    h2e_v_contig = _as_f64c(h2e_v.transpose(0, 2, 1, 3))
+    hdm2_contig = _as_f64c(hdm2)
+    a9_contig = _as_f64c(a9)
     lib.nevpt2_sij(nact, ncore,
                    ffi.cast("double *", h2e_v_contig.ctypes.data),
                    ffi.cast("double *", hdm2_contig.ctypes.data),
@@ -1113,9 +1113,9 @@ def _sijr_lib(nvirt, ncore, h2e_v, hdm1, a3):
     nact = int(hdm1.shape[0])
     if nvirt <= 0 or ncore <= 0 or nact <= 0:
         return np.zeros((nvirt, ncore, ncore)), np.zeros((nvirt, ncore, ncore))
-    h2e_v_c = np.ascontiguousarray(h2e_v)
-    hdm1_c = np.ascontiguousarray(hdm1)
-    a3_c = np.ascontiguousarray(a3)
+    h2e_v_c = _as_f64c(h2e_v)
+    hdm1_c = _as_f64c(hdm1)
+    a3_c = _as_f64c(a3)
     nc2 = ncore * ncore
     nr2 = nvirt * nc2
     norm_ptr = ffi.new("double[%d]" % nr2)
@@ -1139,14 +1139,14 @@ def _sr_lib(nvirt, nact, h2e_v, h1e_v, a16, a17, a19, dm3, dm2, dm1):
         return None, None
     if nvirt <= 0 or nact <= 0:
         return np.zeros(nvirt), np.zeros(nvirt)
-    h2e_v_c = np.ascontiguousarray(h2e_v)
-    h1e_v_c = np.ascontiguousarray(h1e_v)
-    a16_c = np.ascontiguousarray(a16)
-    a17_c = np.ascontiguousarray(a17)
-    a19_c = np.ascontiguousarray(a19)
-    dm3_c = np.ascontiguousarray(dm3)
-    dm2_c = np.ascontiguousarray(dm2)
-    dm1_c = np.ascontiguousarray(dm1)
+    h2e_v_c = _as_f64c(h2e_v)
+    h1e_v_c = _as_f64c(h1e_v)
+    a16_c = _as_f64c(a16)
+    a17_c = _as_f64c(a17)
+    a19_c = _as_f64c(a19)
+    dm3_c = _as_f64c(dm3)
+    dm2_c = _as_f64c(dm2)
+    dm1_c = _as_f64c(dm1)
     norm_ptr = ffi.new("double[%d]" % nvirt)
     energy_ptr = ffi.new("double[%d]" % nvirt)
     lib.nevpt2_sr(nvirt, nact,
@@ -1175,9 +1175,9 @@ def _srsi_lib(nvirt, ncore, h2e_v, dm1, k27):
     nact = int(dm1.shape[0])
     if nvirt <= 0 or ncore <= 0 or nact <= 0:
         return np.zeros((nvirt, nvirt, ncore)), np.zeros((nvirt, nvirt, ncore))
-    h2e_v_c = np.ascontiguousarray(h2e_v)
-    dm1_c = np.ascontiguousarray(dm1)
-    k27_c = np.ascontiguousarray(k27)
+    h2e_v_c = _as_f64c(h2e_v)
+    dm1_c = _as_f64c(dm1)
+    k27_c = _as_f64c(k27)
     nvnc = nvirt * ncore
     nv2nc = nvirt * nvirt * ncore
     norm_ptr = ffi.new("double[%d]" % nv2nc)
@@ -1203,13 +1203,13 @@ def _sir_lib(nvirt, ncore, h2e_v1, h2e_v2, h1e_v, dm1, dm2, a12, a13):
     nact = int(dm1.shape[0])
     if nvirt <= 0 or ncore <= 0 or nact <= 0:
         return np.zeros((nvirt, ncore)), np.zeros((nvirt, ncore))
-    h2e_v1_c = np.ascontiguousarray(h2e_v1)
-    h2e_v2_c = np.ascontiguousarray(h2e_v2)
-    h1e_v_c = np.ascontiguousarray(h1e_v)
-    dm1_c = np.ascontiguousarray(dm1)
-    dm2_c = np.ascontiguousarray(dm2)
-    a12_c = np.ascontiguousarray(a12)
-    a13_c = np.ascontiguousarray(a13)
+    h2e_v1_c = _as_f64c(h2e_v1)
+    h2e_v2_c = _as_f64c(h2e_v2)
+    h1e_v_c = _as_f64c(h1e_v)
+    dm1_c = _as_f64c(dm1)
+    dm2_c = _as_f64c(dm2)
+    a12_c = _as_f64c(a12)
+    a13_c = _as_f64c(a13)
     nr = nvirt * ncore
     norm_ptr = ffi.new("double[%d]" % nr)
     energy_ptr = ffi.new("double[%d]" % nr)
@@ -1236,14 +1236,14 @@ def _si_lib(ncore, nact, h2e_v, h1e_v, a22, a23, a25, dm3_h, dm2_h, dm1_h):
         return None, None
     if ncore <= 0 or nact <= 0:
         return np.zeros(ncore), np.zeros(ncore)
-    h2e_v_c = np.ascontiguousarray(h2e_v)
-    h1e_v_c = np.ascontiguousarray(h1e_v)
-    a22_c = np.ascontiguousarray(a22)
-    a23_c = np.ascontiguousarray(a23)
-    a25_c = np.ascontiguousarray(a25)
-    dm3_h_c = np.ascontiguousarray(dm3_h)
-    dm2_h_c = np.ascontiguousarray(dm2_h)
-    dm1_h_c = np.ascontiguousarray(dm1_h)
+    h2e_v_c = _as_f64c(h2e_v)
+    h1e_v_c = _as_f64c(h1e_v)
+    a22_c = _as_f64c(a22)
+    a23_c = _as_f64c(a23)
+    a25_c = _as_f64c(a25)
+    dm3_h_c = _as_f64c(dm3_h)
+    dm2_h_c = _as_f64c(dm2_h)
+    dm1_h_c = _as_f64c(dm1_h)
     norm_ptr = ffi.new("double[%d]" % ncore)
     energy_ptr = ffi.new("double[%d]" % ncore)
     lib.nevpt2_si(ncore, nact,
@@ -1333,7 +1333,16 @@ def sc_nevpt2_energy(h1e_mo, eri_mo, eps, ncore, nact, active_nelec, ci_vector,
     # permutation/result panels. Reserve 24 rank-six arrays plus small panels;
     # retaining dm4 here also covers the unfused NumPy fallback conservatively.
     _post_bytes = _dm4_bytes + 24*_dm3_bytes + 8*(16*n**4 + 8*n**2)
-    _live_bytes = max(_construction, _post_bytes)
+    nc = max(0, int(ncore))
+    nv = max(0, int(h1e_mo.shape[0]) - nc - n) if h1e_mo is not None else 0
+    # Two packed Sir tensors are the largest simultaneous integral copies.
+    # Other native paths pack one block; norm/H/diff, triangular copies and
+    # denominator arithmetic are bounded conservatively by 16 output arrays.
+    _pack = max(nc*nc*nv*nv, nv*nv*nc*n, nv*nc*nc*n,
+                nv*nv*n*n, nc*nc*n*n, 2*nv*nc*n*n, (nv+nc)*n**3)
+    _external = 8 * (_pack + 16*(nv*nv*nc + nv*nc*nc + nv*nv + nc*nc + nv*nc + nv+nc)
+                     + 4*int(h1e_mo.shape[0])**2 if h1e_mo is not None else _pack)
+    _live_bytes = max(_construction, _post_bytes + _external)
     _cap = (2 * 1024**3 if max_memory is None
             else max(1, int(max_memory)) * 1024**2)
     if _live_bytes > _cap:
