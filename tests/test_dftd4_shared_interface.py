@@ -17,6 +17,8 @@ from types import SimpleNamespace
 import numpy as np
 
 
+from build_tools import find_cmake
+
 ROOT = Path(__file__).resolve().parents[1]
 SINGLE_POINT = ROOT / "pyoqp" / "oqp" / "library" / "single_point.py"
 MOLECULE = ROOT / "pyoqp" / "oqp" / "molecule" / "molecule.py"
@@ -302,9 +304,7 @@ def test_checked_in_build_file_patches_are_stable_and_declared():
 def test_patch_helper_is_idempotent_and_rejects_unknown_source_state():
     patch_executable = shutil.which("patch")
     assert patch_executable, "the DFT-D4 build requires the patch executable"
-    cmake = "/opt/homebrew/bin/cmake"
-    if not Path(cmake).is_file():
-        cmake = "cmake"
+    cmake = find_cmake()
 
     with tempfile.TemporaryDirectory(prefix="oqp_d4_patch_helper_") as tmp:
         tmp_path = Path(tmp)
@@ -411,9 +411,7 @@ oqp_generate_dftd4_build_info("@OUTPUT@")
             driver = driver.replace(marker, value)
         driver_path = tmp_path / "generate.cmake"
         driver_path.write_text(driver, encoding="utf-8")
-        cmake = "/opt/homebrew/bin/cmake"
-        if not Path(cmake).is_file():
-            cmake = "cmake"
+        cmake = find_cmake()
         result = subprocess.run(
             [cmake, "-P", str(driver_path)],
             capture_output=True,

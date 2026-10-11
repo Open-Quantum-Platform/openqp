@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
+from oqp_module_isolation import child_env
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -245,11 +246,7 @@ result = {
 }
 print('BAECK_AN=' + json.dumps(result))
 """
-    env = os.environ.copy()
-    pythonpath = str(ROOT / "pyoqp")
-    if env.get("PYTHONPATH"):
-        pythonpath += os.pathsep + env["PYTHONPATH"]
-    env["PYTHONPATH"] = pythonpath
+    env = child_env()
     result = subprocess.run(
         [sys.executable, "-c", script], cwd=ROOT, env=env,
         capture_output=True, text=True, check=False,
@@ -308,11 +305,7 @@ def test_trace_rejects_output_alias_before_deleting_source(tmp_path, alias_kind)
         '--input', str(input_path), '--random-file', str(random_path),
         '--trace', str(protected),
     ]
-    env = os.environ.copy()
-    pythonpath = str(ROOT / 'pyoqp')
-    if env.get('PYTHONPATH'):
-        pythonpath += os.pathsep + env['PYTHONPATH']
-    env['PYTHONPATH'] = pythonpath
+    env = child_env()
     result = subprocess.run(
         command, cwd=tmp_path, env=env, capture_output=True, text=True,
         check=False,
@@ -665,10 +658,7 @@ print('SOC_GATES=' + json.dumps({
 """
     env = os.environ.copy()
     env["OQP_NAMD_TEST_ROOT"] = str(tmp_path)
-    pythonpath = str(ROOT / "pyoqp")
-    if env.get("PYTHONPATH"):
-        pythonpath += os.pathsep + env["PYTHONPATH"]
-    env["PYTHONPATH"] = pythonpath
+    env = child_env(env)
     result = subprocess.run(
         [sys.executable, "-c", script], cwd=ROOT, env=env,
         capture_output=True, text=True, check=False,
@@ -1828,10 +1818,7 @@ print('DENSE=' + json.dumps({
 """
     env = os.environ.copy()
     env["OQP_NAMD_TEST_ROOT"] = str(tmp_path)
-    pythonpath = str(ROOT / "pyoqp")
-    if env.get("PYTHONPATH"):
-        pythonpath += os.pathsep + env["PYTHONPATH"]
-    env["PYTHONPATH"] = pythonpath
+    env = child_env(env)
     result = subprocess.run(
         [sys.executable, "-c", script], cwd=ROOT, env=env,
         capture_output=True, text=True, check=False,
