@@ -46,10 +46,10 @@ class SelectPrTestsTests(unittest.TestCase):
         self.assertIsNotNone(chosen)
         self.assertIn("tests/test_tdhf_input_checker.py", chosen)
 
-    def test_native_source_change_selects_tests_naming_the_stem(self):
-        chosen = self.sel.select(["source/ecp.F90"])
-        self.assertIsNotNone(chosen)
-        self.assertIn("tests/test_ecp_integrals.py", chosen)
+    def test_native_source_change_runs_the_full_suite(self):
+        for path in ("source/ecp.F90", "source/tdhf_hessian.F90", "include/oqp.h"):
+            with self.subTest(path=path):
+                self.assertIsNone(self.sel.select([path]))
 
     def test_deleted_test_file_is_not_selected(self):
         chosen = self.sel.select(["tests/test_file_that_does_not_exist.py"])

@@ -12,8 +12,11 @@ Selection, from ``git diff --name-only BASE...HEAD``:
   that names one (tests import helpers from other test modules);
 * for each changed Python module under ``pyoqp/oqp``, every test file whose
   source names the module (``oqp.a.b`` or its last component as a word);
-* for each changed native source under ``source/`` or ``include/``, every test
-  file that names the file stem (e.g. ``tdhf_energy``);
+* any change under ``source/`` or ``include/`` runs the full suite: a native
+  routine is reached through other routines and Python wrappers whose tests
+  never name its file (e.g. tdhf_hessian through the Hessian drivers);
+* for each changed test driver or data file in a ``tests/`` subdirectory, every
+  test file that names the file stem;
 * for each changed document (Markdown, docs/, LICENSE, .gitignore, CITATION),
   every test file that names it, e.g. tests/test_readme_log_metadata.py for
   README.md;
@@ -60,6 +63,8 @@ FULL_SUITE_PATTERNS = [
     r"^cmake/",
     r"^external/",
     r"^pyoqp/requirements",
+    r"^source/",
+    r"^include/",
 ]
 
 
@@ -149,8 +154,8 @@ def select(paths):
             if mod.endswith(".__init__"):
                 mod = mod[: -len(".__init__")]
             words = {mod, mod.rsplit(".", 1)[-1]} | public_names(p)
-        elif p.startswith(("source/", "include/", "tests/")):
-            # native sources, and test data/drivers in tests/ subdirectories
+        elif p.startswith("tests/"):
+            # test data/drivers in tests/ subdirectories
             # (tests/fortran/x.F90 is driven by the test file that names x)
             words = {Path(p).stem}
         else:

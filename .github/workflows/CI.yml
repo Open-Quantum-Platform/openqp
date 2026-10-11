@@ -100,6 +100,10 @@ jobs:
             CC: gcc-${{ matrix.version }}
             CXX: g++-${{ matrix.version }}
             FC: gfortran-${{ matrix.version }}
+            # The arm runners were shut down (exit 143) twice while compiling the
+            # optimized externals at full parallelism (4 jobs on 4 cores); three keep them alive.
+            # Empty means the generator default on the other legs.
+            CMAKE_BUILD_PARALLEL_LEVEL: ${{ contains(matrix.os, 'arm') && '3' || '' }}
            run: |
             # Build + install from the repo root in one step. scikit-build-core
             # (pyproject [tool.scikit-build], wheel.install-dir = oqp) bundles the
