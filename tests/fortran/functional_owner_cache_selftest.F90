@@ -141,3 +141,16 @@ subroutine functional_owner_cache_compare(a, b, error, failed) bind(C)
   ia%dft=saved_a; ib%dft=saved_b
   ia%tddft=saved_ta; ib%tddft=saved_tb
 end subroutine functional_owner_cache_compare
+
+! The production-property regression observes reuse without changing the owner.
+function functional_owner_cache_revision(owner) result(revision) bind(C)
+  use iso_c_binding, only: c_int64_t
+  use c_interop, only: oqp_handle_t, oqp_handle_get_info
+  use types, only: information
+  implicit none
+  type(oqp_handle_t), intent(in) :: owner
+  type(information), pointer :: infos
+  integer(c_int64_t) :: revision
+  infos => oqp_handle_get_info(owner)
+  revision = infos%functional%cache_revision
+end function functional_owner_cache_revision
