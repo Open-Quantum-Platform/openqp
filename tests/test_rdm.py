@@ -1,16 +1,8 @@
 import importlib
-import os
 import sys
-from pathlib import Path
 
 import numpy as np
 import pytest
-
-os.environ.setdefault("OQP_BACKEND_OPTIONAL", "1")
-ROOT = Path(__file__).resolve().parents[1]
-PYOQP = ROOT / "pyoqp"
-if str(PYOQP) not in sys.path:
-    sys.path.insert(0, str(PYOQP))
 
 
 def _use_real_oqp_package():

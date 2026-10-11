@@ -1,22 +1,10 @@
 import importlib
-import os
 import re
 import sys
-from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
-
-# Allow the pure-Python FCI components (solve_fci and the input checker) to be
-# imported and tested without a compiled liboqp build. Tests that genuinely need
-# the native backend skip themselves when it is unavailable.
-os.environ.setdefault("OQP_BACKEND_OPTIONAL", "1")
-ROOT = Path(__file__).resolve().parents[1]
-PYOQP = ROOT / "pyoqp"
-if str(PYOQP) not in sys.path:
-    sys.path.insert(0, str(PYOQP))
-
 
 def _use_real_oqp_package():
     # Several lightweight unit tests stub oqp.* modules in sys.modules. The FCI

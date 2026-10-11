@@ -19,7 +19,6 @@ import os
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
 SELFTEST_OUT = Path("/tmp/hess_skel_open_selftest.out")
 
 # OH radical (doublet), small enough to finite-difference quickly while still
@@ -42,7 +41,6 @@ type={scftype}
 
 def _runtime_available():
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         import oqp  # noqa: F401
         from oqp.pyoqp import Runner  # noqa: F401

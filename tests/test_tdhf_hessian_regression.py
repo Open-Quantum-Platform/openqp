@@ -68,7 +68,6 @@ CASES = {
 def _runtime_available() -> bool:
     if not RUN_LIVE:
         return False
-    os.environ.setdefault("OPENQP_ROOT", str(ROOT))
     os.environ.setdefault("OMP_NUM_THREADS", "1")
     try:
         from oqp.pyoqp import Runner  # noqa: F401

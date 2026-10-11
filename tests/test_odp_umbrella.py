@@ -29,7 +29,6 @@ def test_odp_kernel_is_fortran_resident_and_c_interoperable():
 
 
 def test_odp_configuration_requires_explicit_metric_and_continuous_cvs():
-    sys.path.insert(0, str(ROOT / "pyoqp"))
     from oqp.library.odp import ODPUmbrella, parse_odp_cv_specification
 
     types, atoms, labels = parse_odp_cv_specification(
@@ -56,7 +55,6 @@ def test_odp_configuration_requires_explicit_metric_and_continuous_cvs():
 
 
 def test_runtime_checker_rejects_enabled_odp_outside_namd():
-    sys.path.insert(0, str(ROOT / "pyoqp"))
     from oqp.utils.input_checker import check_input_values
 
     config = {

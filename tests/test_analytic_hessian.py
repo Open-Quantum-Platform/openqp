@@ -8,33 +8,23 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 
-STUB_MODULES = [
-    "oqp",
-    "oqp.molecule",
-    "oqp.utils",
-    "oqp.utils.constants",
-    "oqp.utils.mpi_utils",
-    "oqp.utils.matrix",
-    "oqp.utils.file_utils",
-    "oqp.library",
-    "oqp.library.frequency",
-    "oqp.library.openqp_dftb",
-    "oqp.utils.state_labels",
-    "oqp.utils.qmmm",
-    "oqp.periodic_table",
-]
+def _in_oqp_namespace(name):
+    return name == "oqp" or name.startswith("oqp.")
 
 
-def snapshot_modules(names=STUB_MODULES):
-    return {name: sys.modules.get(name) for name in names}
+def snapshot_modules():
+    # Snapshot the whole oqp namespace rather than a list of stubbed names: a
+    # hand-kept list drifted from the stubs (state_tracking, nac_utils and
+    # tb_backends were installed but never restored), and any real oqp module
+    # imported under a stub parent would leak in the same way.
+    return {name: module for name, module in sys.modules.items() if _in_oqp_namespace(name)}
 
 
 def restore_modules(snapshot):
-    for name, module in snapshot.items():
-        if module is None:
-            sys.modules.pop(name, None)
-        else:
-            sys.modules[name] = module
+    for name in [name for name in sys.modules if _in_oqp_namespace(name)]:
+        if name not in snapshot:
+            del sys.modules[name]
+    sys.modules.update(snapshot)
 
 
 def load_module(name, relative_path):
