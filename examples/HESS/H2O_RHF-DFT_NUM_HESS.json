@@ -5,7 +5,7 @@
     1
   ],
   "coord": [
-    -0.0,
+    0.0,
     0.0,
     -0.07759509131153179,
     -1.0075912537694984,
@@ -15,13 +15,17 @@
     -1.0075912537694984,
     -1.1611785434815982
   ],
-  "energy": -76.36778169964677,
+  "energy": -76.36778169964666,
   "td_energies": [
     0
   ],
   "json": {
     "scf_type": "rhf",
     "basis": "6-31g*",
-    "library": ""
+    "library": "",
+    "ispher": "auto",
+    "nbf": 19,
+    "nbf_cartesian": 19,
+    "spherical_harmonics": false
   }
 }

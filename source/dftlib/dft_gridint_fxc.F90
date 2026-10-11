@@ -793,6 +793,10 @@ contains
     dat%spin_antisym = .false.
     if (present(spin_antisymmetric)) dat%spin_antisym = spin_antisymmetric
 
+    ! run_xc splits the grid over dat%pe. Its communicator belongs to the
+    ! caller, which may run this on a rank subset: callers on all ranks
+    ! initialise a consumer on the world communicator and pass it in.
+
     call run_xc(xc_opts, dat, basis)
 
     deallocate (d2a, d2b)
