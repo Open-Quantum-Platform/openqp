@@ -160,9 +160,10 @@ seen = []
 phase = "success"
 ordinal = 0
 optimized_mo = None
+transform_allocations = None
 class FailRDM:
     def casscf_energy(self, *args):
-        global initial_mo, controls, optimized_mo
+        global initial_mo, controls, optimized_mo, transform_allocations
         # All four calls share a Molecule. Pin the native input orbitals after
         # the top-level SCF, so separate SCF reductions cannot mask recovery.
         if initial_mo is None:
@@ -188,7 +189,8 @@ class FailRDM:
             assert count == ordinal, (status, count, ordinal)
             assert status == -2, status
             # Reacquire the native record; never keep a borrowed view across calls.
-            expected = optimized_mo if failure_target == "transform" and ordinal == 3 else initial_mo
+            post_commit = failure_target == "transform" and ordinal == transform_allocations
+            expected = optimized_mo if post_commit else initial_mo
             assert runner.mol.data["OQP::VEC_MO_A"].tobytes() == expected.tobytes()
         else:
             if failure_target == "transform":
@@ -198,10 +200,17 @@ class FailRDM:
             finally:
                 if failure_target == "transform":
                     count = shim.rdm_allocation_count()
-            if failure_target == "transform":
-                # One analytic build, canonicalization, then post-commit final CI.
-                assert count == 3, count
             assert status == 0, status
+            if failure_target == "transform":
+                # A converged control may build multiple analytic Hessians.
+                # Each owns one transform, followed by canonicalization and
+                # post-commit final CI; select those sites from native stats.
+                assert args[8][2] == 1, "Control must converge at the unchanged tolerance"
+                assert args[8][4] >= 1, "Control must enter the analytic Hessian"
+                assert count == int(args[8][4]) + 2, (count, args[8][4])
+                if transform_allocations is None:
+                    transform_allocations = count
+                assert count == transform_allocations, (count, transform_allocations)
             native_energies.append(bytes(ffi.buffer(args[5], 8)))
             if optimized_mo is None:
                 optimized_mo = runner.mol.data["OQP::VEC_MO_A"].copy()
@@ -219,8 +228,7 @@ config = {
     "tests": {"exception": "True"},
 }
 if failure_target == "transform":
-    config["casscf"].update({"converger": "ah", "hessian": "analytic",
-                             "max_macro_iterations": "1"})
+    config["casscf"].update({"converger": "ah", "hessian": "analytic"})
 runner = Runner(project="persistent-recovery", input_file=None, silent=1, usempi=False,
                 input_dict=config, log=str(pathlib.Path(sys.argv[2])/"recovery.log"))
 molecule = runner.mol
@@ -231,9 +239,17 @@ def forbidden_fallback(*args, **kwargs):
 cs._optimize = forbidden_fallback
 cs._casscf_energy_backend = lambda: (FailRDM(), ffi)
 try:
-    phases = [("success", 0)]
-    for failure_ordinal in range(1, 4 if failure_target == "transform" else 2):
-        phases.extend([(name, failure_ordinal) for name in ("failure", "recovery1", "recovery2")])
+    runner.run(test_mod=True)
+    assert runner.mol is molecule
+    if failure_target == "transform":
+        # First Hessian, canonicalization, and final CI, independent
+        # of the number of Hessian builds needed for convergence.
+        failure_ordinals = (1, transform_allocations - 1, transform_allocations)
+        assert len(set(failure_ordinals)) == 3
+    else:
+        failure_ordinals = (1,)
+    phases = [(name, failure_ordinal) for failure_ordinal in failure_ordinals
+              for name in ("failure", "recovery1", "recovery2")]
     for phase, ordinal in phases:
         if phase == "failure":
             try:
