@@ -396,8 +396,9 @@ ExternalProject_Add(libxc
 endif()
 
 # TagArray 1.0.0 allocated at alignment 64 but deleted at alignment 32.
-# Rebuild only this dependency with the fix; retain all other cached libraries.
-oqp_set_external_paths(TAGARRAY libtagarray-aligned64-v1
+# Record creation also reported success with a null allocation. Rebuild only
+# this dependency with both root fixes; retain all other cached libraries.
+oqp_set_external_paths(TAGARRAY libtagarray-aligned64-valid-v2
         "${CMAKE_SOURCE_DIR}/external/libtagarray"
         "${CMAKE_SOURCE_DIR}/external/libtagarray/src/libtagarray"
         "${CMAKE_BINARY_DIR}/external/libtagarray/src/libtagarray-build-${CMAKE_Fortran_COMPILER_ID}"

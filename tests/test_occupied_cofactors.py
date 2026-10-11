@@ -328,3 +328,13 @@ def test_persistent_debug_control_rejects_invalid_selector(monkeypatch, control)
     np.testing.assert_array_equal(checks, [0, 0, 0, 0, 0, 2])
     np.testing.assert_array_equal(actual, np.zeros_like(actual))
     np.testing.assert_array_equal(previous, np.zeros_like(previous))
+
+
+@pytest.mark.parametrize("n", [0, 1])
+def test_zero_one_debug_extents_remove_seeded_records(monkeypatch, n):
+    # Synthetic helper extents; these are not physical two-SOMO MRSF inputs.
+    monkeypatch.setenv("NAC_DUMP_MINORS", "1")
+    actual, previous, used = _call(np.eye(n))
+    assert not used
+    np.testing.assert_array_equal(actual, previous)
+    np.testing.assert_array_equal(actual, np.eye(n))

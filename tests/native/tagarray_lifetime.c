@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/resource.h>
+#include <unistd.h>
 
 /* Public TagArray 1.0 C ABI (tagarray.h and tagarray/RecordInfo.h). */
 typedef struct {
@@ -30,6 +32,62 @@ static void *symbol(void *library, const char *name) {
     } \
 } while (0)
 
+/* Real allocator refusal under a temporary Linux address-space limit.
+   No shim changes allocator behavior; the installed C ABI must return -1 and
+   leave no record. Restore the process setting before checking the result. */
+static void allocation_failure(void *container,
+    int32_t (*create)(void *, const char *, int32_t, int32_t, const int64_t *,
+                      const uint8_t *, const char *),
+    RecordInfo (*get)(void *, const char *)) {
+    const int64_t small = 3;
+    const double sentinel[3] = {3.0, -2.0, 5.0};
+    CHECK(create(container, "failure_sibling", 10, 1, &small,
+                 (const uint8_t *)sentinel, "") == 0);
+    RecordInfo sibling = get(container, "failure_sibling");
+    CHECK(sibling.count == small && sibling.data != NULL);
+    struct rlimit saved, limited;
+    CHECK(getrlimit(RLIMIT_AS, &saved) == 0);
+    FILE *statm = fopen("/proc/self/statm", "r");
+    CHECK(statm);
+    unsigned long pages = 0;
+    CHECK(fscanf(statm, "%lu", &pages) == 1);
+    CHECK(fclose(statm) == 0);
+    long page_size = sysconf(_SC_PAGESIZE);
+    CHECK(page_size > 0);
+    CHECK((rlim_t)pages <= (RLIM_INFINITY - 64 * 1024 * 1024) / (rlim_t)page_size);
+    const rlim_t request_bound = (rlim_t)pages * (rlim_t)page_size + 64 * 1024 * 1024;
+    limited = saved;
+    limited.rlim_cur = request_bound;
+    if (saved.rlim_cur != RLIM_INFINITY && saved.rlim_cur < limited.rlim_cur)
+        limited.rlim_cur = saved.rlim_cur;
+    CHECK(saved.rlim_max == RLIM_INFINITY || limited.rlim_cur <= saved.rlim_max);
+    /* Exceed both mapped memory and the applied ceiling. A saved finite
+       limit may already be below VmSize; it is never raised. Pre-mapped free
+       arenas still cannot contain a payload larger than all mapped memory.
+       Keep the count within the dependency's unchanged 32-bit accumulate seed. */
+    CHECK(request_bound < (rlim_t)INT32_MAX * sizeof(double));
+    const int64_t count = (int64_t)(request_bound / sizeof(double)) + 1;
+    CHECK(setrlimit(RLIMIT_AS, &limited) == 0);
+    struct rlimit active;
+    CHECK(getrlimit(RLIMIT_AS, &active) == 0);
+    CHECK(active.rlim_cur == limited.rlim_cur);
+    int32_t status = create(container, "failed_allocation", 10, 1, &count, NULL, "");
+    CHECK(setrlimit(RLIMIT_AS, &saved) == 0);
+    printf("TagArray allocation refusal: bytes=%lld limit=%llu status=%d\n",
+           (long long)(count * (int64_t)sizeof(double)),
+           (unsigned long long)limited.rlim_cur, status);
+    CHECK(status == -1);
+    RecordInfo absent = get(container, "failed_allocation");
+    CHECK(absent.count < 0 && absent.data == NULL);
+    RecordInfo preserved = get(container, "failure_sibling");
+    CHECK(preserved.data == sibling.data && preserved.count == small);
+    CHECK(((double *)preserved.data)[0] == 3.0 && ((double *)preserved.data)[2] == 5.0);
+    CHECK(create(container, "failed_allocation", 10, 1, &small, NULL, "") == 0);
+    RecordInfo recovered = get(container, "failed_allocation");
+    CHECK(recovered.count == small && recovered.data != NULL);
+    puts("TagArray real allocation refusal and subsequent creation passed");
+}
+
 /* Also exercise the production cofactor caller and its debug records. */
 static void cofactor_lifetime(void *library) {
     void (*persistent)(int64_t, int64_t, const int64_t *, const double *,
@@ -46,6 +104,16 @@ static void cofactor_lifetime(void *library) {
         }
     }
     CHECK(setenv("NAC_DUMP_MINORS", "1", 1) == 0);
+    void (*fresh)(int64_t, const double *, double *, double *, int *) =
+        symbol(library, "occupied_cofactors_selftest");
+    for (int64_t n = 0; n <= 1; ++n) {
+        double input = 2.0, actual_one = -3.0, previous_one = -5.0;
+        int used = -1;
+        fresh(n, &input, &actual_one, &previous_one, &used);
+        CHECK(used == 0);
+        if (n == 1) CHECK(actual_one == 1.0 && previous_one == 1.0);
+    }
+    puts("Cofactor synthetic zero/one debug boundary passed");
     for (int repeat = 0; repeat < 3; ++repeat) {
         int checks[6] = {-1, -1, -1, -1, -1, -1}, status = -1;
         persistent(7, 4, sizes, inputs, actual, previous, checks, &status);
@@ -105,6 +173,8 @@ int main(int argc, char **argv) {
         void *container = new_container("linked lifetime regression");
         CHECK(container);
         clear(container);  /* empty cleanup is valid */
+        allocation_failure(container, create, get);
+        clear(container);
         for (unsigned s = 0; s < sizeof(sizes) / sizeof(sizes[0]); ++s) {
             int64_t n = sizes[s];
             /* TA_TYPE_REAL64 = 10; one owned record and one live sibling. */

@@ -1181,6 +1181,10 @@ class OQPData:
             val = np.ndarray.__new__(_TagArrayView, tuple(int(s) for s in shape),
                                      dtype=data_type, buffer=buf)
             val._oqp_owner = self
+            if key in ("OQP::dbg_s_ij", "OQP::dbg_s_ab", "OQP::dbg_s_ia", "OQP::dbg_s_mo"):
+                # The next overlap call replaces these diagnostic records.
+                # Pinning the container cannot pin a replaced record's storage.
+                return np.array(val, copy=True, order="K", subok=False)
             return val
 
         raise AttributeError(f"Key `{key}` not found in QOP data")

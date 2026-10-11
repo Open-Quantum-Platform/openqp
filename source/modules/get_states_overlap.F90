@@ -499,38 +499,35 @@ contains
        end do
     end do
 
-    ! Debug export (read-only, no physics change): dump the minor matrices
-    ! for external convention gates. Enabled by env NAC_DUMP_MINORS.
+    ! Debug records are snapshots of this call. TagArray cannot represent
+    ! empty arrays, so an empty matrix has no record (including after shrink).
     block
       use oqp_tagarray_driver
       character(len=16) :: ev
-      real(kind=dp), pointer :: d1(:), d2(:), d3(:)
       call get_environment_variable('NAC_DUMP_MINORS', ev)
       if (len_trim(ev) > 0) then
-        call infos%dat%erase((/ character(len=80) :: &
-             'OQP::dbg_s_ij', 'OQP::dbg_s_ab', 'OQP::dbg_s_ia', &
-             'OQP::dbg_s_mo' /))
-        call tagarray_reserve_data(infos%dat, 'OQP::dbg_s_ij', ta_type_real64, &
-             noca*noca, (/ noca*noca /))
-        call tagarray_reserve_data(infos%dat, 'OQP::dbg_s_ab', ta_type_real64, &
-             nvirb*nvirb, (/ nvirb*nvirb /))
-        call tagarray_reserve_data(infos%dat, 'OQP::dbg_s_ia', ta_type_real64, &
-             noca*nvirb, (/ noca*nvirb /))
-        call tagarray_get_data(infos%dat, 'OQP::dbg_s_ij', d1)
-        call tagarray_get_data(infos%dat, 'OQP::dbg_s_ab', d2)
-        call tagarray_get_data(infos%dat, 'OQP::dbg_s_ia', d3)
-        d1 = reshape(s_ij, (/ noca*noca /))
-        d2 = reshape(s_ab, (/ nvirb*nvirb /))
-        d3 = reshape(s_ia, (/ noca*nvirb /))
-        block
-          real(kind=dp), pointer :: d4(:)
-          call tagarray_reserve_data(infos%dat, 'OQP::dbg_s_mo', ta_type_real64, &
-               nbf*nbf, (/ nbf*nbf /))
-          call tagarray_get_data(infos%dat, 'OQP::dbg_s_mo', d4)
-          d4 = reshape(s_mo(1:nbf,1:nbf), (/ nbf*nbf /))
-        end block
+        call dump_matrix('OQP::dbg_s_ij', s_ij)
+        call dump_matrix('OQP::dbg_s_ab', s_ab)
+        call dump_matrix('OQP::dbg_s_ia', s_ia)
+        call dump_matrix('OQP::dbg_s_mo', s_mo(1:nbf,1:nbf))
       end if
     end block
+  contains
+    subroutine dump_matrix(tag, matrix)
+      use oqp_tagarray_driver
+      character(len=*), intent(in) :: tag
+      real(dp), intent(in) :: matrix(:,:)
+      real(dp), pointer :: borrowed(:)
+      integer :: count
+      count = size(matrix)
+      nullify(borrowed)
+      call infos%dat%erase(tag)
+      if (count == 0) return
+      call tagarray_reserve_data(infos%dat, tag, ta_type_real64, count, [count])
+      call tagarray_get_data(infos%dat, tag, borrowed)
+      borrowed = reshape(matrix, [count])
+      nullify(borrowed)
+    end subroutine dump_matrix
 
   end subroutine mrsf_tlf
 

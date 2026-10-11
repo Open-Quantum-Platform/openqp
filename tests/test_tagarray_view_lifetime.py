@@ -90,3 +90,23 @@ def test_inplace_write_through_view_still_works(tmp_path):
     np.testing.assert_allclose(
         np.asarray(runner.mol.data["OQP::PROBE_INPLACE"], dtype=float),
         [1.0, 2.0, 3.0, 4.0], atol=1.0e-15)
+
+
+@pytest.mark.parametrize("tag", ["OQP::dbg_s_ij", "OQP::dbg_s_ab", "OQP::dbg_s_ia", "OQP::dbg_s_mo"])
+def test_debug_snapshot_survives_record_replacement(tmp_path, tag):
+    # Mandatory installed backend; no calculation or injected test fault.
+    runner = _fresh_runner(tmp_path, "debug_snapshot")
+    data = runner.mol.data
+    data[tag] = np.array([3.0, -2.0, 5.0])
+    retained = data[tag]
+    # Deterministic original-fail check, before any dangling read is attempted.
+    assert type(retained) is np.ndarray
+    assert retained.flags.owndata and retained.base is None
+    sliced = np.asarray(retained)[1:]
+    for n in (7, 1, 4):
+        data[tag] = np.arange(n, dtype=float)
+        np.testing.assert_array_equal(data[tag], np.arange(n, dtype=float))
+    del runner, data
+    gc.collect()
+    np.testing.assert_array_equal(retained, [3.0, -2.0, 5.0])
+    np.testing.assert_array_equal(sliced, [-2.0, 5.0])

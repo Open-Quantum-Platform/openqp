@@ -34,7 +34,40 @@ subroutine occupied_cofactors_selftest(n, s, actual, previous, used_lu) bind(C)
   ! mrsf_tlf may create debug records; this local information owns them.
   call infos%dat%new('occupied_cofactors_selftest')
   if (.not. infos%dat%is_allocated()) error stop 'Cannot allocate selftest container'
-  call mrsf_tlf(infos, full_s, actual, ab, ia, 0)
+  block
+    use, intrinsic :: iso_c_binding, only: c_int32_t
+    use tagarray, only: recordinfo_t
+    use oqp_tagarray_driver, only: TA_TYPE_REAL64, TA_OK
+    character(len=16) :: debug
+    character(len=80), parameter :: tags(4) = [character(len=80) :: &
+      'OQP::dbg_s_ij', 'OQP::dbg_s_ab', 'OQP::dbg_s_ia', 'OQP::dbg_s_mo']
+    integer :: counts(4), k
+    integer(c_int32_t) :: record_status
+    type(recordinfo_t) :: record
+    call get_environment_variable('NAC_DUMP_MINORS', debug)
+    if (len_trim(debug) > 0) then
+      ! Seed nonempty records so zero extents must remove stale debug data.
+      ! n=0/1 are synthetic helper boundaries, not two-SOMO molecules.
+      do k = 1, 4
+        record_status = infos%dat%create(tags(k), TA_TYPE_REAL64, [3_c_int64_t])
+        if (record_status /= TA_OK) error stop 'Cannot seed debug boundary records'
+      end do
+    end if
+    call mrsf_tlf(infos, full_s, actual, ab, ia, 0)
+    if (len_trim(debug) > 0) then
+      counts = [int(n*n), nvir*nvir, int(n)*nvir, nbf*nbf]
+      do k = 1, 4
+        if (counts(k) == 0) then
+          if (infos%dat%contains(tags(k))) error stop 'Empty debug matrix retained a record'
+        else
+          if (.not. infos%dat%contains(tags(k))) error stop 'Missing nonempty debug record'
+          record = infos%dat%get(tags(k))
+          if (record%count /= counts(k)) error stop 'Stale debug extent'
+          if (.not. record%is_associated()) error stop 'Null debug allocation'
+        end if
+      end do
+    end if
+  end block
   ! Returned arrays are caller-owned and independent of the debug records.
   call infos%dat%delete()
   call occupied_cofactors(s, direct, batch)
