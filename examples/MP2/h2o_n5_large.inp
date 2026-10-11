@@ -1,0 +1,15 @@
+# The 172 spherical AOs select the default nbf > 120 MP2 transform.
+[input]
+method=mp2
+runtype=energy
+basis=aug-cc-pvqz
+system=
+ O 0 0 0
+ H 0 .757 .587
+ H 0 -.757 .587
+[guess]
+type=hcore
+[scf]
+type=rhf
+conv=1.0e-11
+maxit=200
