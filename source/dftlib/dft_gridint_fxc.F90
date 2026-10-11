@@ -14,6 +14,11 @@ module mod_dft_gridint_fxc
 
   type, extends(xc_consumer_t) :: xc_consumer_tde_t
     integer :: nMtx = 1
+!   Set when db = -da exactly (closed-shell triplet response).  Every
+!   spin-beta response quantity is linear in db, so it is the negated alpha
+!   one: the beta transformations and the beta Fock build are skipped and the
+!   beta Fock contribution is -alpha.
+    logical :: spin_antisym = .false.
     real(kind=fp), pointer :: da(:,:,:) => null()
     real(kind=fp), pointer :: db(:,:,:) => null()
     real(kind=fp), allocatable :: focks(:,:,:,:,:)
@@ -204,7 +209,7 @@ contains
       ! triangle upper.
       if (xce%skip_p) then
 
-         do s = 1, ubound(focks, 4)
+         do s = 1, merge(1, ubound(focks, 4), self%spin_antisym)
            do m = 1, ubound(focks, 3)
              do j = 1, numAOs
                self%focks(1:j, j, m, s, myThread) = &
@@ -215,7 +220,7 @@ contains
 
       else
 
-         do s = 1, ubound(focks, 4)
+         do s = 1, merge(1, ubound(focks, 4), self%spin_antisym)
            do m = 1, ubound(focks, 3)
              do j = 1, numAOs
                jj = indices(j)
@@ -355,7 +360,9 @@ contains
       )
 
       call xce%compRMOs(da, mo(:,:,:,1))
-      if (hasBeta) then
+      if (hasBeta .and. self%spin_antisym) then
+        mo(:,:,:,2) = -mo(:,:,:,1)
+      else if (hasBeta) then
         call xce%compRMOs(db, mo(:,:,:,2))
       end if
 
@@ -367,7 +374,9 @@ contains
       if (xce%funTyp == OQP_FUNTYP_MGGA) then
         call xce%compRMOGs(da, moG1)
         call compRTau(xce, moG1, rTau, 1)
-        if (xce%hasBeta) then
+        if (xce%hasBeta .and. self%spin_antisym) then
+          rTau(2,:,:) = -rTau(1,:,:)
+        else if (xce%hasBeta) then
           call xce%compRMOGs(db, moG1)
           call compRTau(xce, moG1, rTau, 2)
         end if
@@ -502,6 +511,9 @@ contains
                            1.0_fp, focks(:,:,j,1), numAOs)
           end do
         end if
+
+        ! db = -da: the beta Fock contribution is -alpha (see utddft_fxc)
+        if (dat%spin_antisym) cycle
 
         do i = 1, numPts
 
@@ -673,7 +685,8 @@ contains
                   wfa, wfb, &
                   fxa, fxb, &
                   dxa, dxb, &
-                  nMtx, threshold, infos, consumer, cache)
+                  nMtx, threshold, infos, consumer, cache, &
+                  spin_antisymmetric)
 !$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
     use basis_tools, only: basis_set
     use mod_dft_gridint, only: xc_options_t, run_xc
@@ -695,6 +708,9 @@ contains
     real(kind=fp), intent(in) :: threshold
     type(response_cache_t), target, intent(inout), optional :: cache
     type(xc_consumer_tde_t), target, intent(inout), optional :: consumer
+    !> Caller guarantees dxb = -dxa (closed-shell triplet response); the beta
+    !> half is then not computed and fxb receives the negated alpha result
+    logical, intent(in), optional :: spin_antisymmetric
 
     type(xc_consumer_tde_t), target :: local_consumer
     type(xc_consumer_tde_t), pointer :: dat
@@ -764,6 +780,8 @@ contains
     dat%da => dxa
     dat%db => dxb
     dat%nMtx = nMtx
+    dat%spin_antisym = .false.
+    if (present(spin_antisymmetric)) dat%spin_antisym = spin_antisymmetric
 
     call run_xc(xc_opts, dat, basis)
 
@@ -779,15 +797,27 @@ contains
       end do
     end do
 
-    do j = 1, nMtx
-      call triangular_to_full(dat%focks(:,:,j,2,1), nbf, 'u')
-      do i = 1, nbf
-        fxb(:,i,j) = fxb(:,i,j) &
-                    +   dat%focks(:,i,j,2,1) &
-                      * basis%bfnrm(i) &
-                      * basis%bfnrm(:)
+    if (dat%spin_antisym) then
+      ! The beta block was not built: it is the negated alpha one
+      do j = 1, nMtx
+        do i = 1, nbf
+          fxb(:,i,j) = fxb(:,i,j) &
+                      -   dat%focks(:,i,j,1,1) &
+                        * basis%bfnrm(i) &
+                        * basis%bfnrm(:)
+        end do
       end do
-    end do
+    else
+      do j = 1, nMtx
+        call triangular_to_full(dat%focks(:,:,j,2,1), nbf, 'u')
+        do i = 1, nbf
+          fxb(:,i,j) = fxb(:,i,j) &
+                      +   dat%focks(:,i,j,2,1) &
+                        * basis%bfnrm(i) &
+                        * basis%bfnrm(:)
+        end do
+      end do
+    end if
 
     ! Scale densities back
     do j = 1, nMtx

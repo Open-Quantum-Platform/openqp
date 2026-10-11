@@ -134,6 +134,28 @@ class TestClosedShellTripletDFT(unittest.TestCase):
 
 
 @unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime unavailable")
+class TestClosedShellTripletAntisymmetricPath(unittest.TestCase):
+    """The triplet skips the beta half of the unrestricted XC contraction
+    (dxb = -dxa makes it the negated alpha half).  It must equal the full
+    two-spin contraction (OQP_TDDFT_TRIPLET_FULL_UXC=1), for a GGA hybrid and
+    for a meta-GGA, whose tau response takes a separate branch."""
+
+    def test_fast_triplet_xc_equals_full_two_spin_contraction(self):
+        for func in ("b3lypv5", "m06-2x"):
+            for td in ("tda", "rpa"):
+                with self.subTest(functional=func, td=td):
+                    r0, e0, d0 = run(deck(H2O_C1, "6-31g*", func, td, 3, 4))
+                    r1, e1, d1 = run(deck(H2O_C1, "6-31g*", func, td, 3, 4),
+                                     {"OQP_TDDFT_TRIPLET_FULL_UXC": "1"})
+                    self.assertEqual(r0, 0, d0)
+                    self.assertEqual(r1, 0, d1)
+                    self.assertEqual(len(e0), 4, d0)
+                    self.assertEqual(len(e1), 4, d1)
+                    for a, b in zip(e0, e1):
+                        self.assertAlmostEqual(a, b, delta=1e-6)
+
+
+@unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime unavailable")
 class TestClosedShellTripletThreads(unittest.TestCase):
     def test_triplet_energies_independent_of_thread_count(self):
         for td in ("tda", "rpa"):

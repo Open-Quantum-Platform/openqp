@@ -99,7 +99,7 @@ contains
     integer :: iter, istart, nv, iv, ivec
     integer :: mxiter
     logical :: do_apb,do_amb, tamm_dancoff   ! SWITCH FOR a-b, a+b, tANDAMM COFF
-    logical :: triplet, xc_unrestricted
+    logical :: triplet, xc_unrestricted, xc_antisym
     real(kind=dp) :: xc_beta_sign
     real(kind=dp), allocatable :: dxa(:,:,:), dxb(:,:,:), fxb(:,:,:)
     character(len=8) :: envval
@@ -210,11 +210,15 @@ contains
   ! beta block is its negative).  The singlet uses the restricted contraction,
   ! which equals the unrestricted one with dxa = dxb = D; the developer switch
   ! OQP_TDDFT_XC_UNRESTRICTED=1 routes the singlet through that unrestricted
-  ! path so the identity can be tested.
+  ! path so the identity can be tested.  For the triplet the beta half is the
+  ! exact negative of the alpha half and is not computed (spin_antisymmetric);
+  ! OQP_TDDFT_TRIPLET_FULL_UXC=1 computes both halves so this can be tested.
     triplet = infos%tddft%mult == 3
     xc_beta_sign = merge(-1.0_dp, 1.0_dp, triplet)
     call get_environment_variable('OQP_TDDFT_XC_UNRESTRICTED', envval, length=envlen, status=envstat)
     xc_unrestricted = triplet .or. (envstat == 0 .and. envlen > 0 .and. envval(1:1) == '1')
+    call get_environment_variable('OQP_TDDFT_TRIPLET_FULL_UXC', envval, length=envlen, status=envstat)
+    xc_antisym = triplet .and. .not. (envstat == 0 .and. envlen > 0 .and. envval(1:1) == '1')
     if (triplet) write(iw,'(/5x,"Closed-shell TDDFT: triplet excited states (no Coulomb term, f_aa - f_ab kernel)")')
 
   ! Construct TD trial vector
@@ -266,7 +270,9 @@ contains
           fxb = 0.0_dp
           call utddft_fxc(basis=basis, molGrid=molGrid, isVecs=.true., &
                  wfa=mo_a, wfb=mo_a, fxa=ab1(:,:,:iv), fxb=fxb, &
-                 dxa=dxa, dxb=dxb, nMtx=iv, threshold=0.0d0, infos=infos)
+                 dxa=dxa, dxb=dxb, nMtx=iv, threshold=0.0d0, infos=infos, &
+                 cache=xc_cache, consumer=xc_consumer, &
+                 spin_antisymmetric=xc_antisym)
           deallocate(dxa, dxb, fxb)
         else
           call tddft_fxc(basis=basis, &
