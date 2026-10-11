@@ -939,9 +939,9 @@ contains
     call cas_fused_core_sweep(n, na, nc, ctx%eri_ao, ctx%hcore, cbuf, &
                               ctx%dcore, ctx%js, ctx%ks, ctx%fao, ctx%tp1)
     ! W_core = C^T F_core C
-    call dgemm('N', 'N', n, n, n, 1.0_dp, cbuf(0, 0), n, ctx%fao(0, 0), n, &
+    call dgemm('N', 'N', n, n, n, 1.0_dp, cbuf, n, ctx%fao(0, 0), n, &
                0.0_dp, ctx%tmw(0, 0), n)
-    call dgemm('N', 'T', n, n, n, 1.0_dp, ctx%tmw(0, 0), n, cbuf(0, 0), n, &
+    call dgemm('N', 'T', n, n, n, 1.0_dp, ctx%tmw(0, 0), n, cbuf, n, &
                0.0_dp, ctx%wcore(0, 0), n)
     efold = 0.0_dp
     do b = 0_i8, int(n, i8) - 1_i8
@@ -1018,9 +1018,9 @@ contains
       call cas_act_fock(n, na, ctx%tp2, ctx%yten, ctx%g1(off1), ctx%fao, &
                         ctx%js, ctx%ks, ctx%dwork)
       ! W_k = C^T F_k C
-      call dgemm('N', 'N', n, n, n, 1.0_dp, cbuf(0, 0), n, ctx%dwork(0, 0), &
+      call dgemm('N', 'N', n, n, n, 1.0_dp, cbuf, n, ctx%dwork(0, 0), &
                  n, 0.0_dp, ctx%tmw(0, 0), n)
-      call dgemm('N', 'T', n, n, n, 1.0_dp, ctx%tmw(0, 0), n, cbuf(0, 0), n, &
+      call dgemm('N', 'T', n, n, n, 1.0_dp, ctx%tmw(0, 0), n, cbuf, n, &
                  0.0_dp, ctx%wmo(int(k, i8) * int(n, i8)**2), n)
     end do
     call casscf_gfock_grad_w(n, nc, na, ctx%nstate, ctx%weights, ctx%g1, &
@@ -2445,7 +2445,7 @@ contains
       end if
       ! Cnew[:, idx] = C[:, idx] @ V, i.e. in the C-order buffer (MO index
       ! first) blk = V^T * cbuf(lo:hi, :).
-      call dgemm('T', 'N', m, n, m, 1.0_dp, sub, m, cbuf(lo, 0), n, &
+      call dgemm('T', 'N', m, n, m, 1.0_dp, sub, m, cbuf(lo:hi, :), m, &
                  0.0_dp, blk, m)
       do i = 1, m
         do j = 0, n - 1
