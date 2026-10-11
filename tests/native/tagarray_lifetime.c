@@ -49,6 +49,9 @@ static void cofactor_lifetime(void *library) {
     for (int repeat = 0; repeat < 3; ++repeat) {
         int checks[6] = {-1, -1, -1, -1, -1, -1}, status = -1;
         persistent(7, 4, sizes, inputs, actual, previous, checks, &status);
+        printf("Cofactor status=%d checks=%d,%d,%d,%d,%d,%d\n", status,
+               checks[0], checks[1], checks[2], checks[3], checks[4], checks[5]);
+        CHECK(fflush(stdout) == 0);
         CHECK(status == 0);
         CHECK(checks[0] == 1 && checks[1] == 4 && checks[2] == 16);
         CHECK(checks[3] == 4 && checks[4] == 4 && checks[5] == 2);

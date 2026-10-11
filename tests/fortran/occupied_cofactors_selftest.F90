@@ -101,16 +101,33 @@ subroutine occupied_cofactors_persistent_selftest(nmax, nsteps, sizes, s, actual
   integer(c_int32_t) :: record_status
   integer :: step, n, nbf, i, j, allocation_status
   logical :: ok
+  character(len=32) :: control
+  integer :: control_status
 
   actual = 0.0_dp
   previous = 0.0_dp
   checks = 0_c_int
   status = 1_c_int
+  ! Fault injection belongs only to this test shim, never the production caller.
+  ! Each diagnostic child selects one defect; unknown/truncated values fail closed.
+  control = ''
+  call get_environment_variable('OQP_COFACTOR_LIFETIME_CONTROL', control, &
+                                status=control_status)
+  if (control_status /= 0 .and. control_status /= 1) then
+    status = 8_c_int
+    goto 900
+  end if
+  select case (trim(control))
+  case ('', 'missing-owner', 'recreated-owner', 'missing-record', 'omit-cleanup')
+  case default
+    status = 8_c_int
+    goto 900
+  end select
   ! Debug records have nonzero extents; no empty-record behavior is claimed.
   if (nmax < 2 .or. nsteps < 1) goto 900
   if (any(sizes < 2) .or. any(sizes > nmax)) goto 900
   status = 2_c_int
-  call infos%dat%new('occupied_cofactors_persistent_selftest')
+  if (trim(control) /= 'missing-owner') call infos%dat%new('occupied_cofactors_persistent_selftest')
   if (.not. infos%dat%is_allocated()) goto 900
   owner = infos%dat%container_ptr
   record_status = infos%dat%create('OQP::persistent_owner_probe', TA_TYPE_REAL64, [3_c_int64_t])
@@ -142,6 +159,7 @@ subroutine occupied_cofactors_persistent_selftest(nmax, nsteps, sizes, s, actual
     infos%mol_prop%nelec_b = nbf - 4
     ! Only records are replaced. The owning container stays alive throughout.
     call mrsf_tlf(infos, full_s, actual(1:n,1:n,step), ab, ia, 0)
+    if (trim(control) == 'recreated-owner') call infos%dat%new('negative_recreated_owner')
     status = 3_c_int
     if (.not. c_associated(infos%dat%container_ptr, owner)) goto 900
     call check_record('OQP::persistent_owner_probe', [3.0_dp, -2.0_dp, 5.0_dp], ok)
@@ -152,6 +170,7 @@ subroutine occupied_cofactors_persistent_selftest(nmax, nsteps, sizes, s, actual
         call ov_exact(previous(i,j,step), i, j, 0, 0, full_s, 1, n-1, 1)
       end do
     end do
+    if (trim(control) == 'missing-record') call infos%dat%erase('OQP::dbg_s_ij')
     status = 4_c_int
     call check_record('OQP::dbg_s_ij', reshape(actual(1:n,1:n,step), [n*n]), ok)
     if (.not. ok) goto 900
@@ -178,10 +197,10 @@ subroutine occupied_cofactors_persistent_selftest(nmax, nsteps, sizes, s, actual
   status = 0_c_int
 900 continue
   ! All borrowed pointers were scoped/nullified before any erase/delete.
-  call infos%dat%delete()
+  if (trim(control) /= 'omit-cleanup') call infos%dat%delete()
   if (infos%dat%is_allocated()) status = 7_c_int
   checks(6) = checks(6) + 1_c_int
-  call infos%dat%delete()
+  if (trim(control) /= 'omit-cleanup') call infos%dat%delete()
   if (infos%dat%is_allocated()) status = 7_c_int
   checks(6) = checks(6) + 1_c_int
 contains

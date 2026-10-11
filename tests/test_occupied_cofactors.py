@@ -317,3 +317,14 @@ def test_persistent_debug_missing_records_cleans_live_owner(monkeypatch):
     np.testing.assert_array_equal(actual[:, :, 0], previous[:, :, 0])
     np.testing.assert_allclose(actual[:6, :6, 0], _cofactors(inputs[:6, :6, 0]),
                                rtol=2e-13, atol=1e-15)
+
+
+@pytest.mark.parametrize("control", ["unrecognized", "missing-record," + "x"*40])
+def test_persistent_debug_control_rejects_invalid_selector(monkeypatch, control):
+    monkeypatch.setenv("NAC_DUMP_MINORS", "1")
+    monkeypatch.setenv("OQP_COFACTOR_LIFETIME_CONTROL", control)
+    _, actual, previous, checks, status = _persistent_call((6, 7, 3, 6))
+    assert status == 8
+    np.testing.assert_array_equal(checks, [0, 0, 0, 0, 0, 2])
+    np.testing.assert_array_equal(actual, np.zeros_like(actual))
+    np.testing.assert_array_equal(previous, np.zeros_like(previous))
