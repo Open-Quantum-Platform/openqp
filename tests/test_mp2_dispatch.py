@@ -132,6 +132,9 @@ def test_allocator_failure_runs_real_fallback(tmp_path, stage):
     flags = ['-dynamiclib'] if sys.platform == 'darwin' else ['-shared', '-fPIC']
     subprocess.run(['cc', *flags, '-O2', str(fixture), '-o', str(library)], check=True)
     env = os.environ.copy()
+    # The native scratch shape uses the OpenMP team width. Keep an explicit
+    # caller's width, and make the child and the failure size agree by default.
+    env.setdefault('OMP_NUM_THREADS', '1')
     env['DYLD_INSERT_LIBRARIES' if sys.platform == 'darwin' else 'LD_PRELOAD'] = str(library)
     child = subprocess.run([sys.executable, str(Path(__file__).resolve()),
                             str(tmp_path), stage, str(library)], env=env,
