@@ -307,3 +307,12 @@ def test_legacy_f3_abi_compatibility(monkeypatch):
     legacy = sc._f3ca_f3ac(g, d4)
     for actual, expected in zip(legacy, checked):
         np.testing.assert_array_equal(actual, expected)
+
+
+def test_zero_denominator_is_not_masked():
+    # Native and NumPy contractions share this unchanged denominator policy.
+    # A nonzero norm with zero energy difference must remain an arithmetic
+    # failure when the caller requests strict floating-point checking.
+    with np.errstate(divide='raise', invalid='raise'):
+        with pytest.raises(FloatingPointError):
+            sc._norm_to_energy(np.ones(1), np.array([2.0]), np.array([-2.0]))
