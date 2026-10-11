@@ -130,6 +130,8 @@ jobs:
               exit 1
             fi
             export LD_LIBRARY_PATH="$(dirname "$ddx_lib"):${LD_LIBRARY_PATH:-}"
+            # Later MPI steps run in fresh shells and also load liboqp.
+            echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
             test_dir="$(mktemp -d)"
             cp examples/QUANTUM/h2.inp "$test_dir/banner.inp"
             mpiexec --oversubscribe -n 2 openqp "$test_dir/banner.inp" --silent
