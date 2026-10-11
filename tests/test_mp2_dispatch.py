@@ -77,7 +77,7 @@ def test_n5_matches_direct_j(tmp_path, monkeypatch, scf, mult, atoms, variant):
 
 
 def test_input_dispatch_and_default_crossover(tmp_path, monkeypatch):
-    """Use the actual default threshold, with 172 spherical AOs (>120).
+    """Use the actual default threshold, with 124 spherical AOs (>120).
 
     The small direct-J result pins the input route too. The large full and
     occupied-virtual calculations share the same converged SCF reference.
@@ -86,11 +86,15 @@ def test_input_dispatch_and_default_crossover(tmp_path, monkeypatch):
     monkeypatch.delenv('OQP_MEMORY_LIMIT_GB', raising=False)
     _, small_log = _run(tmp_path, 'small_input')
     assert 'MP2 path: direct-J' in small_log.read_text()
-    runner, log = _run(tmp_path, 'large_input', basis='aug-cc-pvqz')
+    runner, log = _run(tmp_path, 'large_input', atoms='H 0 0 0; H 0 0 .74', basis='d-aug-cc-pvqz')
     assert int(runner.mol.data.get_basis()['nbf']) > 120
     assert 'MP2 path: n5 ' in log.read_text()
     assert 'MP2 path: direct-J' not in log.read_text()
     reference = _components(log)
+    # PySCF RHF/MP2 with the identical Basis Set Exchange d-aug-cc-pVQZ
+    # basis, 0.74 Angstrom, SCF conv_tol=1e-12, conv_tol_grad=1e-9.
+    np.testing.assert_allclose(reference[-2:], [-0.03325695678608737,
+                                               -1.1667414879132405], rtol=0, atol=1e-9)
     # Restore the SCF energy before evaluating MP2 on the same native handle.
     scf_energy = float(re.findall(r'E\(reference, SCF\)\s*=\s*([-+0-9.eE]+)', log.read_text())[-1])
     runner.mol.data._data.mol_energy.energy = scf_energy
