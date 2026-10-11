@@ -7,13 +7,11 @@ module tdhf_mrsf_lib
 
     type, extends(int2_fock_data_t) :: int2_mrsf_data_t
 
-      ! Per-thread Fock accumulator: only the density-dependent components
-      ! (1:4 for MRSF, 1:8 for UMRSF).  Exchange-only components (ao21v,
-      ! aco12, agdlr) go to f3_ex_shared to avoid per-thread replication.
+      ! Public result is also thread 1's density-dependent accumulator and
+      ! the shared exchange image. It keeps one owner throughout every CAM pass.
       real(kind=dp), allocatable :: f3(:,:,:,:,:)
-      ! Shared exchange-only Fock accumulator (single copy across all threads,
-      ! updated with !$OMP ATOMIC); storage is independent of thread count.
-      real(kind=dp), allocatable :: f3_ex_shared(:,:,:,:)
+      ! Workers 2..T own only their density-dependent channels (4 or 8).
+      real(kind=dp), allocatable :: f3_private(:,:,:,:,:)
       real(kind=sp), allocatable :: f3_ex_sp(:,:,:,:) !< shared FP32 exchange image
       real(kind=dp), pointer :: d3(:,:,:,:) => null()
       real(kind=dp), allocatable :: ds(:,:,:,:) !< symmetrized Coulomb density (comps 1:4 MRSF, 1:8 UMRSF), precomputed once
@@ -90,13 +88,13 @@ contains
 
     if (this%cur_pass == 1) then
       if (allocated(this%f3)) deallocate(this%f3)
+      if (allocated(this%f3_private)) deallocate(this%f3_private)
       if (allocated(this%dsh)) deallocate(this%dsh)
 
       ncoul = nmatrix - 3
-      allocate(this%f3(this%nfocks, ncoul, nbf, nbf, nthreads), &
+      allocate(this%f3(this%nfocks, nmatrix, nbf, nbf, 1), &
+               this%f3_private(this%nfocks, ncoul, nbf, nbf, nthreads-1), &
                this%dsh(nsh,nsh), source=0.0_dp)
-      if (allocated(this%f3_ex_shared)) deallocate(this%f3_ex_shared)
-      allocate(this%f3_ex_shared(this%nfocks, 3, nbf, nbf), source=0.0_dp)
 
       ! Invalidate FP32 images even when this call switches FP32 off.
       if (allocated(this%ds_sp)) deallocate(this%ds_sp)
@@ -151,37 +149,36 @@ contains
 
     implicit none
 
-    integer :: t, ncoul, nmatrix
-    real(kind=dp), allocatable :: tmp(:,:,:,:,:)
+    integer :: t, ncoul, nmatrix, mu, nu
     class(int2_mrsf_data_t), intent(inout) :: this
 
     if (this%cur_pass /= this%num_passes) return
 
-    ncoul = size(this%f3,2)
-    nmatrix = size(this%d3,2)
-    do t = 2, size(this%f3,5)
-      this%f3(:,:,:,:,1) = this%f3(:,:,:,:,1) + this%f3(:,:,:,:,t)
-    end do
-    if (allocated(this%f3s)) then
-      do t = 1, size(this%f3s,5)
-        this%f3(:,:,:,:,1) = this%f3(:,:,:,:,1) + real(this%f3s(:,:,:,:,t), dp)
+    nmatrix = size(this%f3,2)
+    ncoul = nmatrix - 3
+    ! Fold a single AO pair at a time: no AO-sized expression/conversion
+    ! temporary and no overlap with a second full public result allocation.
+    do nu = 1, size(this%f3,4)
+      do mu = 1, size(this%f3,3)
+        do t = 1, size(this%f3_private,5)
+          this%f3(:,1:ncoul,mu,nu,1) = this%f3(:,1:ncoul,mu,nu,1) + this%f3_private(:,:,mu,nu,t)
+        end do
+        if (allocated(this%f3s)) then
+          do t = 1, size(this%f3s,5)
+            this%f3(:,1:ncoul,mu,nu,1) = this%f3(:,1:ncoul,mu,nu,1) + real(this%f3s(:,:,mu,nu,t), dp)
+          end do
+          this%f3(:,ncoul+1:nmatrix,mu,nu,1) = this%f3(:,ncoul+1:nmatrix,mu,nu,1) + &
+                                             real(this%f3_ex_sp(:,:,mu,nu), dp)
+        end if
       end do
-      this%f3_ex_shared = this%f3_ex_shared + real(this%f3_ex_sp, dp)
-    end if
-
-    ! Both MRSF and UMRSF need every rank's private and shared images.
-    call this%pe%allreduce(this%f3(:,:,:,:,1), size(this%f3(:,:,:,:,1)))
-    call this%pe%allreduce(this%f3_ex_shared, size(this%f3_ex_shared))
-
-    ! Preserve the public seven/eleven-channel layout after the last CAM pass.
-    ! Consumers borrow f3 only after the driver returns; no borrowed view is
-    ! retained while move_alloc replaces this owned accumulator.
-    allocate(tmp(this%nfocks, nmatrix, size(this%f3,3), size(this%f3,4), 1))
-    tmp(:,1:ncoul,:,:,1) = this%f3(:,:,:,:,1)
-    tmp(:,ncoul+1:nmatrix,:,:,1) = this%f3_ex_shared
-    call move_alloc(tmp, this%f3)
-    deallocate(this%f3_ex_shared)
+    end do
+    deallocate(this%f3_private)
+    if (allocated(this%f3s)) deallocate(this%f3s)
     if (allocated(this%f3_ex_sp)) deallocate(this%f3_ex_sp)
+
+    ! The contiguous public image contains BOTH private and shared channels
+    ! for MRSF and UMRSF. One collective reduces every channel on every rank.
+    call this%pe%allreduce(this%f3(:,:,:,:,1), size(this%f3(:,:,:,:,1)))
     this%nthreads = 1
 
   end subroutine
@@ -195,7 +192,7 @@ contains
     class(int2_mrsf_data_t), intent(inout) :: this
 
     if (allocated(this%f3)) deallocate(this%f3)
-    if (allocated(this%f3_ex_shared)) deallocate(this%f3_ex_shared)
+    if (allocated(this%f3_private)) deallocate(this%f3_private)
     if (allocated(this%f3_ex_sp)) deallocate(this%f3_ex_sp)
     if (allocated(this%dsh)) deallocate(this%dsh)
     if (allocated(this%ds)) deallocate(this%ds)
@@ -284,20 +281,26 @@ contains
 
     implicit none
 
-    class(int2_mrsf_data_t), intent(inout) :: this
+    class(int2_mrsf_data_t), target, intent(inout) :: this
     type(int2_storage_t), intent(inout) :: buf
     integer :: i, j, k, l, n, v, c
     real(kind=dp) :: val, xval, cval
-    integer :: mythread
+    integer :: mythread, ncoul
+    real(kind=dp), pointer :: f3(:,:,:,:), f3_ex(:,:,:,:)
 
     mythread = buf%thread_id
 
     if (.not.this%tamm_dancoff) return
 
-    associate ( f3 => this%f3(:,:,:,:,mythread), &
-                d3 => this%d3, &
+    ncoul = size(this%f3,2) - 3
+    if (mythread == 1) then
+      f3 => this%f3(:,1:ncoul,:,:,1)
+    else
+      f3 => this%f3_private(:,:,:,:,mythread-1)
+    end if
+    f3_ex => this%f3(:,ncoul+1:ncoul+3,:,:,1)
+    associate ( d3 => this%d3, &
                 ds => this%ds, &
-                f3_ex => this%f3_ex_shared, &
                 nf => this%nfocks &
       )
 
@@ -426,7 +429,7 @@ contains
           i = buf%ids(1,n); j = buf%ids(2,n); k = buf%ids(3,n); l = buf%ids(4,n)
           xval = buf%ints(n) * this%scale_exchange
           ! Pass 2 updates only the general component agdlr (d3 channel 7,
-          ! mapped to f3_ex_shared index 3). CAM short-range exchange.
+          ! mapped to shared public channel 7). CAM short-range exchange.
           do v = 1, nf
             !$omp atomic update
             f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,7,j,l)
@@ -460,20 +463,26 @@ contains
 
     implicit none
 
-    class(int2_umrsf_data_t), intent(inout) :: this
+    class(int2_umrsf_data_t), target, intent(inout) :: this
     type(int2_storage_t), intent(inout) :: buf
     integer :: i, j, k, l, n, v, c
     real(kind=dp) :: val, xval, cval
-    integer :: mythread
+    integer :: mythread, ncoul
+    real(kind=dp), pointer :: f3(:,:,:,:), f3_ex(:,:,:,:)
 
     mythread = buf%thread_id
 
     if (.not.this%tamm_dancoff) return
 
-    associate ( f3 => this%f3(:,:,:,:,mythread), &
-                d3 => this%d3, &
+    ncoul = size(this%f3,2) - 3
+    if (mythread == 1) then
+      f3 => this%f3(:,1:ncoul,:,:,1)
+    else
+      f3 => this%f3_private(:,:,:,:,mythread-1)
+    end if
+    f3_ex => this%f3(:,ncoul+1:ncoul+3,:,:,1)
+    associate ( d3 => this%d3, &
                 ds => this%ds, &
-                f3_ex => this%f3_ex_shared, &
                 nf => this%nfocks &
       )
 
@@ -4118,14 +4127,15 @@ contains
 
     implicit none
 
-    class(int2_mrsf_data_t), intent(inout) :: this
+    class(int2_mrsf_data_t), target, intent(inout) :: this
     type(int2_shell_block_t), intent(in) :: shell_block
     integer, intent(in) :: thread_id
     integer :: ba,bb,bc,bd,bmaxb,bmaxd,bnij,bnkl,swap_index
     logical :: bab,bcd,bsame
     integer :: i, j, k, l, n, v, c
     real(kind=dp) :: val, xval, cval
-    integer :: mythread
+    integer :: mythread, ncoul
+    real(kind=dp), pointer :: f3(:,:,:,:), f3_ex(:,:,:,:)
 
     bab=shell_block%shells(1)==shell_block%shells(2)
     bcd=shell_block%shells(3)==shell_block%shells(4)
@@ -4134,10 +4144,15 @@ contains
 
     if (.not.this%tamm_dancoff) return
 
-    associate ( f3 => this%f3(:,:,:,:,mythread), &
-                d3 => this%d3, &
+    ncoul = size(this%f3,2) - 3
+    if (mythread == 1) then
+      f3 => this%f3(:,1:ncoul,:,:,1)
+    else
+      f3 => this%f3_private(:,:,:,:,mythread-1)
+    end if
+    f3_ex => this%f3(:,ncoul+1:ncoul+3,:,:,1)
+    associate ( d3 => this%d3, &
                 ds => this%ds, &
-                f3_ex => this%f3_ex_shared, &
                 nf => this%nfocks &
       )
 
@@ -4403,14 +4418,15 @@ contains
 
     implicit none
 
-    class(int2_umrsf_data_t), intent(inout) :: this
+    class(int2_umrsf_data_t), target, intent(inout) :: this
     type(int2_shell_block_t), intent(in) :: shell_block
     integer, intent(in) :: thread_id
     integer :: ba,bb,bc,bd,bmaxb,bmaxd,bnij,bnkl,swap_index
     logical :: bab,bcd,bsame
     integer :: i, j, k, l, n, v, c
     real(kind=dp) :: val, xval, cval
-    integer :: mythread
+    integer :: mythread, ncoul
+    real(kind=dp), pointer :: f3(:,:,:,:), f3_ex(:,:,:,:)
 
     bab=shell_block%shells(1)==shell_block%shells(2)
     bcd=shell_block%shells(3)==shell_block%shells(4)
@@ -4419,10 +4435,15 @@ contains
 
     if (.not.this%tamm_dancoff) return
 
-    associate ( f3 => this%f3(:,:,:,:,mythread), &
-                d3 => this%d3, &
+    ncoul = size(this%f3,2) - 3
+    if (mythread == 1) then
+      f3 => this%f3(:,1:ncoul,:,:,1)
+    else
+      f3 => this%f3_private(:,:,:,:,mythread-1)
+    end if
+    f3_ex => this%f3(:,ncoul+1:ncoul+3,:,:,1)
+    associate ( d3 => this%d3, &
                 ds => this%ds, &
-                f3_ex => this%f3_ex_shared, &
                 nf => this%nfocks &
       )
 

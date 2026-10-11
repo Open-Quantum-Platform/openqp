@@ -338,7 +338,10 @@ subroutine int2_mrsf_shared_selftest(comm, use_mpi, ranks, threads, error, check
         do pass=1,2
           data%cur_pass=pass
           call data%parallel_start(basis,int(threads))
-          if(size(data%f3,2)/=ncoul.or.size(data%f3,5)/=threads) failures=failures+1
+          if(size(data%f3,2)/=nmatrix.or.size(data%f3,5)/=1) failures=failures+1
+          if(size(data%f3_private,2)/=ncoul.or.size(data%f3_private,5)/=threads-1) failures=failures+1
+          ! Exactly ncoul*T+3 DP images: no second full result at finalization.
+          if(size(data%f3)+size(data%f3_private)/=nf*(ncoul*threads+3)*nbf*nbf) failures=failures+1
           if(pass==1) then
             if(allocated(data%f3s).neqv.(kind==1.and.flag==1)) failures=failures+1
             if(allocated(data%f3_ex_sp).neqv.(kind==1.and.flag==1)) failures=failures+1
@@ -395,16 +398,16 @@ subroutine int2_mrsf_shared_selftest(comm, use_mpi, ranks, threads, error, check
             nullify(shell(t)%values)
           end do
           if(kind==1.and.flag==1.and.pass==1) then
-            if(any(data%f3_ex_shared/=0.0_dp)) failures=failures+1
+            if(any(data%f3(:,ncoul+1:nmatrix,:,:,1)/=0.0_dp)) failures=failures+1
             if(.not.any(data%f3_ex_sp/=0.0_sp)) failures=failures+1
           end if
           call data%parallel_stop()
           checks=checks+1
           if(pass==1) then
-            if(.not.allocated(data%f3_ex_shared)) failures=failures+1
+            if(.not.allocated(data%f3_private)) failures=failures+1
           else
             if(size(data%f3,2)/=nmatrix.or.size(data%f3,5)/=1) failures=failures+1
-            if(allocated(data%f3_ex_shared).or.allocated(data%f3_ex_sp)) failures=failures+1
+            if(allocated(data%f3_private).or.allocated(data%f3s).or.allocated(data%f3_ex_sp)) failures=failures+1
             if(.not.any(reference(:,nmatrix,:,:)/=0.0_dp)) failures=failures+1
             delta=maxval(abs(data%f3(:,:,:,:,1)-reference))
             error=max(error,delta)
@@ -455,7 +458,7 @@ subroutine int2_mrsf_shared_selftest(comm, use_mpi, ranks, threads, error, check
         else
           call data%consume_shell(shell(1),1)
         end if
-        if(any(data%f3_ex_shared/=0.0_dp)) failures=failures+1
+        if(any(data%f3(:,ncoul+1:nmatrix,:,:,1)/=0.0_dp)) failures=failures+1
         delta=real(maxval(abs(data%f3_ex_sp-reference_sp)),dp)
         error=max(error,delta);checks=checks+1
         if(delta/=0.0_dp) failures=failures+1
