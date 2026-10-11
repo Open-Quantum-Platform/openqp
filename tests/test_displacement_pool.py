@@ -263,15 +263,21 @@ STOP_RUNNING_DRIVER = textwrap.dedent('''
     runner.run()
 
     pid_file = work / "child.pid"
+    grandchild_pid_file = work / "grandchild.pid"
     returned = work / "worker1.returned"
-    child = ("import os, pathlib, sys, time; "
+    # The child starts a grandchild of its own, as [dftb] backend=probe does,
+    # and both sleep: stopping only the direct child would orphan the other.
+    child = ("import os, pathlib, subprocess, sys, time; "
+             "g = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)']); "
+             "pathlib.Path(sys.argv[2]).write_text(str(g.pid)); "
              "pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(120)")
 
     def worker(task):
         if task["idx"] == 1:
             # Stands in for a displaced OpenQP job: a long-running child
             # started through the driver's job registry.
-            task["jobs"].run([sys.executable, "-c", child, str(pid_file)], dict(os.environ))
+            task["jobs"].run([sys.executable, "-c", child, str(pid_file),
+                              str(grandchild_pid_file)], dict(os.environ))
             returned.touch()
             return task["idx"], None, "failed", None
         if task["idx"] == 0:
@@ -290,15 +296,23 @@ STOP_RUNNING_DRIVER = textwrap.dedent('''
     else:
         raise AssertionError("worker exception did not reach numerical_hess")
     elapsed = time.time() - start
-    pid = int(pid_file.read_text())
-    try:
-        os.kill(pid, 0)
-        alive = True
-    except ProcessLookupError:
-        alive = False
-    # The child sleeps 120 s: an un-stopped job is still alive here, and a
+    def alive(pid):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        return True
+
+    # Both processes sleep 120 s: an un-stopped one is still alive here, and a
     # driver that does not wait for its workers raises before they return.
-    assert not alive, f"displacement child {pid} outlived the failed driver"
+    # The grandchild is not ours to reap, so give init a moment to collect it.
+    pid = int(pid_file.read_text())
+    grandchild = int(grandchild_pid_file.read_text())
+    deadline = time.time() + 10
+    while alive(grandchild) and time.time() < deadline:
+        time.sleep(0.1)
+    assert not alive(pid), f"displacement child {pid} outlived the failed driver"
+    assert not alive(grandchild), f"grandchild {grandchild} outlived the failed driver"
     assert returned.exists(), "driver raised before its active worker returned"
     assert elapsed < 60, elapsed
     print("DISPLACEMENT_POOL_OK")

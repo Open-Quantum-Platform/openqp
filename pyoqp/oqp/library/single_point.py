@@ -6,6 +6,7 @@ import json
 import copy
 import time
 import shutil
+import signal
 import hashlib
 import platform
 import subprocess
@@ -2659,6 +2660,14 @@ class _ExternalJobs:
     driver's scratch directory after the driver has raised.  The driver passes
     one of these to every worker so that, on failure, it can stop the children
     that are running and refuse to start new ones.
+
+    Each child runs as the leader of its own process group (POSIX) or process
+    tree (Windows), and ``stop`` signals the whole group: a displaced job can
+    start processes of its own -- ``[dftb] backend=probe`` runs an external
+    executable -- and signalling only the direct child would orphan those.
+    Because the children are no longer in the terminal's foreground group, a
+    Ctrl-C reaches only this process; it surfaces as KeyboardInterrupt in the
+    driver, whose handler stops the groups through ``_abort_displacements``.
     """
 
     def __init__(self):
@@ -2670,7 +2679,12 @@ class _ExternalJobs:
         with self._lock:
             if self._stopped:
                 return
-            proc = subprocess.Popen(cmd, env=env)
+            if os.name == 'posix':
+                proc = subprocess.Popen(cmd, env=env, start_new_session=True)
+            else:
+                proc = subprocess.Popen(
+                    cmd, env=env,
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
             self._procs.add(proc)
         try:
             proc.wait()
@@ -2678,18 +2692,33 @@ class _ExternalJobs:
             with self._lock:
                 self._procs.discard(proc)
 
+    @staticmethod
+    def _signal_tree(proc, kill):
+        if os.name == 'posix':
+            try:
+                os.killpg(proc.pid, signal.SIGKILL if kill else signal.SIGTERM)
+            except (ProcessLookupError, PermissionError):
+                # ESRCH: the group is gone.  macOS returns EPERM instead
+                # when the only members left are zombies awaiting reaping.
+                pass
+        else:
+            subprocess.run(['taskkill', '/T', '/F', '/PID', str(proc.pid)],
+                           capture_output=True)
+
     def stop(self, grace=10.0):
         with self._lock:
             self._stopped = True
             procs = list(self._procs)
         for proc in procs:
-            proc.terminate()
+            self._signal_tree(proc, kill=False)
         for proc in procs:
             try:
                 proc.wait(timeout=grace)
             except subprocess.TimeoutExpired:
-                proc.kill()
+                self._signal_tree(proc, kill=True)
                 proc.wait()
+            # The leader is gone; remove any descendant that ignored SIGTERM.
+            self._signal_tree(proc, kill=True)
 
 
 def _abort_displacements(pool, jobs):
