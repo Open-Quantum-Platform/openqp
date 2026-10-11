@@ -10,6 +10,7 @@ runtype=hess
 method=hf
 
 [scf]
+conv=1.0e-9
 type=rhf
 multiplicity=1
 

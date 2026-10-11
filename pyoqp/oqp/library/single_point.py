@@ -230,7 +230,7 @@ def _no_integral_symmetry_in_child(config):
 
 
 def _finite_difference_response_tolerances(config):
-    """Tighten the SCF and response convergence of a finite-difference gradient child.
+    """Tighten the response convergence of a finite-difference gradient child.
 
     ``[tdhf] zvconv`` and ``[tdhf] conv`` bound the SQUARED residual norm of
     the Z-vector and Davidson solvers (tdhf_z_vector passes sqrt(zvconv) to
@@ -240,36 +240,29 @@ def _finite_difference_response_tolerances(config):
     count.  A central difference over +-dx divides them by 2 dx: linear
     H3+/STO-3G TDHF, dx = 1e-3 bohr, numerical zz 0.26306 against 0.26447
     Eh/bohr^2 from the state energies and the analytic Hessian, while every
-    single gradient met its tolerance.  The ground-state gradient carries the
-    SCF error the same way: [scf] conv defaults to 1e-6, and the numerical
-    HESS examples moved by 0.01 cm^-1 when only the children's SCF iteration
-    path changed.  Converge each child so that every residual is below
-    max(1e-5 dx, 1e-8) (Hessian error ~1e-6); a looser user value is
-    tightened, a tighter one kept.
+    single gradient met its tolerance.  Converge each child so that both
+    residuals are below max(1e-5 dx, 1e-8) (Hessian error ~1e-6); a looser
+    user value is tightened, a tighter one kept.  Below ~1e-9 the MRSF
+    Davidson stalls (squared residual 2.5e-18 after its auto-restart, H2O
+    BHHLYP/6-31G*) and an unreachable tolerance aborts the child.
+
+    ``[scf] conv`` is left to the user: tightening it in every child made
+    open-shell DFT numerical Hessians up to 5x slower (ROKS OH, dx = 5e-3),
+    while the response tolerances cost +28 % on benzene B3LYP RPA.
     """
     def as_float(value):
         return float(str(value).strip().lower().replace('d', 'e'))
 
     dx = abs(as_float(config.get('hess', {}).get('dx', 1.0e-3)))
-    # Below ~1e-9 the MRSF Davidson stalls (squared residual 2.5e-18 after
-    # its auto-restart, H2O BHHLYP/6-31G*), and an unreachable tolerance
-    # aborts the child; 1e-8 keeps the Hessian error near 1e-6 at dx = 1e-3.
-    residual = max(1.0e-5 * dx, 1.0e-8)
-    # [tdhf] tolerances are squared residual norms, [scf] conv is the DIIS
-    # error itself (max |FDS - SDF|).  The SCF has no such floor, and the
-    # frequency references need run-to-run agreement to 1e-6 relative: H2O
-    # RHF/6-31G frequencies moved 0.02 cm^-1 between children converged to
-    # 1e-8 and to 1e-11, and 7e-4 cm^-1 between 1e-9 and 1e-11.
-    for section, key, target in (('tdhf', 'zvconv', residual ** 2),
-                                 ('tdhf', 'conv', residual ** 2),
-                                 ('scf', 'conv', 1.0e-6 * dx)):
-        values = config.setdefault(section, {})
+    target = max(1.0e-5 * dx, 1.0e-8) ** 2
+    tdhf = config.setdefault('tdhf', {})
+    for key in ('zvconv', 'conv'):
         try:
-            current = as_float(values.get(key, 1.0))
+            current = as_float(tdhf.get(key, 1.0))
         except ValueError:
             current = 1.0
         if current > target:
-            values[key] = f'{target:.3e}'
+            tdhf[key] = f'{target:.3e}'
     return config
 
 
