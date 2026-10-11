@@ -1137,13 +1137,12 @@ contains
           .and. (.not. ps_force_iter) .and. (.not. xc_reuse_now) &
           .and. (.not. cold_first_iter) &
           .and. .not. (shift_applied .and. iter > 1 .and. .not. (use_soscf .or. use_trah))) then
-        ! Fully converged - exit loop
-        if (do_pfon) then
-          if (pfon%temp > 1.0_dp + 1.0e-6_dp) then
-            do_pfon_final = .true.
-          else
-            exit
-          end if
+        ! Fully converged - exit loop (pFON: only once annealed to ~1 K).
+        ! The pFON exit goes through the same orbital-energy steps below as
+        ! every other DIIS exit: it used to leave directly and published the
+        ! shifted virtual energies of a vshift run (RHF/ROHF +vshift).
+        if (do_pfon .and. pfon%temp > 1.0_dp + 1.0e-6_dp) then
+          do_pfon_final = .true.
         else
           if (vshift_last_iter) vshift = 0.0_dp
           ! A first-iteration exit (supplied orbitals; cold guesses are held
@@ -1185,11 +1184,12 @@ contains
               mo_energy_b = mo_energy_a
             end if
           end if
-          call handle_soscf_trah_rohf(use_soscf, use_trah, scf_type, pfock, rohf_bak, &
-                                      mo_a, mo_b, mo_energy_a, mo_energy_b, &
-                                      qmat, smat_full, nelec_a, nelec_b, nbf, nbf_tri, vshift, &
-                                      work1, work2, infos, basis, &
-                                      dens_prev, pdmat)
+          if (.not. do_pfon) &
+            call handle_soscf_trah_rohf(use_soscf, use_trah, scf_type, pfock, rohf_bak, &
+                                        mo_a, mo_b, mo_energy_a, mo_energy_b, &
+                                        qmat, smat_full, nelec_a, nelec_b, nbf, nbf_tri, vshift, &
+                                        work1, work2, infos, basis, &
+                                        dens_prev, pdmat)
           exit
         end if
       elseif ((abs(diis_error) < infos%control%conv) .and. (vshift /= 0.0_dp)) then
