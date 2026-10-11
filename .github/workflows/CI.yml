@@ -233,12 +233,25 @@ jobs:
          # toolkit, the interop/export APIs, the input handling) could regress
          # silently. Run it on one leg: it is Python-only, so a second OS or the
          # MPI leg would re-run identical assertions against the same code.
+         - name: Pin CASPT2 direct engines on two MPI ranks
+           if: ${{ matrix.MPI == 'ON' && matrix.os == 'ubuntu-24.04' }}
+           env:
+            OMP_NUM_THREADS: "1"
+            OMP_DYNAMIC: "FALSE"
+            OPENBLAS_NUM_THREADS: "1"
+           run: |
+            pip install pytest mpi4py
+            ddx_lib="$(find "$HOME"/.cache/openqp -name 'libddx.so*' -print -quit 2>/dev/null)"
+            test -n "$ddx_lib"
+            export LD_LIBRARY_PATH="$(dirname "$ddx_lib"):${LD_LIBRARY_PATH:-}"
+            mpiexec --oversubscribe -n 2 python tests/caspt2_direct_mpi.py "$(mktemp -d)"
          - name: Run Python test suite
            if: ${{ matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
            env:
             # This is a post-build job.  Native EDIIS/A-DIIS tests must fail,
             # rather than skip, if the extension or its C ABI symbols are absent.
             OQP_REQUIRE_NATIVE_TESTS: "1"
+            OMP_DYNAMIC: "FALSE"
             # Opt the analytic-TDHF-Hessian end-to-end gate in. Without this the
             # only test that actually compares an analytic Hessian against its
             # finite-difference reference never runs, and the file's remaining

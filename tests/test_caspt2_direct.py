@@ -81,6 +81,9 @@ def test_signed_couplings_and_energy_match_dense(tmp_path, monkeypatch, engine, 
         ka = np.array([core | ((int(d) & active) << nc) for d in dets], dtype=np.uint64)
         kb = np.array([core | ((int(d) >> na) << nc) for d in dets], dtype=np.uint64)
         c = coeffs[:, roots].copy()
+        # qdpt2_stream_kernel caps its team at nsup / 4. CAS(4,4)
+        # supplies 36 determinants, so the four-thread call enters that path.
+        assert c.shape == (36, 1)
         for threads in (1, 4):
             stream = direct._stream_fortran(h1e, eri, eps, norb, nc, na,
                                             ka, kb, c, options.max_terms, threads,
@@ -119,9 +122,11 @@ def test_signed_couplings_and_energy_match_dense(tmp_path, monkeypatch, engine, 
         return result
 
     monkeypatch.setattr(direct, "direct_qdpt2", pin)
-    runner = _run_caspt2(tmp_path, "pin_" + engine, system=_H4, basis="sto-3g",
-                         cas=_CAS, pt2={"reference": "casci", "engine": engine,
-                                       "nproc": "1", **shift})
+    cas = {**_CAS, "active_electrons": "4", "active_orbitals": "4",
+           "frozen_core": "0"}
+    runner = _run_caspt2(tmp_path, "pin_" + engine, system=_H4, basis="6-31g",
+                         cas=cas, pt2={"reference": "casci", "engine": engine,
+                                      "frozen": "0", "nproc": "1", **shift})
     np.testing.assert_allclose(runner.mol.data["OQP::CASPT2_STATE_SPECIFIC_CORRECTIONS"],
                                [captured["e2"]], rtol=0, atol=1e-10)
     log = (tmp_path / ("pin_" + engine + ".log")).read_text()
@@ -197,6 +202,52 @@ def test_word_boundary_empty_external_and_memory_budget():
     with pytest.raises(ValueError, match="max_memory"):
         _stream_fortran(h, g, eps, n, 0, 4, word, word,
                          coeffs, 30_000_000, 1, max_memory=1)
+
+
+def test_populated_word_boundary_has_analytic_signed_couplings():
+    from oqp.library.caspt2_dyall import CASPT2Options
+    from oqp.library.qdpt2_direct import direct_qdpt2, _stream_all, _stream_fortran
+
+    n, nc, na = 63, 61, 2
+    eps = np.linspace(-3.0, 3.0, n)
+    h = np.diag(eps)
+    t0, t1 = 0.17, -0.23
+    h[61, 0] = h[0, 61] = t0
+    h[61, 1] = h[1, 61] = t1
+    g = np.zeros((n, n, n, n))
+    # Both spins occupy orbital 62 and every core orbital, leaving 61 empty.
+    word = ((1 << nc) - 1) | (1 << 62)
+    keys = np.array([word], dtype=np.uint64)
+    coeffs = np.ones((1, 1))
+    eref = 2 * (eps[:nc].sum() + eps[62])
+    expected = {}
+    for hole, signed in ((0, t0), (1, -t1)):
+        excited = (word ^ (1 << hole)) | (1 << 61)
+        for pair in ((excited, word), (word, excited)):
+            expected[pair] = (signed, eref + eps[61] - eps[hole])
+
+    a, b, v, e0, src = _stream_all(h, g, eps, n, nc, na, keys, keys, 1)
+    assert np.all(src == 0)
+    native = _stream_fortran(h, g, eps, n, nc, na, keys, keys,
+                             coeffs, 30_000_000, 1, max_memory=512)
+    assert native is not None, "the 63-orbital boundary requires the native kernel"
+    an, bn, en, vn = native
+    for aa, bb, vv, ee in ((a, b, v, e0), (an, bn, vn[0], en)):
+        actual = {(int(x), int(y)): (coupling, energy)
+                  for x, y, coupling, energy in zip(aa, bb, vv, ee)
+                  if abs(coupling) > 1e-14}
+        assert actual.keys() == expected.keys()
+        assert all(x & (1 << 62) and y & (1 << 62) for x, y in actual)
+        for pair, values in expected.items():
+            np.testing.assert_allclose(actual[pair], values, rtol=0, atol=1e-10)
+
+    e2 = -2 * (t0**2 / (eps[61] - eps[0]) + t1**2 / (eps[61] - eps[1]))
+    for engine in ("direct", "fortran"):
+        result = direct_qdpt2(h, g, coeffs, np.array([eref]), [0b1010], eps,
+                             np.zeros((n, n)), nc, na, (1, 1), n, 0,
+                             [0], CASPT2Options(engine=engine, nproc=1), False,
+                             max_memory=512)
+        np.testing.assert_allclose(result["e2"], [e2], rtol=0, atol=1e-12)
 
 
 @pytest.mark.parametrize("engine", ["direct", "fortran"])
