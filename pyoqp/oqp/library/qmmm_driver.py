@@ -161,6 +161,30 @@ def _with_qmmm_flag(oqp_cfg, embedding):
     return oqp_cfg
 
 
+def _require_mol_qmmm_flag(mol, embedding):
+    """Mol mode: a pre-built molecule must already carry input.qmmm_flag.
+
+    Same requirement as ``_with_qmmm_flag``, but the caller owns this
+    molecule's configuration (and its native control block), so the driver
+    raises instead of changing it.
+    """
+    if embedding == "mechanical":
+        return
+    config = getattr(mol, "config", None)
+    if not isinstance(config, dict):
+        return    # not a molecule; the constructor's own checks report it
+    inp = config.get("input", {})
+    if is_tb_method(str(inp.get("method", ""))):
+        return
+    flag = inp.get("qmmm_flag", False)
+    if flag is True or str(flag).strip().lower() in _TRUE_WORDS:
+        return
+    raise ValueError(
+        f"QM/MM with Embedding='{embedding}' needs input.qmmm_flag=True on the "
+        f"supplied molecule (got {flag!r}): without it the excited-state forces "
+        "use the reference-state ESPF charges.")
+
+
 def anderson_step(q_hist, f_hist, m=3, beta=1.0, max_step=0.5):
     """Anderson-accelerated update for a charge fixed point q = g(q).
 
@@ -344,6 +368,7 @@ class OpenQpQMMM:
         self.use_mol = mol is not None
 
         if self.use_mol:
+            _require_mol_qmmm_flag(mol, self.Embedding)
             self.mol = mol
             self.oqp_cfg_base = None
         else:
