@@ -134,6 +134,12 @@ def _normalize_embedding(value):
 _TRUE_WORDS = {"1", "true", "t", "yes", "y", "on"}
 
 
+def _uses_relaxed_td_charges(method):
+    """True for the native excited-state method, whose QM/MM forces use the
+    relaxed ESPF charges formed by the TD Z-vector solvers."""
+    return str(method).strip().lower() == "tdhf"
+
+
 def _with_qmmm_flag(oqp_cfg, embedding):
     """Config-mode QM/MM needs ``input.qmmm_flag`` in the native engine.
 
@@ -141,13 +147,15 @@ def _with_qmmm_flag(oqp_cfg, embedding):
     (which the MM electrostatic-embedding forces use) only when qmmm_flag is
     set.  A config without it ran the embedded SCF and returned excited-state
     forces built from the reference-state charges, silently inconsistent with
-    the energy.  Electrostatic-type embeddings of the native methods therefore
-    get the flag set when it is absent, and an explicit false is rejected.
-    Mechanical embedding and the tight-binding backends do not use it.
+    the energy.  Excited-state (method=tdhf) electrostatic-type embeddings
+    therefore get the flag set when it is absent, and an explicit false is
+    rejected.  Ground-state HF/DFT forms its charges directly (form_esp_charges,
+    grad_esp_qmmm) without a Z-vector, and mechanical embedding and the
+    tight-binding backends do not use it, so those are left unchanged.
     """
     if embedding == "mechanical":
         return oqp_cfg
-    if is_tb_method(str(oqp_cfg.get("input.method", ""))):
+    if not _uses_relaxed_td_charges(oqp_cfg.get("input.method", "")):
         return oqp_cfg
     key = "input.qmmm_flag"
     if key in oqp_cfg:
@@ -174,7 +182,7 @@ def _require_mol_qmmm_flag(mol, embedding):
     if not isinstance(config, dict):
         return    # not a molecule; the constructor's own checks report it
     inp = config.get("input", {})
-    if is_tb_method(str(inp.get("method", ""))):
+    if not _uses_relaxed_td_charges(inp.get("method", "")):
         return
     flag = inp.get("qmmm_flag", False)
     if flag is True or str(flag).strip().lower() in _TRUE_WORDS:

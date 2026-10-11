@@ -8,7 +8,8 @@ inconsistent with the energy (finite-difference check in
 tests/test_restricted_td_relaxed_density_consumers.py, ``..._without_qmmm_flag``).
 
 ``_with_qmmm_flag`` sets the flag for electrostatic-type embeddings of the
-native methods, rejects an explicit false, and leaves mechanical embedding and
+excited-state method (``method=tdhf``), rejects an explicit false, leaves
+ground-state HF/DFT (charges formed directly, no Z-vector) unchanged, and leaves mechanical embedding and
 the tight-binding backends alone.  In mol mode (``OpenQpQMMM(mol=...)``) the
 caller owns the molecule's configuration, so ``_require_mol_qmmm_flag`` raises
 the same error instead of changing it.  Needs OpenMM (the driver imports it).
@@ -50,7 +51,7 @@ class QMMMFlagGuardTests(unittest.TestCase):
 
     def test_explicit_true_is_kept(self):
         for value in (True, "True", "true", "1", "on"):
-            cfg = {"input.method": "hf", "input.qmmm_flag": value}
+            cfg = {"input.method": "tdhf", "input.qmmm_flag": value}
             _with_qmmm_flag(cfg, "electrostatic")
             self.assertEqual(cfg["input.qmmm_flag"], value)
 
@@ -59,6 +60,17 @@ class QMMMFlagGuardTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "needs input.qmmm_flag=True"):
                 _with_qmmm_flag({"input.method": "tdhf", "input.qmmm_flag": value},
                                 "electrostatic")
+
+    def test_ground_state_methods_are_untouched(self):
+        # Ground-state HF/DFT forms its ESPF charges directly (no Z-vector):
+        # neither an absent nor an explicit false flag is changed or rejected.
+        for method in ("hf", "HF"):
+            cfg = {"input.method": method}
+            _with_qmmm_flag(cfg, "electrostatic")
+            self.assertNotIn("input.qmmm_flag", cfg)
+            cfg = {"input.method": method, "input.qmmm_flag": False}
+            _with_qmmm_flag(cfg, "split")
+            self.assertIs(cfg["input.qmmm_flag"], False)
 
     def test_mechanical_and_tight_binding_are_untouched(self):
         cfg = {"input.method": "tdhf"}
@@ -94,6 +106,9 @@ class MolModeQMMMFlagTests(unittest.TestCase):
             _require_mol_qmmm_flag(_FakeMol("tdhf", flag), "electrostatic")
         _require_mol_qmmm_flag(_FakeMol("tdhf"), "mechanical")
         _require_mol_qmmm_flag(_FakeMol("dftb"), "electrostatic")
+        # ground state: missing or false flag is fine (no Z-vector charges)
+        _require_mol_qmmm_flag(_FakeMol("hf"), "electrostatic")
+        _require_mol_qmmm_flag(_FakeMol("hf", False), "split")
 
     def test_driver_constructor_rejects_mol_without_flag(self):
         # The guard runs in OpenQpQMMM.__init__ before the molecule is used,
