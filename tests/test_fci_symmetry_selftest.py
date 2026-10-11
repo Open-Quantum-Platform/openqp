@@ -16,17 +16,14 @@ exact rather than tolerance-based:
 Skipped unless a built OpenQP is importable, like the other selftest drivers.
 """
 
-import os
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
 SELFTEST_OUT = Path("/tmp/fci_symmetry_selftest.out")
 
 
 def _runtime_available():
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
         import oqp  # noqa: F401
         return True
     except Exception:
@@ -69,15 +66,16 @@ class FciSymmetrySelfTest(unittest.TestCase):
 
 
 def _library_path():
-    root = Path(os.environ["OPENQP_ROOT"])
-    for pattern in ("lib/liboqp.dylib", "lib/liboqp.so", "lib64/liboqp.so"):
-        candidate = root / pattern
-        if candidate.exists():
-            return candidate
-    matches = sorted(root.glob("lib*/liboqp.*"))
-    if not matches:
-        raise unittest.SkipTest("liboqp not found under OPENQP_ROOT")
-    return matches[0]
+    # The liboqp that `import oqp` resolved, not $OPENQP_ROOT: the variable is
+    # only a fallback in oqp.runtime, and reading it here tested whatever tree
+    # it happened to name (usually the unbuilt source tree, so the test skipped).
+    from oqp.runtime import library_path, resolve_oqp_root
+
+    root, suffix = resolve_oqp_root()
+    path = library_path(root, suffix)
+    if path is None:
+        raise AssertionError(f"oqp resolved runtime root {root} but it has no liboqp.{suffix}")
+    return path
 
 
 if __name__ == "__main__":

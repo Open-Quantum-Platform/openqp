@@ -22,7 +22,6 @@ import re
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
 RHF_OUT = Path("/tmp/cphf_polar.out")
 ROHF_OUT = Path("/tmp/cphf_rohf_polar.out")
 
@@ -45,7 +44,6 @@ type={scftype}
 
 def _runtime_available():
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         import oqp  # noqa: F401
         from oqp.pyoqp import Runner  # noqa: F401

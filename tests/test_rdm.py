@@ -1,23 +1,5 @@
-import importlib
-import os
-import sys
-from pathlib import Path
-
 import numpy as np
 import pytest
-
-os.environ.setdefault("OQP_BACKEND_OPTIONAL", "1")
-ROOT = Path(__file__).resolve().parents[1]
-PYOQP = ROOT / "pyoqp"
-if str(PYOQP) not in sys.path:
-    sys.path.insert(0, str(PYOQP))
-
-
-def _use_real_oqp_package():
-    for name in list(sys.modules):
-        if name == "oqp" or name.startswith("oqp."):
-            sys.modules.pop(name, None)
-    importlib.invalidate_caches()
 
 
 def _model_integrals():
@@ -49,7 +31,6 @@ def _scalar(value):
 
 
 def test_spinorb_and_spatial_rdms_for_single_determinant_are_exact():
-    _use_real_oqp_package()
     from oqp.library.rdm import (
         make_rdm1_spatial,
         make_rdm1_spinorb,
@@ -79,7 +60,6 @@ def test_spinorb_and_spatial_rdms_for_single_determinant_are_exact():
 
 
 def test_rdms_reconstruct_native_fci_energy_and_identities():
-    _use_real_oqp_package()
     from oqp.library.fci import _spin_orbital_integrals, solve_fci
     from oqp.library.rdm import (
         determinant_basis,
@@ -116,7 +96,6 @@ def test_rdms_reconstruct_native_fci_energy_and_identities():
 
 
 def test_natural_orbital_occupations_are_sorted_eigenvalues():
-    _use_real_oqp_package()
     from oqp.library.rdm import natural_orbital_occupations
 
     np.testing.assert_allclose(
@@ -141,7 +120,6 @@ def test_natural_orbital_occupations_are_sorted_eigenvalues():
     ],
 )
 def test_natural_orbital_occupations_reject_malformed_rdm1(rdm1):
-    _use_real_oqp_package()
     from oqp.library.rdm import natural_orbital_occupations
 
     with pytest.raises(ValueError, match="spatial 1-RDM"):
@@ -163,7 +141,6 @@ def test_natural_orbital_occupations_reject_malformed_rdm1(rdm1):
 )
 def test_spatial_rdms_match_pyscf_casci_reference(atom, active_electrons, active_orbitals):
     pytest.importorskip("pyscf")
-    _use_real_oqp_package()
     from pyscf import gto, mcscf, scf
 
     from oqp.library.rdm import determinant_basis, make_rdm1_spatial, make_rdm2_spatial

@@ -29,16 +29,11 @@ Skipped unless the compiled OpenQP runtime (pyoqp) and PySCF are importable.
 """
 
 import os
-import sys
 import unittest
 from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(__file__).resolve().parents[1]
-PYOQP = ROOT / "pyoqp"
-if PYOQP.is_dir() and str(PYOQP) not in sys.path:
-    sys.path.insert(0, str(PYOQP))
 
 BLOCKS = Path("/tmp/hess_nuc_blocks.txt")
 
@@ -68,7 +63,6 @@ DERIV_TOL = 1.0e-8
 def _runtime_reason():
     """Return None if runtime+pyscf are importable, else a reason string."""
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         import oqp  # noqa: F401
         from oqp.pyoqp import Runner  # noqa: F401
