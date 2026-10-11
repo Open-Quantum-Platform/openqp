@@ -411,13 +411,8 @@ contains
 
     select case (ndtlf)
     case(0)
-!     alpha determinant
-      do i1 = 1, noca
-         do i2 = 1, noca
-            call ov_exact(temp1, i1, i2, ia1, ia2, s_mo, 1, noc, 1)
-            s_ij(i1,i2) = temp1
-         end do
-      end do
+!     C(i,j) = det(S_occ) * inv(S_occ)(j,i), when numerically safe.
+      call occupied_cofactors(s_mo(1:noca,1:noca), s_ij)
 
 !     1-2 det
       do j1 = 1, nvirb
@@ -538,6 +533,96 @@ contains
     end block
 
   end subroutine mrsf_tlf
+
+  subroutine occupied_cofactors(s, cofactors, used_lu)
+    use precision, only: dp
+    use oqp_linalg, only: dgetrf, dgecon, dgetrs
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+    implicit none
+    real(dp), intent(in) :: s(:,:)
+    real(dp), intent(out) :: cofactors(:,:)
+    logical, intent(out), optional :: used_lu
+    real(dp) :: lu(size(s,1),size(s,1)), inverse(size(s,1),size(s,1))
+    real(dp) :: work(4*size(s,1)), minor(max(0,size(s,1)-1),max(0,size(s,1)-1))
+    integer :: piv(size(s,1)), iwork(size(s,1)), n, info, i, j, r, c, rr, cc
+    real(dp) :: anorm, rcond, det, logdet
+    logical :: safe
+
+    n = size(s,1)
+    if (present(used_lu)) used_lu = .false.
+    ! The determinant of the empty minor is one, even when S(1,1)=0.
+    if (n == 1) then
+      cofactors(1,1) = 1.0_dp
+      return
+    end if
+    if (n == 0) return
+
+    lu = s
+    call dgetrf(n, n, lu, n, piv, info)
+    safe = info == 0 .and. all(ieee_is_finite(lu))
+    if (safe) then
+      ! comp_det treats pivots <= tiny as zero. Never invert such a pivot:
+      ! a finite cofactor may exist although the inverse overflows.
+      do i = 1, n
+        if (abs(lu(i,i)) <= tiny(1.0_dp)) safe = .false.
+      end do
+    end if
+    if (safe) then
+      anorm = maxval(sum(abs(s), dim=1))
+      call dgecon('1', n, lu, n, anorm, rcond, work, iwork, info)
+      safe = info == 0 .and. ieee_is_finite(rcond)
+      safe = safe .and. rcond > sqrt(epsilon(1.0_dp))
+    end if
+    if (safe) then
+      logdet = 0.0_dp
+      do i = 1, n
+        logdet = logdet + log(abs(lu(i,i)))
+      end do
+      ! An underflowed determinant times a large inverse loses finite minors.
+      safe = logdet > log(tiny(1.0_dp)) .and. logdet < log(huge(1.0_dp))
+    end if
+    if (safe) then
+      ! Form the magnitude from its logarithm to avoid intermediate underflow.
+      det = exp(logdet)
+      inverse = 0.0_dp
+      do i = 1, n
+        if (piv(i) /= i) det = -det
+        if (lu(i,i) < 0.0_dp) det = -det
+        inverse(i,i) = 1.0_dp
+      end do
+      call dgetrs('N', n, n, lu, n, piv, inverse, n, info)
+      safe = info == 0 .and. all(ieee_is_finite(inverse))
+      if (safe) then
+        cofactors = det * transpose(inverse)
+        safe = all(ieee_is_finite(cofactors))
+        if (safe) then
+          if (present(used_lu)) used_lu = .true.
+          return
+        end if
+      end if
+    end if
+
+    ! Exact signed minors preserve comp_det's tiny-pivot convention. Singular
+    ! occupied overlaps can have nonzero minors; TLF approximations cannot
+    ! replace them. All scratch belongs to this invocation.
+    do i = 1, n
+      do j = 1, n
+        rr = 0
+        do r = 1, n
+          if (r == i) cycle
+          rr = rr + 1
+          cc = 0
+          do c = 1, n
+            if (c == j) cycle
+            cc = cc + 1
+            minor(rr,cc) = s(r,c)
+          end do
+        end do
+        cofactors(i,j) = comp_det(minor, n-1)
+        if (mod(i+j,2) /= 0) cofactors(i,j) = -cofactors(i,j)
+      end do
+    end do
+  end subroutine occupied_cofactors
 
   subroutine ov_exact(temp1, i1, i2, ia1, ia2, s_mo, ilow, noc, itype)
 

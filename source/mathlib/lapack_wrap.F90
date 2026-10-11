@@ -197,15 +197,42 @@ subroutine oqp_dgetrf_i64(m, n, a, lda, ipiv, info)
     m_ = int(m, blas_int)
     n_ = int(n, blas_int)
     lda_ = int(lda, blas_int)
-    ! Allocate memory for 'ipiv_' and copy 'ipiv' to it
+    ! ipiv is an output: do not read uninitialized caller storage.
     allocate(ipiv_(min(m_,n_)))
-    ipiv_ = int(ipiv, blas_int)
     ! Call LAPACK routine dgetrf to perform LU factorization
     call dgetrf(m_, n_, a, lda_, ipiv_, info_)
+    ipiv = int(ipiv_, kind(ipiv))
     ! Assign the output info_ to the info argument
     info = info_
     ! Free allocated memory
 end subroutine oqp_dgetrf_i64
+
+!> Reciprocal 1/infinity-norm condition estimate from an LU factorization.
+subroutine oqp_dgecon_i64(norm, n, a, lda, anorm, rcond, work, iwork, info)
+    character, intent(in) :: norm
+    integer, intent(in) :: n, lda
+    real(dp), intent(in) :: a(lda,*), anorm
+    real(dp), intent(out) :: rcond, work(*)
+    integer, intent(out) :: iwork(n), info
+    integer(blas_int) :: iwork_(n), info_
+    call dgecon(norm, int(n,blas_int), a, int(lda,blas_int), anorm, rcond, work, iwork_, info_)
+    iwork = int(iwork_,kind(iwork))
+    info = int(info_,kind(info))
+end subroutine oqp_dgecon_i64
+
+!> Solve with the pivot indices returned by oqp_dgetrf_i64.
+subroutine oqp_dgetrs_i64(trans, n, nrhs, a, lda, ipiv, b, ldb, info)
+    character, intent(in) :: trans
+    integer, intent(in) :: n, nrhs, lda, ldb, ipiv(n)
+    real(dp), intent(in) :: a(lda,*)
+    real(dp), intent(inout) :: b(ldb,*)
+    integer, intent(out) :: info
+    integer(blas_int) :: ipiv_(n), info_
+    ipiv_ = int(ipiv,blas_int)
+    call dgetrs(trans, int(n,blas_int), int(nrhs,blas_int), a, int(lda,blas_int), &
+                ipiv_, b, int(ldb,blas_int), info_)
+    info = int(info_,kind(info))
+end subroutine oqp_dgetrs_i64
 !MHR END
 
 !----------------------------------------------------------------------

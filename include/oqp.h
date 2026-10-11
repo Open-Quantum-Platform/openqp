@@ -11,6 +11,9 @@ void oqp_simplex_qp_solve_avoid(int64_t n, const double *h, const double *g,
 
 /* Internal ECP-integral self-test: err[0..9] (see tests/fortran/ecp_selftest.F90). */
 void oqp_ecp_selftest(double *err);
+/* Internal mrsf_tlf regression shim; no additional overlap product API. */
+void occupied_cofactors_selftest(int64_t n, const double *s, double *actual,
+                               double *previous, int *used_lu);
 
 typedef double xyz_t[3];
 

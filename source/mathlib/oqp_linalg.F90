@@ -156,6 +156,9 @@ module oqp_linalg
   use lapack_wrap, only: dtpttr => oqp_dtpttr_i64
   use lapack_wrap, only: dtrttp => oqp_dtrttp_i64
 #endif
+  use lapack_wrap, only: dgetrf => oqp_dgetrf_i64
+  use lapack_wrap, only: dgecon => oqp_dgecon_i64
+  use lapack_wrap, only: dgetrs => oqp_dgetrs_i64
 
   implicit none
 
