@@ -152,8 +152,33 @@ def allocation_interposer(native, tmp_path):
 #include <string.h>
 #include <dlfcn.h>
 #include <errno.h>
+#include <stdint.h>
 static int selected, count, active, strings_only;
 static int final_transform, transform_count;
+static int evaluate_phase, evaluate_markers;
+static int32_t (*original_fault_request)(int32_t);
+static int32_t replacement_fault_request(int32_t site);
+int32_t oqp_casscf_test_fault_request(int32_t site);
+int rdm_set_fault_forward(void *original) {
+#ifdef __APPLE__
+    /* References from the interposer image retain the original dyld binding,
+     * as does malloc below. The owning dylib is a linked dependency. */
+    original = (void *)oqp_casscf_test_fault_request;
+#endif
+    if (!original || original == (void *)replacement_fault_request) return 1;
+#ifndef __APPLE__
+    if (original == (void *)oqp_casscf_test_fault_request) return 1;
+#endif
+    original_fault_request = (int32_t (*)(int32_t))original;
+    return 0;
+}
+static int32_t replacement_fault_request(int32_t site) {
+    if (!original_fault_request) abort();
+    if (active && strings_only==4 && site==4 && !evaluate_phase) {
+        evaluate_phase=1; evaluate_markers++;
+    }
+    return original_fault_request(site);
+}
 static size_t final_ci_bytes[3];
 static size_t total_bytes, largest_bytes;
 void rdm_fail_allocation(int n) { selected=n; count=0; active=1; strings_only=0; total_bytes=largest_bytes=0; }
@@ -164,6 +189,11 @@ void rdm_fail_final_ci_allocation(int transform, int n) {
     final_transform=transform; transform_count=0;
     memset(final_ci_bytes, 0, sizeof final_ci_bytes);
 }
+void rdm_fail_evaluate_ci_allocation(int n) {
+    rdm_fail_final_ci_allocation(0, n); strings_only=4;
+    evaluate_phase=evaluate_markers=0;
+}
+int rdm_evaluate_ci_markers(void) { return evaluate_markers; }
 int rdm_final_ci_transform_count(void) { return transform_count; }
 size_t rdm_final_ci_allocation_bytes(int i) { return i>=0 && i<3 ? final_ci_bytes[i] : 0; }
 size_t rdm_total_bytes(void) { return total_bytes; }
@@ -174,13 +204,18 @@ static int fail(void *caller, size_t n) {
     if (active && dladdr(caller, &info) && info.dli_fname && strstr(info.dli_fname, "liboqp")) {
         if (strings_only==3) {
             /* The control counts one allocation per transform. After its
-             * last transform, fci_solve allocates xor_code, orb_code, dets.
+             * selected transform, fci_solve allocates xor_code, orb_code, dets.
              * Reject a changed allocation layout instead of failing an
              * unchecked allocation: Python requires the actual failure. */
             if (transform_count < final_transform) {
                 if (info.dli_sname && !strcmp(info.dli_sname, "mo_transform_eri")) transform_count++;
                 return 0;
             }
+            if (count < 3) final_ci_bytes[count]=n;
+        } else if (strings_only==4) {
+            /* The caller-owned observation opens the first active CI phase.
+             * Private allocator symbols and inlining do not select it. */
+            if (!evaluate_phase) return 0;
             if (count < 3) final_ci_bytes[count]=n;
         } else if (strings_only==1 && (!info.dli_sname || !strstr(info.dli_sname, "_MOD_rdm12_strings"))) {
             return 0;
@@ -192,7 +227,7 @@ static int fail(void *caller, size_t n) {
             active=0;
             /* ILP64 CAS(2,2): two one-integer arrays, then four int64 dets.
              * A layout mismatch fails the Python guard without injecting. */
-            if (strings_only==3 && (selected!=3 || final_ci_bytes[0]!=8 ||
+            if ((strings_only==3 || strings_only==4) && (selected!=3 || final_ci_bytes[0]!=8 ||
                 final_ci_bytes[1]!=8 || final_ci_bytes[2]!=32)) return 0;
             errno=ENOMEM; return 1;
         }
@@ -205,11 +240,15 @@ static void *replacement_malloc(size_t n) {
     return malloc(n);
 }
 __attribute__((used)) static struct { const void *replacement, *original; }
-interpose __attribute__((section("__DATA,__interpose"))) = {
-    (const void *)replacement_malloc, (const void *)malloc
+interpose[] __attribute__((section("__DATA,__interpose"))) = {
+    {(const void *)replacement_malloc, (const void *)malloc},
+    {(const void *)replacement_fault_request, (const void *)oqp_casscf_test_fault_request}
 };
 #else
 extern void *__libc_malloc(size_t);
+int32_t oqp_casscf_test_fault_request(int32_t site) {
+    return replacement_fault_request(site);
+}
 void *malloc(size_t n) {
     if (fail(__builtin_return_address(0), n)) return NULL;
     return __libc_malloc(n);
@@ -217,8 +256,14 @@ void *malloc(size_t n) {
 #endif
 ''')
     if sys.platform == "darwin":
+        from oqp import runtime
+        owner = Path(runtime.library_path(*runtime.resolve_oqp_root()))
         compiler = "/opt/homebrew/bin/gcc-15" if os.uname().machine == "arm64" else "/usr/local/bin/gcc-15"
-        command = [compiler, "-dynamiclib", "-O0", str(source), "-o", str(library)]
+        # Load the hook's actual owner before dyld resolves the interpose tuple.
+        # An unresolved dynamic-lookup symbol cannot satisfy this address
+        # relocation when liboqp would otherwise be loaded later by Python.
+        command = [compiler, "-dynamiclib", "-O0", str(source), str(owner),
+                   "-Wl,-rpath," + str(owner.parent), "-o", str(library)]
         preload_key = "DYLD_INSERT_LIBRARIES"
     else:
         command = ["cc", "-shared", "-fPIC", "-O0", str(source), "-ldl", "-o", str(library)]
@@ -284,7 +329,7 @@ finally:
 
 
 @pytest.mark.parametrize("threads", [1, 4])
-@pytest.mark.parametrize("failure_target", ["rdm", "transform", "final-ci"])
+@pytest.mark.parametrize("failure_target", ["rdm", "transform", "ci-evaluate", "ci-canonical", "final-ci"])
 def test_persistent_casscf_real_allocator_recovery(native, allocation_interposer, tmp_path, threads,
                                                  failure_target):
     """One Runner/Molecule: success, native failure, then two top-level recoveries."""
@@ -293,6 +338,7 @@ def test_persistent_casscf_real_allocator_recovery(native, allocation_interposer
 import ctypes, pathlib, sys
 import numpy as np
 from oqp.library import casscf as cs
+from oqp import runtime
 from oqp.pyoqp import Runner
 requested_threads = int(sys.argv[3])
 failure_target = sys.argv[4]
@@ -300,10 +346,16 @@ shim = ctypes.CDLL(sys.argv[1])
 shim.rdm_fail_strings_allocation.argtypes = [ctypes.c_int]
 shim.rdm_fail_transform_allocation.argtypes = [ctypes.c_int]
 shim.rdm_fail_final_ci_allocation.argtypes = [ctypes.c_int, ctypes.c_int]
+shim.rdm_fail_evaluate_ci_allocation.argtypes = [ctypes.c_int]
 shim.rdm_final_ci_allocation_bytes.argtypes = [ctypes.c_int]
 shim.rdm_final_ci_allocation_bytes.restype = ctypes.c_size_t
 real_backend = cs._casscf_energy_backend
 lib, ffi = real_backend()
+ctl = ctypes.CDLL(str(runtime.library_path(*runtime.resolve_oqp_root())))
+shim.rdm_set_fault_forward.argtypes = [ctypes.c_void_p]
+# Resolve the original hook from its owning library before malloc is armed.
+assert shim.rdm_set_fault_forward(ctypes.cast(ctl.oqp_casscf_test_fault_request,
+                                            ctypes.c_void_p)) == 0
 for name in ("casscf_energy",):
     assert hasattr(lib, name), "Missing native entry point: " + name
 initial_mo = None
@@ -314,6 +366,7 @@ ordinal = 0
 optimized_mo = None
 transform_allocations = None
 final_ci_layouts = []
+ci_targets = {"ci-evaluate", "ci-canonical", "final-ci"}
 class FailRDM:
     def casscf_energy(self, *args):
         global initial_mo, controls, optimized_mo, transform_allocations
@@ -335,8 +388,11 @@ class FailRDM:
             result_before = tuple(bytes(ffi.buffer(args[i], 8)) for i in (5, 6))
             if failure_target == "transform":
                 shim.rdm_fail_transform_allocation(ordinal)
-            elif failure_target == "final-ci":
-                shim.rdm_fail_final_ci_allocation(transform_allocations, ordinal)
+            elif failure_target == "ci-evaluate":
+                shim.rdm_fail_evaluate_ci_allocation(ordinal)
+            elif failure_target in ci_targets:
+                selected_transform = transform_allocations - (failure_target == "ci-canonical")
+                shim.rdm_fail_final_ci_allocation(selected_transform, ordinal)
             else:
                 shim.rdm_fail_strings_allocation(ordinal)
             try:
@@ -344,11 +400,15 @@ class FailRDM:
             finally:
                 count = shim.rdm_allocation_count()
             assert count == ordinal, (status, count, ordinal)
-            if failure_target == "final-ci":
-                assert shim.rdm_final_ci_transform_count() == transform_allocations
+            if failure_target in ci_targets:
+                if failure_target == "ci-evaluate":
+                    assert shim.rdm_evaluate_ci_markers() == 1, "Missing first-CI observation"
+                expected_transform = (0 if failure_target == "ci-evaluate" else
+                                      transform_allocations - (failure_target == "ci-canonical"))
+                assert shim.rdm_final_ci_transform_count() == expected_transform
                 sizes = tuple(shim.rdm_final_ci_allocation_bytes(i) for i in range(3))
-                assert sizes == (8, 8, 32), ("Final CI allocation layout changed", sizes, status)
-                final_ci_layouts.append((transform_allocations, sizes))
+                assert sizes == (8, 8, 32), ("CI allocation layout changed", failure_target, sizes, status)
+                final_ci_layouts.append((failure_target, expected_transform, sizes))
             assert status == -2, status
             # Reacquire the native record; never keep a borrowed view across calls.
             assert runner.mol.data["OQP::VEC_MO_A"].tobytes() == initial_mo.tobytes(), (
@@ -414,7 +474,7 @@ try:
         # of the number of Hessian builds needed for convergence.
         failure_ordinals = (1, transform_allocations - 1, transform_allocations)
         assert len(set(failure_ordinals)) == 3
-    elif failure_target == "final-ci":
+    elif failure_target in ci_targets:
         # Real malloc failure on dets(ndet), the first checked CI allocation.
         failure_ordinals = (3,)
     else:

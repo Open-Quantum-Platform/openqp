@@ -426,6 +426,18 @@ contains
     end select
   end function cas_transform_driver_status
 
+  pure function cas_ci_driver_status(rc) result(status)
+    integer(i8), intent(in) :: rc
+    integer(i8) :: status
+
+    status = 0_i8
+    if (rc == FCI_ERR_ALLOC) then
+      status = CAS_ERR_ALLOC
+    else if (rc < 0_i8) then
+      status = CAS_ERR_CI
+    end if
+  end function cas_ci_driver_status
+
   !> Preserve the cause of an analytic-Hessian refusal at the driver boundary.
   !> Only the allocator status may enter Python's no-fallback MemoryError path.
   pure function cas_hessian_driver_status(rc) result(status) &
@@ -668,14 +680,8 @@ contains
                             ctx%h1e, ctx%eri, ctx%enci, ctx%civ, ctx%s2w))
     ctx%iopt_ci(FCI_I_NROOT) = int(nroot, c_int32_t)
     ctx%iopt_ci(FCI_I_WANT_S2) = 0_c_int32_t
-    if (ndet_ok < 0) then
-      if (ndet_ok == FCI_ERR_ALLOC) then
-        status = CAS_ERR_ALLOC
-      else
-        status = CAS_ERR_CI
-      end if
-      return
-    end if
+    status = cas_ci_driver_status(int(ndet_ok, i8))
+    if (status < 0_i8) return
 
     ! Publish orbitals only after the final transformation and CI succeed.
     ! Both consume cbuf and context-owned tensors, so a failure leaves the
@@ -1032,12 +1038,14 @@ contains
     end if
     ctx%dopt_act = ctx%dopt_ci
     ctx%dopt_act(FCI_D_ECORE) = ctx%dopt_ci(FCI_D_ECORE) + efold
-    if (fci_solve(ctx%iopt_act, ctx%dopt_act, ctx%active_act, ctx%core_act, &
-                  ctx%h1e_act, ctx%eri_act, ctx%enci, ctx%civ, &
-                  ctx%s2w) < 0_i8) then
-      ierr = CAS_ERR_CI
-      return
-    end if
+    ! Site 4 is observation-only: the normal fault controller cannot arm it.
+    ! The allocator regression opens its counting phase here, independently
+    ! of the compiler's inlining or visibility of fci_solve_impl.
+    rc = int(oqp_casscf_test_fault_request(4_c_int32_t), i8)
+    rc = fci_solve(ctx%iopt_act, ctx%dopt_act, ctx%active_act, ctx%core_act, &
+                   ctx%h1e_act, ctx%eri_act, ctx%enci, ctx%civ, ctx%s2w)
+    ierr = cas_ci_driver_status(rc)
+    if (ierr < 0_i8) return
     ctx%warm = .true.
 
     cap = ctx%ndet * int(2 * na, i8)**2 + 1_i8
@@ -2436,10 +2444,8 @@ contains
     rc = fci_solve(ctx%iopt_ci, ctx%dopt_ci, ctx%active, ctx%core, ctx%h1e, &
                    ctx%eri, ctx%enci, ctx%civ, ctx%s2w)
     ctx%iopt_ci(FCI_I_NROOT) = int(ctx%nroot, c_int32_t)
-    if (rc < 0_i8) then
-      status = CAS_ERR_CI
-      return
-    end if
+    status = cas_ci_driver_status(rc)
+    if (status < 0_i8) return
 
     allocate(dmat(0:int(n, i8)**2 - 1_i8), feff(0:int(n, i8)**2 - 1_i8), &
              stat=ierr)
