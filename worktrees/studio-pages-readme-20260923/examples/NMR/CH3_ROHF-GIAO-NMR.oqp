@@ -1,2 +1,0 @@
-rohf/sto-3g mult=2 properties(scf_prop=nmr,nmr_gauge=giao)
-geom="../geometries/CH3-0b060bed6a1d.xyz"

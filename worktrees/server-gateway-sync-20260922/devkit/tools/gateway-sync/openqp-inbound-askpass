@@ -1,6 +1,0 @@
-#!/bin/sh
-case "$1" in
-  *Username*) printf '%s\n' oauth2 ;;
-  *Password*) cat "${OPENQP_SYNC_TOKEN:?}" ;;
-  *) exit 1 ;;
-esac

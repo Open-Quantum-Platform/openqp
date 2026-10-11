@@ -1,2 +1,0 @@
-rhf/6-31g* properties(scf_prop="el_mom,mulliken,lowdin,resp")
-geom="../geometries/H2O-0381125c86f2.xyz"
