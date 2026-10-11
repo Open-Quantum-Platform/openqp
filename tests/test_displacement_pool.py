@@ -351,6 +351,144 @@ CTRL_C_DRIVER = textwrap.dedent('''
 ''')
 
 
+NAC_WAIT_RUNNING_DRIVER = textwrap.dedent('''
+    import os
+    import pathlib
+    import subprocess
+    import sys
+    import time
+
+    from oqp.pyoqp import Runner
+    from oqp.library import single_point
+
+    work = pathlib.Path(sys.argv[1])
+    inp = work / "h2o_nac.inp"
+    inp.write_text("""[input]
+    system=
+       8   0.000000000   0.000000000  -0.041061554
+       1  -0.533194329   0.533194329  -0.614469223
+       1   0.533194329  -0.533194329  -0.614469223
+    charge=0
+    runtype=energy
+    basis=6-31g*
+    functional=bhhlyp
+    method=tdhf
+    [guess]
+    type=huckel
+    [scf]
+    multiplicity=3
+    type=rohf
+    [tdhf]
+    type=mrsf
+    nstate=3
+    [nac]
+    type=numerical
+    states=1 2
+    dx=0.001
+    nproc=2
+    """)
+    runner = Runner(input_file=str(inp), log=str(work / "h2o_nac.log"))
+    runner.run()
+
+    pid_file = work / "child.pid"
+    returned = work / "worker1.returned"
+    child = ("import os, pathlib, sys, time; "
+             "pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(3); "
+             "pathlib.Path(sys.argv[2]).write_text('late write')")
+    queued = work / "queued"
+    queued.mkdir()
+
+    def worker(task):
+        (queued / str(task["idx"])).touch()
+        if task["idx"] == 1:
+            subprocess.run([sys.executable, "-c", child, str(pid_file),
+                            str(work / "late.txt")])
+            returned.touch()
+            return task["idx"], None, "failed", None
+        if task["idx"] == 0:
+            deadline = time.time() + 60
+            while not pid_file.exists() and time.time() < deadline:
+                time.sleep(0.05)
+            raise RuntimeError("nac displacement worker failure")
+        time.sleep(0.3)
+        return task["idx"], None, "computed", None
+
+    single_point.nacme_wrapper = worker
+    try:
+        single_point.NAC(runner.mol).numerical_nac()
+    except RuntimeError as exc:
+        assert "nac displacement worker failure" in str(exc)
+    else:
+        raise AssertionError("worker exception did not reach numerical_nac")
+    # Same contract as the Hessian driver: the running job has finished, and
+    # at most the two in-flight displacements (nproc=2) plus one each worker
+    # had already taken were started out of 18.
+    assert returned.exists(), "numerical_nac raised before its active worker returned"
+    assert (work / "late.txt").exists(), "a displaced NAC job was still running"
+    time.sleep(2.0)
+    started = sorted(int(m.name) for m in queued.iterdir())
+    assert len(started) <= 4, started
+    print("DISPLACEMENT_POOL_OK")
+''')
+
+
+MPI_HESSIAN_DRIVER = textwrap.dedent('''
+    import json
+    import pathlib
+    import sys
+
+    import numpy as np
+
+    from oqp.pyoqp import Runner
+    from oqp.utils.mpi_utils import MPIManager
+
+    work = pathlib.Path(sys.argv[1])
+    out = pathlib.Path(sys.argv[2])
+    inp = work / "h2.inp"
+    if MPIManager().rank == 0:
+        inp.write_text("""[input]
+    system=
+       1   0.000000000   0.000000000   0.000000000
+       1   0.000000000   0.000000000   0.740000000
+    charge=0
+    runtype=hess
+    basis=sto-3g
+    method=hf
+    [guess]
+    type=huckel
+    [scf]
+    multiplicity=1
+    type=rhf
+    [hess]
+    type=numerical
+    state=0
+    dx=0.005
+    nproc=1
+    """)
+    MPIManager().barrier()
+    runner = Runner(project="h2", input_file=str(inp), log=str(work / "h2.log"))
+    runner.run()
+    if MPIManager().rank == 0:
+        out.write_text(json.dumps({
+            "size": MPIManager().size,
+            "use_mpi": int(MPIManager().use_mpi),
+            "hessian": np.asarray(runner.mol.hessian, dtype=float).tolist(),
+        }))
+''')
+
+
+def _mpi_launcher():
+    import shutil
+    try:
+        probe = subprocess.run([sys.executable, "-c", "import mpi4py.MPI"],
+                               capture_output=True, timeout=120)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if probe.returncode != 0:
+        return None
+    return shutil.which("mpirun") or shutil.which("mpiexec")
+
+
 @unittest.skipUnless(RUNTIME, "compiled OpenQP runtime not available")
 class DisplacementPoolTests(unittest.TestCase):
     def _run(self, driver, timeout):
@@ -383,6 +521,42 @@ class DisplacementPoolTests(unittest.TestCase):
 
     def test_failed_driver_waits_for_running_displacement_jobs(self):
         self._run(WAIT_RUNNING_DRIVER, timeout=180)
+
+    def test_failed_nac_driver_waits_and_stops_queued_displacements(self):
+        self._run(NAC_WAIT_RUNNING_DRIVER, timeout=300)
+
+    def test_mpi_ranks_reproduce_the_thread_pool_hessian(self):
+        # Under MPI the ranks are the workers (MPIPool, in-process gradients);
+        # on one rank the thread pool and external children are used.  Both
+        # routes must give the same numerical Hessian.
+        import json
+
+        launcher = _mpi_launcher()
+        if launcher is None:
+            self.skipTest("mpi4py and an MPI launcher are needed")
+        results = {}
+        for nrank in (1, 2):
+            with tempfile.TemporaryDirectory(prefix="oqp_disp_pool_mpi_") as work:
+                out = os.path.join(work, "result.json")
+                env = dict(os.environ, OMP_NUM_THREADS="1")
+                env.pop("OPENQP_ROOT", None)
+                cmd = [launcher, "-n", str(nrank), "--bind-to", "none", "--oversubscribe",
+                       sys.executable, "-c", MPI_HESSIAN_DRIVER, work, out]
+                try:
+                    proc = subprocess.run(cmd, cwd=work, env=env, capture_output=True,
+                                          text=True, timeout=600)
+                except subprocess.TimeoutExpired as exc:
+                    self.fail(f"{nrank}-rank numerical Hessian hung: {(exc.stderr or '')[-2000:]!r}")
+                self.assertEqual(proc.returncode, 0, proc.stderr[-4000:])
+                with open(out) as handle:
+                    results[nrank] = json.load(handle)
+        self.assertEqual((results[1]["size"], results[1]["use_mpi"]), (1, 0))
+        self.assertEqual((results[2]["size"], results[2]["use_mpi"]), (2, 1))
+        import numpy as np
+        # Both routes evaluate the same displaced gradients; measured on
+        # macOS (Open MPI 5.0.10) the Hessians are bit-identical.
+        np.testing.assert_array_equal(np.asarray(results[2]["hessian"]),
+                                      np.asarray(results[1]["hessian"]))
 
     @unittest.skipUnless(os.name == "posix", "terminal process groups are POSIX")
     def test_ctrl_c_reaches_running_displacement_jobs(self):
