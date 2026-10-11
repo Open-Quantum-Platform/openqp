@@ -150,11 +150,12 @@ def test_python_propagates_native_allocation_failure(native, monkeypatch):
         rdm.make_rdm12_spatial_strings(c, dets, 4)
 
 
-def test_overlapping_rdm_calls_restore_blas(native):
+@pytest.mark.parametrize("threads", [1, 2])
+def test_overlapping_rdm_calls_restore_blas(native, threads):
     dets, c = _ci(8, (4, 4))
     with _caller_blas(native):
         with ThreadPoolExecutor(max_workers=2) as pool:
-            runs = list(pool.map(lambda _: _strings(native, 8, dets, c, 2), range(4)))
+            runs = list(pool.map(lambda _: _strings(native, 8, dets, c, threads), range(4)))
     assert all(result[0] == 0 for result in runs)
     for result in runs[1:]:
         assert np.array_equal(result[1], runs[0][1])

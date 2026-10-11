@@ -92,7 +92,7 @@ contains
   !>
   !> Entries per kl are emitted in ascending target order by construction
   !> (the outer loop below runs over targets in order).
-  subroutine build_link_bykl(norb, nstr, strs, nkl, maxper, cnt, tgt, src, sgn, status)
+  recursive subroutine build_link_bykl(norb, nstr, strs, nkl, maxper, cnt, tgt, src, sgn, status)
     integer, intent(in) :: norb, nkl, maxper
     integer(i8), intent(in) :: nstr
     integer(i8), intent(in) :: strs(nstr)
@@ -274,7 +274,8 @@ contains
   end function spin_square_strings
 
   !> bind(C) face of `rdm12_strings`, for the test pins.
-  function rdm12_strings_c(norb, ndet, dets, civec, d1, d2, nthreads) &
+  !> Concurrent C callers require per-invocation locals even without OpenMP.
+  recursive function rdm12_strings_c(norb, ndet, dets, civec, d1, d2, nthreads) &
       result(status) bind(C, name="rdm12_strings_c")
     use, intrinsic :: iso_c_binding, only: c_int32_t
     integer(c_int32_t), value :: norb, nthreads
@@ -307,7 +308,7 @@ contains
   !> Positive status = unsupported size or noncanonical CAS product; the
   !> caller can fall back to the walking kernels. Negative = allocation
   !> failure, which must propagate without another scratch allocation.
-  function rdm12_strings(norb, ndet, dets, civec, d1, d2, nthreads) &
+  recursive function rdm12_strings(norb, ndet, dets, civec, d1, d2, nthreads) &
       result(status)
     integer, intent(in) :: norb, nthreads
     integer(i8), intent(in) :: ndet
@@ -584,7 +585,7 @@ contains
   !> `a+_a a_i |src> = sgn |t>` and `kl = a*norb + i` (0-based).  Indexing by
   !> the target is what lets both the gather and the scatter run with disjoint
   !> writes: for a fixed target every write lands in that target's own slice.
-  subroutine build_link_table(norb, nstr, strs, maxlink, ntab, &
+  recursive subroutine build_link_table(norb, nstr, strs, maxlink, ntab, &
                               tab_kl, tab_src, tab_sgn, status)
     integer, intent(in) :: norb, maxlink
     integer(i8), intent(in) :: nstr
@@ -637,7 +638,7 @@ contains
     deallocate(skeys, sperm)
   end subroutine build_link_table
 
-  pure function pop_below(det, pos) result(n)
+  pure recursive function pop_below(det, pos) result(n)
     integer(i8), intent(in) :: det
     integer, intent(in) :: pos
     integer :: n
@@ -645,7 +646,7 @@ contains
   end function pop_below
 
   !> Ascending key order plus the permutation back to the original index.
-  subroutine sorted_index(n, keys, skeys, sperm)
+  recursive subroutine sorted_index(n, keys, skeys, sperm)
     integer(i8), intent(in) :: n
     integer(i8), intent(in) :: keys(n)
     integer(i8), intent(out) :: skeys(n), sperm(n)
@@ -671,7 +672,7 @@ contains
     end do
   end subroutine sorted_index
 
-  pure function lookup(n, skeys, sperm, key) result(idx)
+  pure recursive function lookup(n, skeys, sperm, key) result(idx)
     integer(i8), intent(in) :: n, key
     integer(i8), intent(in) :: skeys(n), sperm(n)
     integer(i8) :: idx, lo, hi, mid
@@ -691,7 +692,7 @@ contains
     end do
   end function lookup
 
-  pure function binom(n, k) result(c)
+  pure recursive function binom(n, k) result(c)
     integer, intent(in) :: n, k
     integer(i8) :: c
     integer :: i
@@ -705,7 +706,7 @@ contains
 
   !> Occupation bit patterns for all C(norb, nelec) subsets, in the same
   !> lexicographic order `build_determinants` and the Python driver use.
-  subroutine string_basis(norb, nelec, nstr, out)
+  recursive subroutine string_basis(norb, nelec, nstr, out)
     integer, intent(in) :: norb, nelec
     integer(i8), intent(in) :: nstr
     integer(i8), intent(out) :: out(nstr)
