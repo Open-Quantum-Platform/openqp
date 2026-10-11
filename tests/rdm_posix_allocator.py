@@ -299,6 +299,7 @@ class FailRDM:
             controls = current
         assert current == controls, "Recovery changed native controls"
         if phase == "failure":
+            result_before = tuple(bytes(ffi.buffer(args[i], 8)) for i in (5, 6))
             if failure_target == "transform":
                 shim.rdm_fail_transform_allocation(ordinal)
             else:
@@ -310,9 +311,10 @@ class FailRDM:
             assert count == ordinal, (status, count, ordinal)
             assert status == -2, status
             # Reacquire the native record; never keep a borrowed view across calls.
-            post_commit = failure_target == "transform" and ordinal == transform_allocations
-            expected = optimized_mo if post_commit else initial_mo
-            assert runner.mol.data["OQP::VEC_MO_A"].tobytes() == expected.tobytes()
+            assert runner.mol.data["OQP::VEC_MO_A"].tobytes() == initial_mo.tobytes(), (
+                "Failed native CASSCF committed orbitals", failure_target, ordinal)
+            assert tuple(bytes(ffi.buffer(args[i], 8)) for i in (5, 6)) == result_before, (
+                "Failed native CASSCF published energies or spin", failure_target, ordinal)
         else:
             if failure_target == "transform":
                 shim.rdm_fail_transform_allocation(0)
@@ -325,16 +327,21 @@ class FailRDM:
             if failure_target == "transform":
                 # A converged control may build multiple analytic Hessians.
                 # Each owns one transform, followed by canonicalization and
-                # post-commit final CI; select those sites from native stats.
+                # final CI; select those sites from native stats.
                 assert args[8][2] == 1, "Control must converge at the unchanged tolerance"
                 assert args[8][4] >= 1, "Control must enter the analytic Hessian"
                 assert count == int(args[8][4]) + 2, (count, args[8][4])
                 if transform_allocations is None:
                     transform_allocations = count
                 assert count == transform_allocations, (count, transform_allocations)
-            native_energies.append(bytes(ffi.buffer(args[5], 8)))
+            native_results.append(tuple(bytes(ffi.buffer(args[i], 8)) for i in (5, 6)))
             if optimized_mo is None:
                 optimized_mo = runner.mol.data["OQP::VEC_MO_A"].copy()
+                if failure_target == "transform":
+                    assert optimized_mo.tobytes() != initial_mo.tobytes(), (
+                        "Control must change orbitals to expose a premature commit")
+            assert runner.mol.data["OQP::VEC_MO_A"].tobytes() == optimized_mo.tobytes(), (
+                "Recovery changed optimized orbitals", failure_target, ordinal)
         seen.append(status)
         return status
 config = {
@@ -353,7 +360,7 @@ if failure_target == "transform":
 runner = Runner(project="persistent-recovery", input_file=None, silent=1, usempi=False,
                 input_dict=config, log=str(pathlib.Path(sys.argv[2])/"recovery.log"))
 molecule = runner.mol
-native_energies = []
+native_results = []
 real_optimize = cs._optimize
 def forbidden_fallback(*args, **kwargs):
     raise AssertionError("Allocation failure entered the Python optimizer")
@@ -386,7 +393,7 @@ finally:
     cs._casscf_energy_backend = real_backend
     cs._optimize = real_optimize
 assert seen == [0] + [-2, 0, 0]*(3 if failure_target == "transform" else 1), seen
-assert all(value == native_energies[0] for value in native_energies), native_energies
+assert all(value == native_results[0] for value in native_results), native_results
 print("native CASSCF status -2 propagated; persistent top-level recoveries compared",
       "target=", failure_target, "threads=", requested_threads,
       "ordinals=", failure_ordinals, "statuses=", seen)

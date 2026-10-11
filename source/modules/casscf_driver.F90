@@ -653,16 +653,6 @@ contains
       if (status < 0_i8) return
     end if
 
-    ! ---- commit the optimized orbitals (the Fortran core reads this buffer).
-    ! `cas_context_init` validated the record; re-fetch the pointer here rather
-    ! than carrying it across the whole optimization.
-    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_p)
-    do i = 0, n - 1
-      do j = 0, n - 1
-        mo_p(i + 1, j + 1) = cbuf(j, i)
-      end do
-    end do
-
     ! ================================ final CI on the optimized orbitals
     call mo_transform_h1e(int(n, c_int32_t), ctx%hcore, cbuf, ctx%h1e)
     status = cas_transform_driver_status(mo_transform_eri( &
@@ -677,6 +667,17 @@ contains
       status = CAS_ERR_CI
       return
     end if
+
+    ! Publish orbitals only after the final transformation and CI succeed.
+    ! Both consume cbuf and context-owned tensors, so a failure leaves the
+    ! original MO record intact without allocating a rollback buffer.
+    ! `cas_context_init` validated the record; reacquire its borrowed pointer.
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_p)
+    do i = 0, n - 1
+      do j = 0, n - 1
+        mo_p(i + 1, j + 1) = cbuf(j, i)
+      end do
+    end do
     do k = 0, nroot - 1
       energies(k) = ctx%enci(k)
       s2(k) = ctx%s2w(k)
