@@ -1,5 +1,5 @@
 /* Linked by source/CMakeLists.txt; used by casscf_driver/casscf_anhess and
- * tests/test_casscf_status.py to enter the production Hessian failure paths. */
+ * tests/test_casscf_status.py to enter production Hessian/final-CI failures. */
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,7 +21,7 @@ int32_t oqp_casscf_test_fault_begin(int32_t site)
         return 1;
     if (enabled)
         return 2;
-    if (site != 1 && site != 2)
+    if (site != 1 && site != 2 && site != 3)
         return 3;
     enabled = 1;
     selected = site;

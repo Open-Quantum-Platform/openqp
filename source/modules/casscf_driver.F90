@@ -660,8 +660,13 @@ contains
     if (status < 0_i8) return
     ctx%iopt_ci(FCI_I_NROOT) = int(nroot, c_int32_t)
     ctx%iopt_ci(FCI_I_WANT_S2) = 1_c_int32_t
+    ! The explicitly pytest-armed fault reaches fci_solve's real INPUT check
+    ! after the final transform succeeds; it does not replace a return status.
+    if (oqp_casscf_test_fault_request(3_c_int32_t) /= 0_c_int32_t) &
+      ctx%iopt_ci(FCI_I_NROOT) = 0_c_int32_t
     ndet_ok = int(fci_solve(ctx%iopt_ci, ctx%dopt_ci, ctx%active, ctx%core, &
                             ctx%h1e, ctx%eri, ctx%enci, ctx%civ, ctx%s2w))
+    ctx%iopt_ci(FCI_I_NROOT) = int(nroot, c_int32_t)
     ctx%iopt_ci(FCI_I_WANT_S2) = 0_c_int32_t
     if (ndet_ok < 0) then
       status = CAS_ERR_CI

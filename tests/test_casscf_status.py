@@ -1,4 +1,4 @@
-"""Analytic-Hessian failures retain their cause across the native/Python boundary."""
+"""CASSCF failures retain their cause and preserve unpublished native results."""
 from concurrent.futures import ThreadPoolExecutor
 import os
 import subprocess
@@ -84,7 +84,7 @@ def test_hessian_fault_controller_is_gated_and_consumed(fault_controller, monkey
         guard.setenv("PYTEST_CURRENT_TEST", "foreign.py::test_other (call)")
         assert ctl.oqp_casscf_test_fault_begin(1) == 1
         assert ctl.oqp_casscf_test_fault_request(1) == 0
-    for site in (0, -1, 3):
+    for site in (0, -1, 4):
         assert ctl.oqp_casscf_test_fault_begin(site) == 3
     assert ctl.oqp_casscf_test_fault_begin(1) == 0
     assert ctl.oqp_casscf_test_fault_begin(2) == 2
@@ -95,27 +95,33 @@ def test_hessian_fault_controller_is_gated_and_consumed(fault_controller, monkey
     assert ctl.oqp_casscf_test_fault_end(count) == 0 and count[0] == 1
     assert ctl.oqp_casscf_test_fault_end(count) == 0 and count[0] == 0
     assert ctl.oqp_casscf_test_fault_request(1) == 0
+    assert ctl.oqp_casscf_test_fault_begin(3) == 0
+    assert ctl.oqp_casscf_test_fault_request(1) == 0
+    assert ctl.oqp_casscf_test_fault_request(2) == 0
+    assert ctl.oqp_casscf_test_fault_request(3) == 1
+    assert ctl.oqp_casscf_test_fault_request(3) == 0
+    assert ctl.oqp_casscf_test_fault_end(count) == 0 and count[0] == 1
 
     def isolated(site):
         local = ffi.new("int32_t *")
         assert ctl.oqp_casscf_test_fault_begin(site) == 0
         try:
-            assert ctl.oqp_casscf_test_fault_request(3-site) == 0
+            assert ctl.oqp_casscf_test_fault_request(site % 3 + 1) == 0
             assert ctl.oqp_casscf_test_fault_request(site) == 1
         finally:
             assert ctl.oqp_casscf_test_fault_end(local) == 0
         return local[0]
 
     assert ctl.oqp_casscf_test_fault_begin(1) == 0
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        assert list(pool.map(isolated, [1, 2])) == [1, 1]
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        assert list(pool.map(isolated, [1, 2, 3])) == [1, 1, 1]
     assert ctl.oqp_casscf_test_fault_request(1) == 1
     assert ctl.oqp_casscf_test_fault_end(count) == 0 and count[0] == 1
 
 
 @pytest.mark.parametrize("threads", [1, 4])
 def test_real_hessian_producers_retry_and_recover_same_molecule(fault_controller, tmp_path, threads):
-    """Zero-CI INPUT and injected solver EIGEN traverse the real energy driver."""
+    """Hessian INPUT/EIGEN and final-CI INPUT traverse the real energy driver."""
     child = r'''
 import pathlib, sys
 import numpy as np
@@ -131,13 +137,15 @@ for name in ("casscf_energy", "cas_hessian_driver_status", "oqp_casscf_test_faul
              "oqp_casscf_test_fault_end", "oqp_casscf_test_fault_request"):
     assert hasattr(lib, name), "Missing native entry point: " + name
 initial_mo = None
+optimized_mo = None
+native_results = []
 controls = None
 phase, fault = "baseline", 0
 statuses, retries, python_hessians = [], [], []
 energies = {}
 class NativeCall:
     def casscf_energy(self, *args):
-        global controls
+        global controls, optimized_mo
         current = tuple(bytes(ffi.buffer(args[i], n))
                         for i, n in ((1, len(cs._CAS_IOPT)*4),
                                      (2, len(cs._CAS_DOPT)*8), (3, 8), (4, 4)))
@@ -149,6 +157,9 @@ class NativeCall:
         assert current == controls, "Native controls changed between calls"
         count = ffi.new("int32_t *")
         if fault:
+            # Distinct sentinels make any partial energy/spin publication visible.
+            args[5][0], args[6][0] = 13.25, -3.5
+            results_before = tuple(bytes(ffi.buffer(args[i], 8)) for i in (5, 6))
             assert lib.oqp_casscf_test_fault_begin(fault) == 0
         try:
             # This invokes the actual producer, driver conversion and C ABI.
@@ -157,10 +168,17 @@ class NativeCall:
             assert lib.oqp_casscf_test_fault_end(count) == 0
         if fault:
             assert count[0] == 1, (phase, status, count[0])
-            assert status == {1: -1, 2: -5}[fault], (phase, status)
+            assert status == {1: -1, 2: -5, 3: -4}[fault], (phase, status)
             assert runner.mol.data["OQP::VEC_MO_A"].tobytes() == initial_mo.tobytes()
+            assert tuple(bytes(ffi.buffer(args[i], 8)) for i in (5, 6)) == results_before
         else:
             assert count[0] == 0 and status == 0, (phase, status, count[0])
+            native_results.append(tuple(bytes(ffi.buffer(args[i], 8)) for i in (5, 6)))
+            if optimized_mo is None:
+                optimized_mo = runner.mol.data["OQP::VEC_MO_A"].copy()
+                assert optimized_mo.tobytes() != initial_mo.tobytes(), (
+                    "Control must change orbitals to expose a premature commit")
+            assert runner.mol.data["OQP::VEC_MO_A"].tobytes() == optimized_mo.tobytes()
         statuses.append(status)
         return status
 def pinned_wrapper(*args, **kwargs):
@@ -202,7 +220,8 @@ cs._hessian_provider = provider
 try:
     for phase, fault in (("baseline", 0), ("python-control", 0), ("input", 1),
                          ("input-recovery1", 0), ("input-recovery2", 0), ("eigen", 2),
-                         ("eigen-recovery1", 0), ("eigen-recovery2", 0)):
+                         ("eigen-recovery1", 0), ("eigen-recovery2", 0), ("final-ci", 3),
+                         ("final-ci-recovery1", 0), ("final-ci-recovery2", 0)):
         cs._casscf_energy_backend = (lambda: None) if phase == "python-control" else (lambda: (NativeCall(), ffi))
         runner.run(test_mod=True)
         assert runner.mol is molecule
@@ -212,17 +231,19 @@ finally:
     cs._lib_casscf_energy = real_wrapper
     cs._optimize = real_optimize
     cs._hessian_provider = real_provider
-assert statuses == [0, -1, 0, 0, -5, 0, 0], statuses
-assert retries == ["python-control", "input", "eigen"], retries
+assert statuses == [0, -1, 0, 0, -5, 0, 0, -4, 0, 0], statuses
+assert all(value == native_results[0] for value in native_results), native_results
+assert retries == ["python-control", "input", "eigen", "final-ci"], retries
 for name in retries:
     assert name in python_hessians, (name, python_hessians)
-for name in ("input", "eigen"):
+for name in ("input", "eigen", "final-ci"):
     assert energies[name].tobytes() == energies["python-control"].tobytes(), (name, energies)
-for name in ("input-recovery1", "input-recovery2", "eigen-recovery1", "eigen-recovery2"):
+for name in ("input-recovery1", "input-recovery2", "eigen-recovery1", "eigen-recovery2",
+             "final-ci-recovery1", "final-ci-recovery2"):
     assert energies[name].tobytes() == energies["baseline"].tobytes(), (name, energies)
 # Existing native/Python orbital-optimizer agreement bound; no tolerance changes.
 assert np.max(np.abs(energies["baseline"]-energies["python-control"])) < 1.0e-7, energies
-print("INPUT/EIGEN producers reached; actual Python Hessian retries and two native recoveries passed",
+print("INPUT/EIGEN/FINAL-CI producers reached; actual Python Hessian retries and two native recoveries passed",
       "threads=", requested_threads, "statuses=", statuses, "retries=", retries)
 '''
     env = os.environ.copy()

@@ -14,8 +14,9 @@ void oqp_ecp_selftest(double *err);
 
 /* Internal analytic-Hessian status conversion, also pinned by native tests. */
 int64_t cas_hessian_driver_status(int64_t hessian_status);
-/* Internal, explicitly pytest-gated, calling-thread Hessian fault controller.
+/* Internal, explicitly pytest-gated, calling-thread CASSCF fault controller.
  * Site 1 supplies zero CI to the real builder; site 2 injects solver error info.
+ * Site 3 gives the final fci_solve zero roots, entering its input-error check.
  * request consumes one fault; end resets state and returns the reached count. */
 int32_t oqp_casscf_test_fault_begin(int32_t site);
 int32_t oqp_casscf_test_fault_end(int32_t *count);
