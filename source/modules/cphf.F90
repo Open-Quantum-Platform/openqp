@@ -32,6 +32,7 @@ module cphf_mod
   use minres_mod, only: minres_t, MINRES_OK, MINRES_CONVERGED
   use io_constants, only: iw
 
+  use selftest_output, only: selftest_output_path
   implicit none
 
   character(len=*), parameter :: module_name = "cphf_mod"
@@ -715,7 +716,7 @@ contains
   end subroutine cphf_static_polarizability
 
 !> @brief Validate the CPHF solver via the reusable static dipole polarizability.
-!>   Writes the 3x3 tensor to /tmp/cphf_polar.out for comparison with a reference.
+!>   Writes the 3x3 tensor to $OQP_SELFTEST_DIR/cphf_polar.out for comparison with a reference.
   subroutine cphf_polarizability_selftest(infos)
     type(information), target, intent(inout) :: infos
 
@@ -724,7 +725,7 @@ contains
 
     call cphf_static_polarizability(infos, alpha)
 
-    open(newunit=u, file='/tmp/cphf_polar.out', status='replace', action='write')
+    open(newunit=u, file=selftest_output_path('cphf_polar.out'), status='replace', action='write')
     write(u,'(a)') 'CPHF static dipole polarizability (a.u.):'
     do i = 1, 3
       write(u,'(3f16.8)') alpha(i,1:3)
@@ -1064,7 +1065,7 @@ contains
   end subroutine cphf_uhf_static_polarizability
 
 !> @brief Validate the open-shell (UHF) CPHF solver via the static dipole
-!>   polarizability.  Written to /tmp/cphf_uhf_polar.out.
+!>   polarizability.  Written to $OQP_SELFTEST_DIR/cphf_uhf_polar.out.
   subroutine cphf_uhf_polarizability_selftest(infos)
     type(information), target, intent(inout) :: infos
 
@@ -1073,7 +1074,7 @@ contains
 
     call cphf_uhf_static_polarizability(infos, alpha)
 
-    open(newunit=uu, file='/tmp/cphf_uhf_polar.out', status='replace', action='write')
+    open(newunit=uu, file=selftest_output_path('cphf_uhf_polar.out'), status='replace', action='write')
     write(uu,'(a)') 'open-shell (UHF) CPHF static dipole polarizability (a.u.):'
     do i = 1, 3
       write(uu,'(3f16.8)') alpha(i,1:3)
@@ -1988,7 +1989,7 @@ contains
   end subroutine cphf_rohf_static_polarizability
 
 !> @brief Validate the ROHF CPHF solver via the static dipole polarizability.
-!>   Written to /tmp/cphf_rohf_polar.out.
+!>   Written to $OQP_SELFTEST_DIR/cphf_rohf_polar.out.
   subroutine cphf_rohf_polarizability_selftest(infos)
     type(information), target, intent(inout) :: infos
 
@@ -1997,7 +1998,7 @@ contains
 
     call cphf_rohf_static_polarizability(infos, alpha)
 
-    open(newunit=uu, file='/tmp/cphf_rohf_polar.out', status='replace', action='write')
+    open(newunit=uu, file=selftest_output_path('cphf_rohf_polar.out'), status='replace', action='write')
     write(uu,'(a)') 'open-shell (ROHF) CPHF static dipole polarizability (a.u.):'
     do i = 1, 3
       write(uu,'(3f16.8)') alpha(i,1:3)

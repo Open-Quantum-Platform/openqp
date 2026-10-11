@@ -16,8 +16,9 @@ module fci_symmetry_selftest_mod
 !>     * selection returns matching roots in energy order and skips impure
 !>       ones.
 !>
-!>   Results are written to /tmp/fci_symmetry_selftest.out.
+!>   Results are written to $OQP_SELFTEST_DIR/fci_symmetry_selftest.out.
 
+  use selftest_output, only: selftest_output_path
   implicit none
   character(len=*), parameter :: module_name = "fci_symmetry_selftest_mod"
 
@@ -107,7 +108,7 @@ contains
     ok_sel = (nsel == 1)
     if (ok_sel) ok_sel = (keep(1) == 2)
 
-    open(newunit=iu, file='/tmp/fci_symmetry_selftest.out', status='replace')
+    open(newunit=iu, file=selftest_output_path('fci_symmetry_selftest.out'), status='replace')
     write(iu,'(A,L1)') 'closed_shell_is_totally_symmetric = ', ok_ref
     write(iu,'(A,L1)') 'b2_to_b1_excitation_is_a2         = ', ok_ex
     write(iu,'(A,L1)') 'pure_roots_classify_with_purity_1 = ', ok_pure
