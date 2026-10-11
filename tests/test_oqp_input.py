@@ -325,8 +325,13 @@ def test_response_spin_is_selected_only_by_physical_state():
     # would silently answer with the singlet roots.
     for route in ("tddft(nstate=4)/pbe0/def2-svp", "tda(nstate=4)/pbe0/def2-svp",
                   "tdhf(nstate=4)/def2-svp", "tda-tdhf(nstate=4)/def2-svp"):
+        _, triplet_grad = _parse('%s geom="h2o.xyz" grad(T1)' % route)
+        assert triplet_grad["input"]["runtype"] == "grad"
+        assert triplet_grad["tdhf"]["multiplicity"] == "3"
+        assert triplet_grad["scf"]["multiplicity"] == "1"
+        assert triplet_grad["properties"]["grad"] == "2"
         with pytest.raises(OQPInputError, match="singlet labels only"):
-            oqp_input.parse_canonical_oqp('%s geom="h2o.xyz" grad(T0)' % route)
+            oqp_input.parse_canonical_oqp('%s geom="h2o.xyz" hess(T0)' % route)
 
     # Closed-shell triplet RPA/TDA energies: energy(T0) keeps the RHF singlet
     # reference and selects [tdhf] multiplicity=3.
