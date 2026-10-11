@@ -266,6 +266,22 @@ def _finite_difference_response_tolerances(config):
     return config
 
 
+def _with_child_response_tolerances(model_signature, config):
+    """Add the response tolerances the displaced children actually run at.
+
+    The scratch gradients of a numerical Hessian are reused on restart by
+    name, and the name signs on the parent configuration.  The children run
+    at the tolerances _finite_difference_response_tolerances sets, so sign on
+    those too: gradients written before that tightening existed (or at another
+    dx, which changes the tolerance) are then recomputed instead of reused.
+    """
+    child_tdhf = _finite_difference_response_tolerances(
+        copy.deepcopy(config)).get('tdhf', {})
+    signature = dict(model_signature)
+    signature['fd_child_tdhf'] = {key: str(child_tdhf.get(key)) for key in ('zvconv', 'conv')}
+    return signature
+
+
 def _displacement_run_signature(origin_coord, atoms, dx, model_signature):
     """Short provenance hash naming WHICH run a scratch gradient belongs to.
 
@@ -2643,9 +2659,14 @@ class Hessian(Calculator):
         atoms = self.mol.get_atoms()
         guess_file = self.mol.log.replace('.log', '.json')
         # Provenance for the scratch tag -- see _displacement_run_signature.
+        # The children run at the response tolerances that
+        # _finite_difference_response_tolerances sets, not at the parent's;
+        # sign on those, so scratch gradients written at looser tolerances
+        # (before that tightening existed) are recomputed, not reused.
+        model_signature = _with_child_response_tolerances(
+            self.mol._hessian_request_signature(self.state), self.mol.config)
         run_signature = _displacement_run_signature(
-            origin_coord, atoms, dx,
-            self.mol._hessian_request_signature(self.state))
+            origin_coord, atoms, dx, model_signature)
         variables_wrapper = [
             {
                 'idx': idx,
