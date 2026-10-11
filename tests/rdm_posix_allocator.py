@@ -153,21 +153,49 @@ def allocation_interposer(native, tmp_path):
 #include <dlfcn.h>
 #include <errno.h>
 static int selected, count, active, strings_only;
+static int final_transform, transform_count;
+static size_t final_ci_bytes[3];
 static size_t total_bytes, largest_bytes;
 void rdm_fail_allocation(int n) { selected=n; count=0; active=1; strings_only=0; total_bytes=largest_bytes=0; }
 void rdm_fail_strings_allocation(int n) { rdm_fail_allocation(n); strings_only=1; }
 void rdm_fail_transform_allocation(int n) { rdm_fail_allocation(n); strings_only=2; }
+void rdm_fail_final_ci_allocation(int transform, int n) {
+    rdm_fail_allocation(n); strings_only=3;
+    final_transform=transform; transform_count=0;
+    memset(final_ci_bytes, 0, sizeof final_ci_bytes);
+}
+int rdm_final_ci_transform_count(void) { return transform_count; }
+size_t rdm_final_ci_allocation_bytes(int i) { return i>=0 && i<3 ? final_ci_bytes[i] : 0; }
 size_t rdm_total_bytes(void) { return total_bytes; }
 size_t rdm_largest_bytes(void) { return largest_bytes; }
 int rdm_allocation_count(void) { active=0; return count; }
 static int fail(void *caller, size_t n) {
     Dl_info info;
-    if (active && dladdr(caller, &info) && info.dli_fname &&
-        strstr(info.dli_fname, "liboqp") && (!strings_only ||
-        (info.dli_sname && strings_only==1 && strstr(info.dli_sname, "_MOD_rdm12_strings")) ||
-        (info.dli_sname && strings_only==2 && !strcmp(info.dli_sname, "mo_transform_eri")))) {
+    if (active && dladdr(caller, &info) && info.dli_fname && strstr(info.dli_fname, "liboqp")) {
+        if (strings_only==3) {
+            /* The control counts one allocation per transform. After its
+             * last transform, fci_solve allocates xor_code, orb_code, dets.
+             * Reject a changed allocation layout instead of failing an
+             * unchecked allocation: Python requires the actual failure. */
+            if (transform_count < final_transform) {
+                if (info.dli_sname && !strcmp(info.dli_sname, "mo_transform_eri")) transform_count++;
+                return 0;
+            }
+            if (count < 3) final_ci_bytes[count]=n;
+        } else if (strings_only==1 && (!info.dli_sname || !strstr(info.dli_sname, "_MOD_rdm12_strings"))) {
+            return 0;
+        } else if (strings_only==2 && (!info.dli_sname || strcmp(info.dli_sname, "mo_transform_eri"))) {
+            return 0;
+        }
         total_bytes += n; if (n > largest_bytes) largest_bytes=n;
-        if (++count == selected) { active=0; errno=ENOMEM; return 1; }
+        if (++count == selected) {
+            active=0;
+            /* ILP64 CAS(2,2): two one-integer arrays, then four int64 dets.
+             * A layout mismatch fails the Python guard without injecting. */
+            if (strings_only==3 && (selected!=3 || final_ci_bytes[0]!=8 ||
+                final_ci_bytes[1]!=8 || final_ci_bytes[2]!=32)) return 0;
+            errno=ENOMEM; return 1;
+        }
     }
     return 0;
 }
@@ -256,7 +284,7 @@ finally:
 
 
 @pytest.mark.parametrize("threads", [1, 4])
-@pytest.mark.parametrize("failure_target", ["rdm", "transform"])
+@pytest.mark.parametrize("failure_target", ["rdm", "transform", "final-ci"])
 def test_persistent_casscf_real_allocator_recovery(native, allocation_interposer, tmp_path, threads,
                                                  failure_target):
     """One Runner/Molecule: success, native failure, then two top-level recoveries."""
@@ -271,6 +299,9 @@ failure_target = sys.argv[4]
 shim = ctypes.CDLL(sys.argv[1])
 shim.rdm_fail_strings_allocation.argtypes = [ctypes.c_int]
 shim.rdm_fail_transform_allocation.argtypes = [ctypes.c_int]
+shim.rdm_fail_final_ci_allocation.argtypes = [ctypes.c_int, ctypes.c_int]
+shim.rdm_final_ci_allocation_bytes.argtypes = [ctypes.c_int]
+shim.rdm_final_ci_allocation_bytes.restype = ctypes.c_size_t
 real_backend = cs._casscf_energy_backend
 lib, ffi = real_backend()
 for name in ("casscf_energy",):
@@ -282,6 +313,7 @@ phase = "success"
 ordinal = 0
 optimized_mo = None
 transform_allocations = None
+final_ci_layouts = []
 class FailRDM:
     def casscf_energy(self, *args):
         global initial_mo, controls, optimized_mo, transform_allocations
@@ -299,9 +331,12 @@ class FailRDM:
             controls = current
         assert current == controls, "Recovery changed native controls"
         if phase == "failure":
+            args[5][0], args[6][0] = 13.25, -3.5
             result_before = tuple(bytes(ffi.buffer(args[i], 8)) for i in (5, 6))
             if failure_target == "transform":
                 shim.rdm_fail_transform_allocation(ordinal)
+            elif failure_target == "final-ci":
+                shim.rdm_fail_final_ci_allocation(transform_allocations, ordinal)
             else:
                 shim.rdm_fail_strings_allocation(ordinal)
             try:
@@ -309,6 +344,11 @@ class FailRDM:
             finally:
                 count = shim.rdm_allocation_count()
             assert count == ordinal, (status, count, ordinal)
+            if failure_target == "final-ci":
+                assert shim.rdm_final_ci_transform_count() == transform_allocations
+                sizes = tuple(shim.rdm_final_ci_allocation_bytes(i) for i in range(3))
+                assert sizes == (8, 8, 32), ("Final CI allocation layout changed", sizes, status)
+                final_ci_layouts.append((transform_allocations, sizes))
             assert status == -2, status
             # Reacquire the native record; never keep a borrowed view across calls.
             assert runner.mol.data["OQP::VEC_MO_A"].tobytes() == initial_mo.tobytes(), (
@@ -316,15 +356,15 @@ class FailRDM:
             assert tuple(bytes(ffi.buffer(args[i], 8)) for i in (5, 6)) == result_before, (
                 "Failed native CASSCF published energies or spin", failure_target, ordinal)
         else:
-            if failure_target == "transform":
+            if failure_target != "rdm":
                 shim.rdm_fail_transform_allocation(0)
             try:
                 status = int(lib.casscf_energy(*args))
             finally:
-                if failure_target == "transform":
+                if failure_target != "rdm":
                     count = shim.rdm_allocation_count()
             assert status == 0, status
-            if failure_target == "transform":
+            if failure_target != "rdm":
                 # A converged control may build multiple analytic Hessians.
                 # Each owns one transform, followed by canonicalization and
                 # final CI; select those sites from native stats.
@@ -337,7 +377,7 @@ class FailRDM:
             native_results.append(tuple(bytes(ffi.buffer(args[i], 8)) for i in (5, 6)))
             if optimized_mo is None:
                 optimized_mo = runner.mol.data["OQP::VEC_MO_A"].copy()
-                if failure_target == "transform":
+                if failure_target != "rdm":
                     assert optimized_mo.tobytes() != initial_mo.tobytes(), (
                         "Control must change orbitals to expose a premature commit")
             assert runner.mol.data["OQP::VEC_MO_A"].tobytes() == optimized_mo.tobytes(), (
@@ -355,7 +395,7 @@ config = {
     "casscf": {"max_macro_iterations": "50", "canonicalize": "true"},
     "tests": {"exception": "True"},
 }
-if failure_target == "transform":
+if failure_target != "rdm":
     config["casscf"].update({"converger": "ah", "hessian": "analytic"})
 runner = Runner(project="persistent-recovery", input_file=None, silent=1, usempi=False,
                 input_dict=config, log=str(pathlib.Path(sys.argv[2])/"recovery.log"))
@@ -374,6 +414,9 @@ try:
         # of the number of Hessian builds needed for convergence.
         failure_ordinals = (1, transform_allocations - 1, transform_allocations)
         assert len(set(failure_ordinals)) == 3
+    elif failure_target == "final-ci":
+        # Real malloc failure on dets(ndet), the first checked CI allocation.
+        failure_ordinals = (3,)
     else:
         failure_ordinals = (1,)
     phases = [(name, failure_ordinal) for failure_ordinal in failure_ordinals
@@ -396,7 +439,8 @@ assert seen == [0] + [-2, 0, 0]*(3 if failure_target == "transform" else 1), see
 assert all(value == native_results[0] for value in native_results), native_results
 print("native CASSCF status -2 propagated; persistent top-level recoveries compared",
       "target=", failure_target, "threads=", requested_threads,
-      "ordinals=", failure_ordinals, "statuses=", seen)
+      "ordinals=", failure_ordinals, "statuses=", seen,
+      "final_ci_layouts=", final_ci_layouts)
 '''
     env["OMP_NUM_THREADS"] = str(threads)
     env["OQP_FCI_THREADS"] = str(threads)

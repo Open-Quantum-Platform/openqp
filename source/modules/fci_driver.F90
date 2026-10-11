@@ -87,6 +87,7 @@ module fci_driver_mod
   public :: FCI_NIOPT, FCI_D_ECORE, FCI_D_EIG_TOL, FCI_D_CUTOFF, FCI_NDOPT
   public :: FCI_NIOPT_V1, FCI_NDOPT_V1
   public :: FCI_MAX_NSPIN
+  public :: FCI_ERR_ALLOC
 
   ! ------------------------------------------------------------------ schema
   ! AUTHORITATIVE OPTION SCHEMA -- mirrored in include/oqp.h and in
@@ -143,8 +144,9 @@ module fci_driver_mod
   integer, parameter :: FCI_NDOPT_V1     = 3
 
   ! Status codes.  Success is the number of roots written (>= 0); every
-  ! negative value means "the caller should fall back to the Python solver",
-  ! which then raises the established user-facing message.
+  ! negative values identify the failure cause for the caller. The in-process
+  ! CASSCF driver treats allocation failure as a hard resource error; other
+  ! CI refusals can request its existing Python solver.
   integer(i8), parameter :: FCI_ERR_INPUT    = -1_i8  ! unsupported/invalid sizes
   integer(i8), parameter :: FCI_ERR_ALLOC    = -2_i8  ! out of memory
   integer(i8), parameter :: FCI_ERR_BUDGET   = -3_i8  ! over the max_memory budget

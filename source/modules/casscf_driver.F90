@@ -112,7 +112,7 @@ module casscf_driver_mod
                             FCI_I_MULT, FCI_I_MAXMEMORY, FCI_I_NTHREADS, &
                             FCI_I_WANT_S2, FCI_I_GUESS, FCI_NIOPT, &
                             FCI_D_ECORE, FCI_D_EIG_TOL, FCI_D_CUTOFF, &
-                            FCI_NDOPT, FCI_MAX_NSPIN
+                            FCI_NDOPT, FCI_MAX_NSPIN, FCI_ERR_ALLOC
   use fci_hamiltonian_mod, only: oqp_dsyevd_f
   use mo_transform_mod, only: mo_transform_h1e, mo_transform_eri, MO_TRANSFORM_ERR_ALLOC
   use casscf_kernel_mod, only: casscf_gfock_grad, casscf_effective_fock, &
@@ -669,7 +669,11 @@ contains
     ctx%iopt_ci(FCI_I_NROOT) = int(nroot, c_int32_t)
     ctx%iopt_ci(FCI_I_WANT_S2) = 0_c_int32_t
     if (ndet_ok < 0) then
-      status = CAS_ERR_CI
+      if (ndet_ok == FCI_ERR_ALLOC) then
+        status = CAS_ERR_ALLOC
+      else
+        status = CAS_ERR_CI
+      end if
       return
     end if
 
