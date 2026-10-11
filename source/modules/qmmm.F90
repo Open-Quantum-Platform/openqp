@@ -85,10 +85,13 @@ module qmmm_mod
     real(dp) :: tol, chg, corr
 
     real(dp), contiguous, pointer :: dmat_a(:), dmat_b(:), partial_charges(:)
-    real(dp), contiguous, pointer :: td_p(:,:), td_abxc(:)
+    real(dp), contiguous, pointer :: td_p(:,:)
 
-    character(len=*), parameter :: tags_required(5) = (/ character(len=80) :: &
-         OQP_DM_A, OQP_DM_B, OQP_TD_P, OQP_TD_ABXC, OQP_SM /)
+    ! OQP::DM_B exists only for ROHF/UHF references; requested where read.
+    character(len=*), parameter :: tags_required(3) = (/ character(len=80) :: &
+         OQP_DM_A, OQP_TD_P, OQP_SM /)
+    character(len=*), parameter :: tags_beta(1) = (/ character(len=80) :: &
+         OQP_DM_B /)
 
     character(len=*), parameter :: tags_qmmm(1) = (/ character(len=80) :: &
          OQP_partial_charges /)
@@ -129,13 +132,14 @@ module qmmm_mod
     call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a)
     tmp = dmat_a
     if (urohf) then
+      call data_has_tags(infos%dat, tags_beta, module_name, subroutine_name, WITH_ABORT)
       call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b)
       tmp = tmp + dmat_b
     end if
 
     if (use_relaxed) then
       call tagarray_get_data(infos%dat, OQP_TD_P, td_p)
-      tmp = tmp + td_p(:,1) + td_p(:,2)
+      tmp = tmp + td_p_spin_sum(td_p)
       write(iw,'(4x,a,i4)') 'Using RELAXED excited-state density for ESPF charges, state ', istate
     else
       write(iw,'(4x,a,i4)') 'Using ROHF reference density for ESPF charges (ESPF_ROHF), state ', istate
@@ -900,10 +904,10 @@ module qmmm_mod
     real(kind=dp), contiguous, pointer :: partial_charges(:), mm_potential(:),&
                                           espf_grad_ta(:,:), &
                                           dmat_a(:), dmat_b(:)
-    real(dp), contiguous, pointer :: td_p(:,:), td_abxc(:)
-    character(len=*), parameter :: tags_qmmm(6) = (/ character(len=80) :: &
+    real(dp), contiguous, pointer :: td_p(:,:)
+    character(len=*), parameter :: tags_qmmm(5) = (/ character(len=80) :: &
       OQP_partial_charges, OQP_POTMM, OQP_ESPF_GRAD, OQP_DM_A, &
-      OQP_TD_P, OQP_TD_ABXC/)
+      OQP_TD_P/)
     character(len=*), parameter :: tags_beta(1) = (/ character(len=80) :: &
       OQP_DM_B/)
 
@@ -976,7 +980,7 @@ module qmmm_mod
     if (use_relaxed) then
       ! Default: S1 relaxed density = ROHF + td_p (orbital-relaxation correction)
       call tagarray_get_data(infos%dat, OQP_TD_P, td_p)
-      dens = dens + td_p(:,1) + td_p(:,2)
+      dens = dens + td_p_spin_sum(td_p)
     else
       ! ESPF_ROHF=1: stop at the ROHF reference density -- do NOT add td_abxc.
       ! This option uses the ROHF reference density for ESPF fitting
