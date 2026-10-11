@@ -87,6 +87,8 @@ for attr_name in dir(lib):
             'oqp_simplex_qp_solve', 'oqp_simplex_qp_solve_avoid',
             'oqp_ecp_selftest',
             'oqp_rpa_residual_selftest',
+            'oqp_rdm_test_alloc_begin', 'oqp_rdm_test_alloc_end',
+            'oqp_rdm_test_alloc_active', 'oqp_rdm_test_alloc_request',
         ):
             globals()[attr_name] = _oqp_wrapper(attr_value)
         else:

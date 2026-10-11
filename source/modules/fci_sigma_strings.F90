@@ -77,6 +77,22 @@ module fci_sigma_strings_mod
   public :: fci_sigma_strings, rdm12_strings, spin_square_strings
   public :: fci_set_work_bytes_cap, fci_get_work_bytes_cap
 
+  ! Internal C TLS bridges; normal callers do not arm the test controller.
+  public :: oqp_rdm_test_alloc_active, oqp_rdm_test_alloc_request
+  interface
+    function oqp_rdm_test_alloc_active() result(enabled) bind(C, name="oqp_rdm_test_alloc_active")
+      import c_int32_t
+      integer(c_int32_t) :: enabled
+    end function oqp_rdm_test_alloc_active
+    function oqp_rdm_test_alloc_request(n1, n2, n3, element_bytes) result(failed) &
+        bind(C, name="oqp_rdm_test_alloc_request")
+      import c_int32_t, c_int64_t
+      integer(c_int64_t), value :: n1, n2, n3
+      integer(c_int32_t), value :: element_bytes
+      integer(c_int32_t) :: failed
+    end function oqp_rdm_test_alloc_request
+  end interface
+
 contains
 
   !> Column-major (kl-major) single-excitation table for one string set.
@@ -92,7 +108,7 @@ contains
   !>
   !> Entries per kl are emitted in ascending target order by construction
   !> (the outer loop below runs over targets in order).
-  recursive subroutine build_link_bykl(norb, nstr, strs, nkl, maxper, cnt, tgt, src, sgn, status)
+  recursive subroutine build_link_bykl(norb, nstr, strs, nkl, maxper, cnt, tgt, src, sgn, status, test_allocations)
     integer, intent(in) :: norb, nkl, maxper
     integer(i8), intent(in) :: nstr
     integer(i8), intent(in) :: strs(nstr)
@@ -100,6 +116,8 @@ contains
     integer(i8), intent(out) :: tgt(maxper, nkl), src(maxper, nkl)
     real(dp), intent(out) :: sgn(maxper, nkl)
     integer, intent(out), optional :: status
+    logical, intent(in), optional :: test_allocations
+    logical :: probe_allocations
 
     integer(i8), allocatable :: skeys(:), sperm(:)
     integer(i8) :: t, det1, src_key, s_idx
@@ -107,7 +125,23 @@ contains
     real(dp) :: ph
 
     if (present(status)) status = 0
-    allocate(skeys(nstr), sperm(nstr), stat=ierr)
+    probe_allocations = .false.
+    if (present(test_allocations)) probe_allocations = test_allocations
+    ierr = 0
+    if (probe_allocations) ierr = oqp_rdm_test_alloc_request( &
+        nstr, 1_i8, 1_i8, int(storage_size(0_i8)/8, c_int32_t))
+    if (ierr == 0) allocate(skeys(nstr), stat=ierr)
+    if (ierr /= 0) then
+      if (present(status)) then
+        status = -1
+        return
+      end if
+      error stop 'Cannot allocate FCI string index'
+    end if
+    ierr = 0
+    if (probe_allocations) ierr = oqp_rdm_test_alloc_request( &
+        nstr, 1_i8, 1_i8, int(storage_size(0_i8)/8, c_int32_t))
+    if (ierr == 0) allocate(sperm(nstr), stat=ierr)
     if (ierr /= 0) then
       if (present(status)) then
         status = -1
@@ -325,6 +359,7 @@ contains
     integer(i8) :: row_bytes, gram_bytes, partial_bytes, available_bytes
     integer(i8) :: grow0, growlen
     integer :: gi
+    logical :: probe_allocations
     real(dp), allocatable :: gloc(:, :, :), dloc(:, :)
     integer :: p, q, r, s, pq, rs, t, ierr
     real(dp) :: sgn
@@ -351,8 +386,20 @@ contains
     if (nastr * nbstr /= ndet) return
 
     nkl = norb * norb
+    probe_allocations = oqp_rdm_test_alloc_active() /= 0_c_int32_t
 
-    allocate(astr(nastr), bstr(nbstr), stat=ierr)
+    ierr = 0
+    if (probe_allocations) ierr = oqp_rdm_test_alloc_request( &
+        nastr, 1_i8, 1_i8, int(storage_size(0_i8)/8, c_int32_t))
+    if (ierr == 0) allocate(astr(nastr), stat=ierr)
+    if (ierr /= 0) then
+      status = -1
+      return
+    end if
+    ierr = 0
+    if (probe_allocations) ierr = oqp_rdm_test_alloc_request( &
+        nbstr, 1_i8, 1_i8, int(storage_size(0_i8)/8, c_int32_t))
+    if (ierr == 0) allocate(bstr(nbstr), stat=ierr)
     if (ierr /= 0) then
       status = -1
       return
@@ -371,13 +418,39 @@ contains
     end do
 
     nlink_a = max(1, na * (norb - na) + na)
-    allocate(ntab_a(nastr), kl_a(nlink_a, nastr), src_a(nlink_a, nastr), &
-             sgn_a(nlink_a, nastr), stat=ierr)
+    ierr = 0
+    if (probe_allocations) ierr = oqp_rdm_test_alloc_request( &
+        nastr, 1_i8, 1_i8, int(storage_size(0)/8, c_int32_t))
+    if (ierr == 0) allocate(ntab_a(nastr), stat=ierr)
     if (ierr /= 0) then
       status = -1
       return
     end if
-    call build_link_table(norb, nastr, astr, nlink_a, ntab_a, kl_a, src_a, sgn_a, ierr)
+    ierr = 0
+    if (probe_allocations) ierr = oqp_rdm_test_alloc_request( &
+        int(nlink_a, i8), nastr, 1_i8, int(storage_size(0)/8, c_int32_t))
+    if (ierr == 0) allocate(kl_a(nlink_a, nastr), stat=ierr)
+    if (ierr /= 0) then
+      status = -1
+      return
+    end if
+    ierr = 0
+    if (probe_allocations) ierr = oqp_rdm_test_alloc_request( &
+        int(nlink_a, i8), nastr, 1_i8, int(storage_size(0_i8)/8, c_int32_t))
+    if (ierr == 0) allocate(src_a(nlink_a, nastr), stat=ierr)
+    if (ierr /= 0) then
+      status = -1
+      return
+    end if
+    ierr = 0
+    if (probe_allocations) ierr = oqp_rdm_test_alloc_request( &
+        int(nlink_a, i8), nastr, 1_i8, int(storage_size(0.0_dp)/8, c_int32_t))
+    if (ierr == 0) allocate(sgn_a(nlink_a, nastr), stat=ierr)
+    if (ierr /= 0) then
+      status = -1
+      return
+    end if
+    call build_link_table(norb, nastr, astr, nlink_a, ntab_a, kl_a, src_a, sgn_a, ierr, probe_allocations)
     if (ierr /= 0) then
       status = -1
       return
@@ -388,14 +461,40 @@ contains
     ! excitation label the inner loop walks ONE tmat column with ascending
     ! rows, and the civec reads stay inside one alpha block.
     maxper_b = int(min(nbstr, binom(norb - 1, nb - 1) + binom(norb - 2, nb - 1)))
-    allocate(cnt_b(nkl), tgt_b(max(maxper_b, 1), nkl), &
-             src_bk(max(maxper_b, 1), nkl), sgn_bk(max(maxper_b, 1), nkl), stat=ierr)
+    ierr = 0
+    if (probe_allocations) ierr = oqp_rdm_test_alloc_request( &
+        int(nkl, i8), 1_i8, 1_i8, int(storage_size(0)/8, c_int32_t))
+    if (ierr == 0) allocate(cnt_b(nkl), stat=ierr)
+    if (ierr /= 0) then
+      status = -1
+      return
+    end if
+    ierr = 0
+    if (probe_allocations) ierr = oqp_rdm_test_alloc_request( &
+        int(max(maxper_b, 1), i8), int(nkl, i8), 1_i8, int(storage_size(0_i8)/8, c_int32_t))
+    if (ierr == 0) allocate(tgt_b(max(maxper_b, 1), nkl), stat=ierr)
+    if (ierr /= 0) then
+      status = -1
+      return
+    end if
+    ierr = 0
+    if (probe_allocations) ierr = oqp_rdm_test_alloc_request( &
+        int(max(maxper_b, 1), i8), int(nkl, i8), 1_i8, int(storage_size(0_i8)/8, c_int32_t))
+    if (ierr == 0) allocate(src_bk(max(maxper_b, 1), nkl), stat=ierr)
+    if (ierr /= 0) then
+      status = -1
+      return
+    end if
+    ierr = 0
+    if (probe_allocations) ierr = oqp_rdm_test_alloc_request( &
+        int(max(maxper_b, 1), i8), int(nkl, i8), 1_i8, int(storage_size(0.0_dp)/8, c_int32_t))
+    if (ierr == 0) allocate(sgn_bk(max(maxper_b, 1), nkl), stat=ierr)
     if (ierr /= 0) then
       status = -1
       return
     end if
     call build_link_bykl(norb, nbstr, bstr, nkl, max(maxper_b, 1), cnt_b, &
-                         tgt_b, src_bk, sgn_bk, ierr)
+                         tgt_b, src_bk, sgn_bk, ierr, probe_allocations)
     if (ierr /= 0) then
       status = -1
       return
@@ -435,9 +534,35 @@ contains
     end if
     ! Allocate every owned buffer before changing the caller's BLAS setting.
     ! On failure local allocatables are released on return, including any
-    ! objects allocated before a later object in the same ALLOCATE failed.
-    allocate(tmat(nrow_max, nkl), gram(nkl, nkl), &
-             gloc(nkl, nkl, npartials), dloc(nkl, npartials), stat=ierr)
+    ! objects allocated before a later checked allocation failed.
+    ierr = 0
+    if (probe_allocations) ierr = oqp_rdm_test_alloc_request( &
+        nrow_max, int(nkl, i8), 1_i8, int(storage_size(0.0_dp)/8, c_int32_t))
+    if (ierr == 0) allocate(tmat(nrow_max, nkl), stat=ierr)
+    if (ierr /= 0) then
+      status = -1
+      return
+    end if
+    ierr = 0
+    if (probe_allocations) ierr = oqp_rdm_test_alloc_request( &
+        int(nkl, i8), int(nkl, i8), 1_i8, int(storage_size(0.0_dp)/8, c_int32_t))
+    if (ierr == 0) allocate(gram(nkl, nkl), stat=ierr)
+    if (ierr /= 0) then
+      status = -1
+      return
+    end if
+    ierr = 0
+    if (probe_allocations) ierr = oqp_rdm_test_alloc_request( &
+        int(nkl, i8), int(nkl, i8), int(npartials, i8), int(storage_size(0.0_dp)/8, c_int32_t))
+    if (ierr == 0) allocate(gloc(nkl, nkl, npartials), stat=ierr)
+    if (ierr /= 0) then
+      status = -1
+      return
+    end if
+    ierr = 0
+    if (probe_allocations) ierr = oqp_rdm_test_alloc_request( &
+        int(nkl, i8), int(npartials, i8), 1_i8, int(storage_size(0.0_dp)/8, c_int32_t))
+    if (ierr == 0) allocate(dloc(nkl, npartials), stat=ierr)
     if (ierr /= 0) then
       status = -1
       return
@@ -586,7 +711,7 @@ contains
   !> the target is what lets both the gather and the scatter run with disjoint
   !> writes: for a fixed target every write lands in that target's own slice.
   recursive subroutine build_link_table(norb, nstr, strs, maxlink, ntab, &
-                              tab_kl, tab_src, tab_sgn, status)
+                              tab_kl, tab_src, tab_sgn, status, test_allocations)
     integer, intent(in) :: norb, maxlink
     integer(i8), intent(in) :: nstr
     integer(i8), intent(in) :: strs(nstr)
@@ -595,6 +720,8 @@ contains
     integer(i8), intent(out) :: tab_src(maxlink, nstr)
     real(dp), intent(out) :: tab_sgn(maxlink, nstr)
     integer, intent(out), optional :: status
+    logical, intent(in), optional :: test_allocations
+    logical :: probe_allocations
 
     integer(i8), allocatable :: skeys(:), sperm(:)
     integer(i8) :: src, tgt_key, det1
@@ -603,7 +730,23 @@ contains
     real(dp) :: sgn
 
     if (present(status)) status = 0
-    allocate(skeys(nstr), sperm(nstr), stat=ierr)
+    probe_allocations = .false.
+    if (present(test_allocations)) probe_allocations = test_allocations
+    ierr = 0
+    if (probe_allocations) ierr = oqp_rdm_test_alloc_request( &
+        nstr, 1_i8, 1_i8, int(storage_size(0_i8)/8, c_int32_t))
+    if (ierr == 0) allocate(skeys(nstr), stat=ierr)
+    if (ierr /= 0) then
+      if (present(status)) then
+        status = -1
+        return
+      end if
+      error stop 'Cannot allocate FCI string index'
+    end if
+    ierr = 0
+    if (probe_allocations) ierr = oqp_rdm_test_alloc_request( &
+        nstr, 1_i8, 1_i8, int(storage_size(0_i8)/8, c_int32_t))
+    if (ierr == 0) allocate(sperm(nstr), stat=ierr)
     if (ierr /= 0) then
       if (present(status)) then
         status = -1
