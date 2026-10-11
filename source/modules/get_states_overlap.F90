@@ -543,8 +543,8 @@ contains
     real(dp), intent(out) :: cofactors(:,:)
     logical, intent(out), optional :: used_lu
     real(dp) :: lu(size(s,1),size(s,1)), inverse(size(s,1),size(s,1))
-    real(dp) :: work(4*size(s,1)), minor(max(0,size(s,1)-1),max(0,size(s,1)-1))
-    integer :: piv(size(s,1)), iwork(size(s,1)), n, info, i, j, r, c, rr, cc
+    real(dp) :: work(4*size(s,1))
+    integer :: piv(size(s,1)), iwork(size(s,1)), n, info, i, j
     real(dp) :: anorm, rcond, det, logdet
     logical :: safe
 
@@ -596,6 +596,7 @@ contains
       end do
       call dgetrs('N', n, n, lu, n, piv, inverse, n, info)
       safe = info == 0 .and. all(ieee_is_finite(inverse))
+      safe = safe .and. .not. any(inverse /= 0.0_dp .and. abs(inverse) <= tiny(1.0_dp))
       if (safe) then
         cofactors = det * transpose(inverse)
         safe = all(ieee_is_finite(cofactors))
@@ -610,24 +611,12 @@ contains
       end if
     end if
 
-    ! Exact signed minors preserve comp_det's tiny-pivot convention. Singular
-    ! occupied overlaps can have nonzero minors; TLF approximations cannot
-    ! replace them. All scratch belongs to this invocation.
+    ! Use the previous exact signed minors, including their row/column order:
+    ! comp_det's tiny-pivot cutoff depends on that order. Singular occupied
+    ! overlaps can have nonzero minors; TLF approximations cannot replace them.
     do i = 1, n
       do j = 1, n
-        rr = 0
-        do r = 1, n
-          if (r == i) cycle
-          rr = rr + 1
-          cc = 0
-          do c = 1, n
-            if (c == j) cycle
-            cc = cc + 1
-            minor(rr,cc) = s(r,c)
-          end do
-        end do
-        cofactors(i,j) = comp_det(minor, n-1)
-        if (mod(i+j,2) /= 0) cofactors(i,j) = -cofactors(i,j)
+        call ov_exact(cofactors(i,j), i, j, 0, 0, s, 1, n-1, 1)
       end do
     end do
   end subroutine occupied_cofactors

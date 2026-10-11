@@ -98,3 +98,25 @@ def test_direct_wrappers_return_pivots_and_solve():
     assert used
     np.testing.assert_allclose(actual, [[0.2, -0.4], [-0.7, 0.0]], atol=1e-15)
     np.testing.assert_allclose(actual, previous, atol=1e-15)
+
+
+def test_tiny_minor_pivot_preserves_previous_permutation():
+    # The old minor ordering produces a tiny pivot even though the natural
+    # Leibniz cofactor is subnormal. Keep the existing numerical contract.
+    s = np.eye(3)
+    s[1, 0] = s[2, 1] = 1e-155
+    actual, previous, used = _call(s)
+    assert not used
+    assert _cofactors(s)[0, 2] > 0.0
+    assert actual[0, 2] == previous[0, 2] == 0.0
+    np.testing.assert_array_equal(actual, previous)
+
+    # A normal determinant may scale a subnormal inverse entry back into a
+    # normal cofactor. Detect the inverse entry before that multiplication.
+    s = 2.0 * np.eye(30)
+    s[1, 0] = s[2, 1] = 1e-155
+    actual, previous, used = _call(s)
+    assert not used
+    assert actual[0, 2] == previous[0, 2] == 0.0
+    np.testing.assert_array_equal(actual, previous)
+    np.testing.assert_array_equal(np.diag(actual), np.full(30, 2.0**29))
