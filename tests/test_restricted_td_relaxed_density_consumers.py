@@ -25,7 +25,8 @@ Tests:
   excited-state energy for a QM and an MM coordinate.  The same check with the
   ground-state ESPF density (ESPF_ROHF=1, i.e. no relaxed charges, which is what
   the restricted path used before) is violated by much more than the
-  tolerance, so the test sees missing relaxed charges.
+  tolerance, so the test sees missing relaxed charges.  The RPA check is
+  repeated without input.qmmm_flag in the config: the driver must set it.
 """
 import json
 import os
@@ -333,9 +334,9 @@ class QMMMRestrictedExcitedForceTests(unittest.TestCase):
     # (0.019, ESPF grid weights); MM atoms agree to ~5e-4.
     TOL = 0.05
 
-    def _fd(self, td, env_extra=None):
+    def _fd(self, td, env_extra=None, cfg=None):
         import inspect
-        cfg = dict(QMMM_RESTRICTED_CFG, **{"tdhf.type": td})
+        cfg = dict(QMMM_RESTRICTED_CFG if cfg is None else cfg, **{"tdhf.type": td})
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         env = dict(os.environ)
@@ -373,6 +374,16 @@ class QMMMRestrictedExcitedForceTests(unittest.TestCase):
 
     def test_tda_qmmm_excited_force_matches_finite_difference(self):
         self._check("tda")
+
+    def test_rpa_force_without_explicit_qmmm_flag(self):
+        # The driver must set input.qmmm_flag itself (config mode); without it
+        # the forces were built from the reference-state charges.
+        cfg = {k: v for k, v in QMMM_RESTRICTED_CFG.items() if k != "input.qmmm_flag"}
+        res = self._fd("rpa", cfg=cfg)
+        for r in res:
+            self.assertLess(abs(r["analytic"] - r["fd"]), self.TOL,
+                            f"no explicit qmmm_flag: atom {r['atom']} xyz {r['xyz']}: "
+                            f"analytic {r['analytic']:.5f} vs FD {r['fd']:.5f}")
 
 
 if __name__ == "__main__":

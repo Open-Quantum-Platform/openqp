@@ -131,6 +131,36 @@ def _normalize_embedding(value):
     return embedding
 
 
+_TRUE_WORDS = {"1", "true", "t", "yes", "y", "on"}
+
+
+def _with_qmmm_flag(oqp_cfg, embedding):
+    """Config-mode QM/MM needs ``input.qmmm_flag`` in the native engine.
+
+    The Z-vector solvers form the relaxed ESPF charges of the target state
+    (which the MM electrostatic-embedding forces use) only when qmmm_flag is
+    set.  A config without it ran the embedded SCF and returned excited-state
+    forces built from the reference-state charges, silently inconsistent with
+    the energy.  Electrostatic-type embeddings of the native methods therefore
+    get the flag set when it is absent, and an explicit false is rejected.
+    Mechanical embedding and the tight-binding backends do not use it.
+    """
+    if embedding == "mechanical":
+        return oqp_cfg
+    if is_tb_method(str(oqp_cfg.get("input.method", ""))):
+        return oqp_cfg
+    key = "input.qmmm_flag"
+    if key in oqp_cfg:
+        if str(oqp_cfg[key]).strip().lower() not in _TRUE_WORDS:
+            raise ValueError(
+                f"QM/MM with Embedding='{embedding}' needs input.qmmm_flag=True "
+                f"(got {oqp_cfg[key]!r}): without it the excited-state forces "
+                "use the reference-state ESPF charges.")
+        return oqp_cfg
+    oqp_cfg[key] = "True"
+    return oqp_cfg
+
+
 def anderson_step(q_hist, f_hist, m=3, beta=1.0, max_step=0.5):
     """Anderson-accelerated update for a charge fixed point q = g(q).
 
@@ -317,7 +347,7 @@ class OpenQpQMMM:
             self.mol = mol
             self.oqp_cfg_base = None
         else:
-            self.oqp_cfg_base = oqp_cfg
+            self.oqp_cfg_base = _with_qmmm_flag(oqp_cfg, self.Embedding)
             self.mol = None
 
         self.op = None
