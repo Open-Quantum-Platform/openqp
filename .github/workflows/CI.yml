@@ -510,7 +510,16 @@ jobs:
             # regressions this leg exists to catch, now under the ILP64
             # interposition.
             set -o pipefail
-            openqp --run_tests all | tee run_tests.out
+            # macos-15-intel is the slowest runner (full suite ~14 min).  On a
+            # pull request it runs the examples this leg exists for -- the SCF
+            # set (PBE EDIIS/ADIIS through NLOpt, molden output) and the basis
+            # export -- and the full suite runs after every merge to main.
+            if [ "${{ github.event_name }}" = pull_request ] && [ "${{ matrix.os }}" = macos-15-intel ]; then
+              openqp --run_tests SCF | tee run_tests.out
+              openqp --run_tests examples/HESS/H2O_RHF-DFT_VIEWER_EXPORT.inp | tee -a run_tests.out
+            else
+              openqp --run_tests all | tee run_tests.out
+            fi
 
 # NOTE: the two DDPCM smoke examples (examples/PCM/*.inp) run at conv=1e-6 -- see
 # the inline comment in each input. The energy-only ddPCM Fock coupling is
