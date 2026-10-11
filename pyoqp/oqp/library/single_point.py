@@ -1777,8 +1777,8 @@ class Gradient(Calculator):
 
                 if self.exception is True:
                     raise ZVnotConverged()
-                else:
-                    exit()
+                # A bare exit() is SystemExit(None): status 0 for a failed run.
+                raise RuntimeError("TD Z-vector did not converge — stopping current run.")
             if self.td_prop == True:
                 oqp.electric_moments_excited(self.mol)
                 oqp.mulliken_excited(self.mol)
