@@ -9,12 +9,10 @@ iteration unconverged.
 
 import os
 import unittest
-from pathlib import Path
 
 import numpy as np
 
 
-ROOT = Path(__file__).resolve().parents[1]
 NATIVE_TESTS_REQUIRED = os.getenv("OQP_REQUIRE_NATIVE_TESTS") == "1"
 _RUNTIME_ERROR = ""
 
@@ -22,7 +20,8 @@ _RUNTIME_ERROR = ""
 def _runtime_available():
     global _RUNTIME_ERROR
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
+        # The installed oqp locates its own runtime; the source tree is not put
+        # on any search path (tests/test_oqp_module_isolation.py).
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         import oqp
 
