@@ -2652,6 +2652,31 @@ def _displacement_pool(mpi_manager, ntask, nproc):
     return ThreadPool(processes=ncpu), ncpu
 
 
+def _process_tree(pid):
+    """``pid`` and its live descendants (POSIX), from one ``ps`` snapshot."""
+    out = subprocess.run(['ps', '-A', '-o', 'pid=,ppid='],
+                         capture_output=True, text=True).stdout
+    children = {}
+    for line in out.splitlines():
+        fields = line.split()
+        if len(fields) == 2:
+            children.setdefault(int(fields[1]), []).append(int(fields[0]))
+    tree, stack = [pid], [pid]
+    while stack:
+        for child in children.get(stack.pop(), []):
+            tree.append(child)
+            stack.append(child)
+    return tree
+
+
+def _signal_pids(pids, sig):
+    for pid in pids:
+        try:
+            os.kill(pid, sig)
+        except (ProcessLookupError, PermissionError):
+            pass
+
+
 class _ExternalJobs:
     """Child OpenQP processes started by one finite-difference driver.
 
@@ -2661,13 +2686,13 @@ class _ExternalJobs:
     one of these to every worker so that, on failure, it can stop the children
     that are running and refuse to start new ones.
 
-    Each child runs as the leader of its own process group (POSIX) or process
-    tree (Windows), and ``stop`` signals the whole group: a displaced job can
-    start processes of its own -- ``[dftb] backend=probe`` runs an external
-    executable -- and signalling only the direct child would orphan those.
-    Because the children are no longer in the terminal's foreground group, a
-    Ctrl-C reaches only this process; it surfaces as KeyboardInterrupt in the
-    driver, whose handler stops the groups through ``_abort_displacements``.
+    The children stay in the driver's process group, so a terminal Ctrl-C --
+    which ``Runner`` leaves at SIG_DFL so that it stops long native calls at
+    once -- and a supervisor's ``killpg`` reach them exactly as they reach the
+    driver.  ``stop`` therefore cannot signal a group of its own; it kills each
+    child's process tree instead, because a displaced job can start processes
+    of its own (``[dftb] backend=probe`` runs an external executable) that
+    would otherwise be orphaned.
     """
 
     def __init__(self):
@@ -2679,12 +2704,7 @@ class _ExternalJobs:
         with self._lock:
             if self._stopped:
                 return
-            if os.name == 'posix':
-                proc = subprocess.Popen(cmd, env=env, start_new_session=True)
-            else:
-                proc = subprocess.Popen(
-                    cmd, env=env,
-                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+            proc = subprocess.Popen(cmd, env=env)
             self._procs.add(proc)
         try:
             proc.wait()
@@ -2692,33 +2712,35 @@ class _ExternalJobs:
             with self._lock:
                 self._procs.discard(proc)
 
-    @staticmethod
-    def _signal_tree(proc, kill):
-        if os.name == 'posix':
-            try:
-                os.killpg(proc.pid, signal.SIGKILL if kill else signal.SIGTERM)
-            except (ProcessLookupError, PermissionError):
-                # ESRCH: the group is gone.  macOS returns EPERM instead
-                # when the only members left are zombies awaiting reaping.
-                pass
-        else:
-            subprocess.run(['taskkill', '/T', '/F', '/PID', str(proc.pid)],
-                           capture_output=True)
-
     def stop(self, grace=10.0):
         with self._lock:
             self._stopped = True
             procs = list(self._procs)
+        if os.name != 'posix':
+            for proc in procs:
+                subprocess.run(['taskkill', '/T', '/F', '/PID', str(proc.pid)],
+                               capture_output=True)
+                proc.wait()
+            return
+        trees = []
         for proc in procs:
-            self._signal_tree(proc, kill=False)
-        for proc in procs:
+            # Freeze the tree first so no member can start another process
+            # between the snapshot and the signal, then take the snapshot.
+            _signal_pids(_process_tree(proc.pid), signal.SIGSTOP)
+            tree = _process_tree(proc.pid)
+            _signal_pids(tree, signal.SIGSTOP)
+            trees.append(tree)
+        for tree in trees:
+            _signal_pids(tree, signal.SIGTERM)
+            _signal_pids(tree, signal.SIGCONT)
+        for proc, tree in zip(procs, trees):
             try:
                 proc.wait(timeout=grace)
             except subprocess.TimeoutExpired:
-                self._signal_tree(proc, kill=True)
-                proc.wait()
-            # The leader is gone; remove any descendant that ignored SIGTERM.
-            self._signal_tree(proc, kill=True)
+                pass
+            # Descendants that outlived the child, or ignored SIGTERM.
+            _signal_pids(tree, signal.SIGKILL)
+            proc.wait()
 
 
 def _abort_displacements(pool, jobs):

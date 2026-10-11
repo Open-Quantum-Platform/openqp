@@ -319,6 +319,56 @@ STOP_RUNNING_DRIVER = textwrap.dedent('''
 ''')
 
 
+CTRL_C_DRIVER = textwrap.dedent('''
+    import os
+    import pathlib
+    import sys
+    import time
+
+    from oqp.pyoqp import Runner  # Runner leaves SIGINT at SIG_DFL
+    from oqp.library import single_point
+
+    work = pathlib.Path(sys.argv[1])
+    inp = work / "h2.inp"
+    inp.write_text("""[input]
+    system=
+       1   0.000000000   0.000000000   0.000000000
+       1   0.000000000   0.000000000   0.740000000
+    charge=0
+    runtype=energy
+    basis=sto-3g
+    method=hf
+    [guess]
+    type=huckel
+    [scf]
+    multiplicity=1
+    type=rhf
+    [hess]
+    type=numerical
+    nproc=2
+    """)
+    runner = Runner(project="h2", input_file=str(inp), log=str(work / "h2.log"))
+    runner.run()
+
+    child = ("import os, pathlib, subprocess, sys, time; "
+             "g = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)']); "
+             "pathlib.Path(sys.argv[2]).write_text(str(g.pid)); "
+             "pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(120)")
+
+    def worker(task):
+        if task["idx"] == 1:
+            task["jobs"].run([sys.executable, "-c", child, str(work / "child.pid"),
+                              str(work / "grandchild.pid")], dict(os.environ))
+        else:
+            time.sleep(120)
+        return task["idx"], None, "computed", None
+
+    single_point.grad_wrapper = worker
+    (work / "driver.pid").write_text(str(os.getpid()))
+    single_point.Hessian(runner.mol).numerical_hess()
+''')
+
+
 @unittest.skipUnless(RUNTIME, "compiled OpenQP runtime not available")
 class DisplacementPoolTests(unittest.TestCase):
     def _run(self, driver, timeout):
@@ -351,6 +401,53 @@ class DisplacementPoolTests(unittest.TestCase):
 
     def test_failed_worker_stops_running_displacement_jobs(self):
         self._run(STOP_RUNNING_DRIVER, timeout=180)
+
+    @unittest.skipUnless(os.name == "posix", "terminal process groups are POSIX")
+    def test_ctrl_c_reaches_running_displacement_jobs(self):
+        # A terminal Ctrl-C is SIGINT to the foreground process group.  Runner
+        # leaves SIGINT at SIG_DFL, so the driver dies without any cleanup of
+        # its own; its displacement jobs must therefore share its group.
+        import signal
+        import time
+
+        def alive(pid):
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return False
+            return True
+
+        with tempfile.TemporaryDirectory(prefix="oqp_disp_pool_") as work:
+            env = dict(os.environ)
+            env.pop("OPENQP_ROOT", None)
+            env.setdefault("OMP_NUM_THREADS", "1")
+            driver = subprocess.Popen([sys.executable, "-c", CTRL_C_DRIVER, work],
+                                      cwd=work, env=env, start_new_session=True,
+                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            pids = {}
+            try:
+                deadline = time.time() + 120
+                while time.time() < deadline and len(pids) < 2:
+                    for name in ("child", "grandchild"):
+                        f = os.path.join(work, f"{name}.pid")
+                        if name not in pids and os.path.exists(f) and open(f).read():
+                            pids[name] = int(open(f).read())
+                    time.sleep(0.1)
+                self.assertEqual(len(pids), 2, "displacement job never started")
+                os.killpg(driver.pid, signal.SIGINT)
+                driver.wait(timeout=30)
+                deadline = time.time() + 15
+                while any(alive(p) for p in pids.values()) and time.time() < deadline:
+                    time.sleep(0.1)
+                survivors = {k: v for k, v in pids.items() if alive(v)}
+                self.assertEqual(survivors, {},
+                                 "Ctrl-C left displacement processes running")
+            finally:
+                for pid in list(pids.values()) + [driver.pid]:
+                    try:
+                        os.kill(pid, signal.SIGKILL)
+                    except (ProcessLookupError, PermissionError):
+                        pass
 
 
 if __name__ == "__main__":
