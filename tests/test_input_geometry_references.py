@@ -5,13 +5,17 @@ import sys
 import types
 from pathlib import Path
 
+import pytest
+
+from oqp_module_isolation import isolate_modules, stub_module
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def _load_input_checker():
-    oqp = sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-    utils = sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+    oqp = stub_module("oqp")
+    utils = stub_module("oqp.utils")
     mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
 
     class MPIManager:
@@ -89,6 +93,13 @@ def _load_input_parser():
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+@pytest.fixture(autouse=True)
+def _isolated_oqp_modules():
+    restore = isolate_modules()
+    yield
+    restore()
 
 
 def test_optional_qmmm_xyz_and_index_defaults_are_none():
