@@ -76,11 +76,13 @@ program test_tdhf_hessian_components
     error stop 'lowest excited root was rejected'
   if(tdhf_hessian_target_is_supported(2)) &
     error stop 'higher excited root was accepted'
-  if(.not.tdhf_hessian_lowest_root_is_isolated([0.2_dp,0.3_dp],1.0e-10_dp)) &
+  if(.not.tdhf_hessian_lowest_root_is_isolated([0.2_dp,0.3_dp],1.0e-10_dp,4)) &
     error stop 'isolated lowest root was rejected'
-  if(tdhf_hessian_lowest_root_is_isolated([0.2_dp],1.0e-10_dp)) &
+  if(tdhf_hessian_lowest_root_is_isolated([0.2_dp],1.0e-10_dp,4)) &
     error stop 'single computed root was accepted without an isolation gap'
-  if(tdhf_hessian_lowest_root_is_isolated([0.2_dp,0.2_dp+1.0e-11_dp],1.0e-10_dp)) &
+  if(tdhf_hessian_lowest_root_is_isolated([0.2_dp,0.2_dp+1.0e-11_dp],1.0e-10_dp,4)) &
     error stop 'degenerate lowest-root manifold was accepted'
+  if(.not.tdhf_hessian_lowest_root_is_isolated([0.2_dp],1.0e-10_dp,1)) &
+    error stop 'the only root of a one-pair response space was rejected'
 
 end program test_tdhf_hessian_components
