@@ -242,8 +242,12 @@ contains
     class(xc_engine_t), intent(in) :: xce
     real(kind=fp), intent(out), pointer :: da(:,:,:)
     real(kind=fp), intent(out), pointer :: db(:,:,:)
-    real(kind=fp), intent(out), pointer :: mo(:,:,:,:)
-    real(kind=fp), intent(out), pointer :: moG1(:,:,:,:)
+    ! CONTIGUOUS: mo and moG1 always point at contiguous scratch (tmpMO_,
+    ! self%mo thread slices, moG1_).  Without the attribute gfortran packs
+    ! them into temporaries on every call to the contiguous compRRho,
+    ! compRDRho and compRTau dummies, once per grid slice.
+    real(kind=fp), intent(out), pointer, contiguous :: mo(:,:,:,:)
+    real(kind=fp), intent(out), pointer, contiguous :: moG1(:,:,:,:)
     integer, intent(in) :: myThread
     integer :: nSpin, j, m
 
@@ -340,8 +344,8 @@ contains
     integer :: myThread
     real(kind=fp), pointer :: da(:,:,:)
     real(kind=fp), pointer :: db(:,:,:)
-    real(kind=fp), pointer :: mo(:,:,:,:)
-    real(kind=fp), pointer :: moG1(:,:,:,:)
+    real(kind=fp), pointer, contiguous :: mo(:,:,:,:)
+    real(kind=fp), pointer, contiguous :: moG1(:,:,:,:)
 
     call self%resetXCPointers( &
              xce, da, db, mo, moG1, myThread)
