@@ -175,7 +175,6 @@ UNIT_DRIVER = textwrap.dedent('''
 TERMINATE_DRIVER = textwrap.dedent('''
     import pathlib
     import sys
-    import threading
     import time
 
     from oqp.pyoqp import Runner
@@ -203,12 +202,13 @@ TERMINATE_DRIVER = textwrap.dedent('''
     runner = Runner(project="h2", input_file=str(inp), log=str(work / "h2.log"))
     runner.run()
 
-    started = []
-    lock = threading.Lock()
+    # Starts are recorded as files, so they are counted whether the pool runs
+    # its workers as threads or as processes.
+    marks = work / "started"
+    marks.mkdir()
 
     def failing_worker(task):
-        with lock:
-            started.append(task["idx"])
+        (marks / str(task["idx"])).touch()
         if task["idx"] == 0:
             raise RuntimeError("displacement worker failure")
         time.sleep(0.3)
@@ -225,6 +225,7 @@ TERMINATE_DRIVER = textwrap.dedent('''
     # all of them within this wait; a terminated one starts at most the one
     # the worker thread had already taken.
     time.sleep(4.0)
+    started = sorted(int(m.name) for m in marks.iterdir())
     assert len(started) <= 2, started
     print("DISPLACEMENT_POOL_OK")
 ''')
