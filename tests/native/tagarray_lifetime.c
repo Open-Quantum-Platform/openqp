@@ -72,19 +72,41 @@ static void allocation_failure(void *container,
     CHECK(getrlimit(RLIMIT_AS, &active) == 0);
     CHECK(active.rlim_cur == limited.rlim_cur);
     int32_t status = create(container, "failed_allocation", 10, 1, &count, NULL, "");
+    /* Establish refusal before passing the deliberately short source. An
+       unexpected successful NULL-source allocation must fail with the limit
+       restored, without proceeding to an invalid large copy input. */
+    if (status != -1) {
+        CHECK(setrlimit(RLIMIT_AS, &saved) == 0);
+        CHECK(status == -1);
+    }
+    /* Non-NULL initialized failure-path probe. This intentionally short
+       sentinel is not a full-sized success input; refusal must not try to
+       copy the requested payload from it. */
+    int32_t copy_status = create(container, "failed_copy_allocation", 10, 1, &count,
+                                 (const uint8_t *)sentinel, "");
     CHECK(setrlimit(RLIMIT_AS, &saved) == 0);
-    printf("TagArray allocation refusal: bytes=%lld limit=%llu status=%d\n",
+    printf("TagArray allocation refusal: bytes=%lld limit=%llu status=%d copy_status=%d\n",
            (long long)(count * (int64_t)sizeof(double)),
-           (unsigned long long)limited.rlim_cur, status);
-    CHECK(status == -1);
+           (unsigned long long)limited.rlim_cur, status, copy_status);
+    CHECK(status == -1 && copy_status == -1);
     RecordInfo absent = get(container, "failed_allocation");
     CHECK(absent.count < 0 && absent.data == NULL);
+    absent = get(container, "failed_copy_allocation");
+    CHECK(absent.count < 0 && absent.data == NULL);
+    CHECK(sentinel[0] == 3.0 && sentinel[1] == -2.0 && sentinel[2] == 5.0);
     RecordInfo preserved = get(container, "failure_sibling");
     CHECK(preserved.data == sibling.data && preserved.count == small);
-    CHECK(((double *)preserved.data)[0] == 3.0 && ((double *)preserved.data)[2] == 5.0);
+    CHECK(((double *)preserved.data)[0] == 3.0 &&
+          ((double *)preserved.data)[1] == -2.0 && ((double *)preserved.data)[2] == 5.0);
     CHECK(create(container, "failed_allocation", 10, 1, &small, NULL, "") == 0);
     RecordInfo recovered = get(container, "failed_allocation");
     CHECK(recovered.count == small && recovered.data != NULL);
+    CHECK(create(container, "failed_copy_allocation", 10, 1, &small,
+                 (const uint8_t *)sentinel, "") == 0);
+    recovered = get(container, "failed_copy_allocation");
+    CHECK(recovered.count == small && recovered.data != NULL);
+    CHECK(((double *)recovered.data)[0] == 3.0 &&
+          ((double *)recovered.data)[1] == -2.0 && ((double *)recovered.data)[2] == 5.0);
     puts("TagArray real allocation refusal and subsequent creation passed");
 }
 
