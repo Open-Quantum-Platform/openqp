@@ -34,6 +34,7 @@ typedef struct oqp_handle_t {
 void functional_owner_cache_compare(oqp_handle_t *a, oqp_handle_t *b,
                                     double *error, int *failed);
 int64_t functional_owner_cache_revision(oqp_handle_t *owner);
+void functional_owner_cache_clean(oqp_handle_t *owner);
 
 struct Cstring{
   int64_t length;

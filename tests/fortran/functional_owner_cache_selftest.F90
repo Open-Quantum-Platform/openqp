@@ -154,3 +154,15 @@ function functional_owner_cache_revision(owner) result(revision) bind(C)
   infos => oqp_handle_get_info(owner)
   revision = infos%functional%cache_revision
 end function functional_owner_cache_revision
+
+! The NMR production routine leaves its owner initialized for another property.
+subroutine functional_owner_cache_clean(owner) bind(C)
+  use c_interop, only: oqp_handle_t, oqp_handle_get_info
+  use types, only: information
+  use mod_dft, only: dftclean
+  implicit none
+  type(oqp_handle_t), intent(in) :: owner
+  type(information), pointer :: infos
+  infos => oqp_handle_get_info(owner)
+  call dftclean(infos)
+end subroutine functional_owner_cache_clean

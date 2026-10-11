@@ -12,6 +12,7 @@ class FunctionalOwnerCache(unittest.TestCase):
         from oqp.pyoqp import Runner
 
         revision = oqp.lib.functional_owner_cache_revision
+        cleanup = oqp.lib.functional_owner_cache_clean
         with tempfile.TemporaryDirectory() as tmp:
             runner = Runner(project='nmr_owner', input_file=None, input_dict={
                 'input': {'system': 'O .03 .11 0\nH .21 0 .97\nH .94 .08 -.24',
@@ -22,19 +23,22 @@ class FunctionalOwnerCache(unittest.TestCase):
                 'dftgrid': {'rad_npts': '24', 'ang_npts': '50'},
                 'properties': {'scf_prop': 'nmr', 'nmr_gauge': 'giao'},
             }, log=str(Path(tmp)/'nmr.log'), silent=1, usempi=False)
-            runner.run(test_mod=True)
-            owner_revision = revision(runner.mol.data._data)
-            before = {key: np.array(runner.mol.data[key], copy=True) for key in (
-                'OQP::nmr_shielding', 'OQP::nmr_pdens')}
-            # Repeated property evaluation uses the ordinary production dispatch.
-            # Copy native views before the next call replaces their backing data.
-            for _ in range(2):
-                compute_scf_prop(runner.mol)
-                self.assertEqual(revision(runner.mol.data._data), owner_revision)
-                for key, expected in before.items():
-                    current = np.array(runner.mol.data[key], copy=True)
-                    self.assertTrue(np.isfinite(current).all(), key)
-                    self.assertLessEqual(np.max(np.abs(current-expected)), 1e-10, key)
+            try:
+                runner.run(test_mod=True)
+                owner_revision = revision(runner.mol.data._data)
+                before = {key: np.array(runner.mol.data[key], copy=True) for key in (
+                    'OQP::nmr_shielding', 'OQP::nmr_pdens')}
+                # Repeated property evaluation uses the ordinary production dispatch.
+                # Copy native views before the next call replaces their backing data.
+                for _ in range(2):
+                    compute_scf_prop(runner.mol)
+                    self.assertEqual(revision(runner.mol.data._data), owner_revision)
+                    for key, expected in before.items():
+                        current = np.array(runner.mol.data[key], copy=True)
+                        self.assertTrue(np.isfinite(current).all(), key)
+                        self.assertLessEqual(np.max(np.abs(current-expected)), 1e-10, key)
+            finally:
+                cleanup(runner.mol.data._data)
 
     def test_signed_xc_fock_and_owner_lifetime(self):
         import oqp
