@@ -30,6 +30,34 @@ def _scalar(value):
     return float(np.real_if_close(value))
 
 
+@pytest.mark.parametrize(
+    "ci, message",
+    [([1.0], "length must match"),
+     ([1.0, 0.0, 0.0], "length must match"),
+     ([[1.0, 0.0]], "one-dimensional")],
+)
+def test_string_rdms_reject_invalid_ci_buffer_before_native_call(monkeypatch, ci, message):
+    from oqp.library import rdm
+
+    calls = []
+
+    class Native:
+        def rdm12_strings_c(self, *args):
+            calls.append(args)
+            raise AssertionError("Invalid CI buffer reached the native RDM reader")
+
+    class FFI:
+        def cast(self, typename, address):
+            return address
+
+    monkeypatch.setattr(rdm, "_rdm_backend", lambda: (Native(), FFI()))
+    monkeypatch.setattr(rdm, "_rdm_lib_threads", lambda: 1)
+    # Canonical CAS(1,2) alpha strings: the native reader expects two doubles.
+    with pytest.raises(ValueError, match=message):
+        rdm.make_rdm12_spatial_strings(ci, [1, 2], 2)
+    assert calls == []
+
+
 def test_spinorb_and_spatial_rdms_for_single_determinant_are_exact():
     from oqp.library.rdm import (
         make_rdm1_spatial,

@@ -138,7 +138,9 @@ def make_rdm12_spatial_strings(coeff, dets, norb):
     lib, ffi = backend
     if not hasattr(lib, "rdm12_strings_c"):
         return None
-    coeff = np.asarray(coeff)
+    # The native assumed-size CI buffer has no length descriptor. Validate
+    # before passing its pointer, just as the default spatial builders do.
+    coeff, dets, _ = _validate_ci_inputs(coeff, dets, 2 * int(norb))
     if np.iscomplexobj(coeff):
         return None
     det_arr = _as_i64c(dets)
