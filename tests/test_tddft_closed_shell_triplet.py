@@ -15,6 +15,7 @@ f_aa - f_ab XC kernel.  Checks:
 Before the triplet branch existed, [tdhf] multiplicity=3 was rejected by the
 input checker, so every case here fails without it.
 """
+import json
 import os
 import re
 import subprocess
@@ -212,14 +213,17 @@ C2H4 = ("   C 0.000000 0.000000 0.669500\n   C 0.000000 0.000000 -0.669500\n"
         "   H 0.000000 0.928900 -1.232100\n   H 0.000000 -0.928900 -1.232100\n")
 
 
-def _full_log(text):
+def _full_log(text, want_json=False):
     with tempfile.TemporaryDirectory() as tmp:
         (Path(tmp) / "job.inp").write_text(text)
         env = dict(os.environ, OMP_NUM_THREADS="2")
         proc = subprocess.run([sys.executable, "-m", "oqp.pyoqp", "job.inp"], cwd=tmp, env=env,
                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=600)
         log = (Path(tmp) / "job.log").read_text(errors="ignore") if (Path(tmp) / "job.log").exists() else ""
-        return proc.returncode, log
+        if not want_json:
+            return proc.returncode, log
+        jpath = Path(tmp) / "job.json"
+        return proc.returncode, log, (json.loads(jpath.read_text()) if jpath.exists() else None)
 
 
 @unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime unavailable")
@@ -235,8 +239,16 @@ class TestImaginaryRpaRoots(unittest.TestCase):
             "method=tdhf\n", "method=tdhf\nispher=true\n")
 
     def test_unstable_rpa_triplet_root_is_marked_imaginary(self):
-        rc, log = _full_log(self._deck(C2H4, "rpa"))
+        text = self._deck(C2H4, "rpa").replace("type=huckel\n", "type=huckel\nsave_mol=true\n")
+        rc, log, res = _full_log(text, want_json=True)
         self.assertEqual(rc, 0, log[-3000:])
+        # saved results: status per root, no energy for the imaginary state
+        self.assertIsNotNone(res, log[-2000:])
+        self.assertEqual(res.get("td_imaginary"), [1])
+        self.assertIsNone(res["td_energies"][0])
+        self.assertTrue(all(e is not None and e > 0 for e in res["td_energies"][1:]))
+        self.assertIsNone(res["energies"][1])
+        self.assertTrue(all(e is not None for e in res["energies"][2:]))
         summary = log.split("Summary of the TD-DFT calculation")[-1]
         rows = re.findall(r"^\s*0 ->\s*(\d+)\s+(\S+)", summary, re.M)
         self.assertEqual(len(rows), 3, summary[:1500])

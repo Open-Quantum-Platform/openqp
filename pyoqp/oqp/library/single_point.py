@@ -1232,6 +1232,12 @@ class SinglePoint(Calculator):
                 flags = ()
             self.mol.td_imaginary_states = tuple(
                 n + 1 for n, flag in enumerate(flags) if flag > 0.5)
+        # The solver never converges an imaginary root and has no energy for
+        # it: keep the unconverged |omega| out of the state energies (NaN), and
+        # let get_results() publish the per-root status.
+        for n in self.mol.td_imaginary_states:
+            if n < len(energies):
+                energies[n] = float('nan')
 
         self.mol.energies = energies
 
