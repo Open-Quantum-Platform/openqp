@@ -65,8 +65,22 @@ def test_multiset_reaches_action_and_pins_old_cross_terms(
         assert nstate == 3
         # First nstate rotations form each reference; the following rotations
         # are the two bra/ket directions for each ordered off-diagonal pair.
+        assert len(rotations) == nstate + 2 * nstate * (nstate - 1)
+        reference_vectors = rotations[:nstate]
         cross_rotations = iter(rotations[nstate:])
-        pinned = result["heff"].copy()
+        pinned = np.empty_like(result["heff"])
+        # Evaluate each diagonal from its own Hamiltonian and CI vectors;
+        # neither a returned Heff diagonal nor a returned e2 is the reference.
+        for i, ref in enumerate(reference_vectors):
+            hi, bi, _ = actions[i]
+            href = hi @ ref
+            reference_energy = ref @ href
+            correction = bi @ href
+            pinned[i, i] = reference_energy + correction
+            np.testing.assert_allclose(result["ref_energies"][i], reference_energy,
+                                       rtol=0, atol=1e-12)
+            np.testing.assert_allclose(result["e2"][i], correction,
+                                       rtol=0, atol=1e-12)
         for i in range(nstate):
             for j in range(nstate):
                 if i == j:
@@ -82,20 +96,25 @@ def test_multiset_reaches_action_and_pins_old_cross_terms(
         # Snapshots are owned by the test; the production matrix itself must
         # no longer be retained after each state's action has been formed.
         assert all(ref() is None for _, _, ref in actions)
-        return result
+        return result, reference_vectors
 
     def driver(*args, **kwargs):
-        result = run_and_pin(args, kwargs)
-        # The old contraction pin copies the returned diagonal, so it cannot
-        # by itself check which root owns each diagonal correction. Reorder
-        # the roots on exactly the same integral/orbital inputs and require
-        # the signed matrix and state-specific outputs to follow that order.
+        result, reference_vectors = run_and_pin(args, kwargs)
+        # Also check which root owns each diagonal correction. Reorder the
+        # roots on exactly the same integral/orbital inputs and require the
+        # signed matrix and state-specific outputs to follow that order.
         roots = args[10]
         assert list(roots) == [0, 1, 2]
         permutation = np.array([2, 0, 1])
         reordered_args = (*args[:10], [roots[i] for i in permutation], *args[11:])
-        reordered = run_and_pin(reordered_args, kwargs)
-        assert np.ptp(result["ref_energies"]) > 1e-4
+        reordered, reordered_vectors = run_and_pin(reordered_args, kwargs)
+        # This fixture tests distinct roots, whose vectors retain the same
+        # canonical CI phase. It does not establish identity within a
+        # degenerate subspace, where eigenvectors can mix as well as change sign.
+        assert np.min(np.diff(np.sort(result["ref_energies"]))) > 1e-4
+        for i, ref in enumerate(reordered_vectors):
+            np.testing.assert_allclose(ref, reference_vectors[permutation[i]],
+                                       rtol=0, atol=1e-12)
         if asymmetric:
             # In the uniform chain these two couplings vanish by symmetry,
             # which makes their sign unobservable. This input must exercise
@@ -110,6 +129,15 @@ def test_multiset_reaches_action_and_pins_old_cross_terms(
                                        rtol=0, atol=1e-12)
         np.testing.assert_allclose(reordered["ms_energies"], result["ms_energies"],
                                    rtol=0, atol=1e-12)
+        assert np.min(np.diff(result["ms_energies"])) > 1e-4
+        mixing = reordered["mixing"][np.argsort(permutation)]
+        # MS eigenvector signs are arbitrary; compare the rank-one projectors
+        # after restoring the original root basis, without changing Heff signs.
+        for i in range(3):
+            np.testing.assert_allclose(
+                np.outer(mixing[:, i], mixing[:, i]),
+                np.outer(result["mixing"][:, i], result["mixing"][:, i]),
+                rtol=0, atol=1e-12)
         references.extend(result["ms_energies"])
         return result
 
