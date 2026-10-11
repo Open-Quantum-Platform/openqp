@@ -31,7 +31,12 @@ subroutine occupied_cofactors_selftest(n, s, actual, previous, used_lu) bind(C)
   infos%basis%nbf = nbf
   infos%mol_prop%nelec_a = int(n)
   infos%mol_prop%nelec_b = nbf-nvir
+  ! mrsf_tlf may create debug records; this local information owns them.
+  call infos%dat%new('occupied_cofactors_selftest')
+  if (.not. infos%dat%is_allocated()) error stop 'Cannot allocate selftest container'
   call mrsf_tlf(infos, full_s, actual, ab, ia, 0)
+  ! Returned arrays are caller-owned and independent of the debug records.
+  call infos%dat%delete()
   call occupied_cofactors(s, direct, batch)
   if (any(actual /= direct)) error stop 'mrsf_tlf did not return occupied cofactors'
   used_lu = 0_c_int

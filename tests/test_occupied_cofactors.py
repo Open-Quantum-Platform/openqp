@@ -233,3 +233,22 @@ def test_repeated_production_dispatch_dimensions():
         np.testing.assert_allclose(actual, previous, rtol=2e-13, atol=1e-15)
         if n <= 6:
             np.testing.assert_array_equal(actual, previous)
+
+
+def test_debug_export_owns_its_temporary_container(monkeypatch):
+    monkeypatch.setenv("NAC_DUMP_MINORS", "1")
+    retained = []
+    for n in (6, 7, 6):
+        s = np.eye(n) + np.arange(n*n).reshape(n, n) * 0.002
+        actual, previous, used = _call(s)
+        assert used is (n > 6)
+        assert actual.flags.owndata and previous.flags.owndata
+        assert not np.shares_memory(actual, previous)
+        np.testing.assert_allclose(actual, previous, rtol=2e-13, atol=1e-15)
+        if n <= 6:
+            np.testing.assert_array_equal(actual, previous)
+        retained.append((actual, actual.copy(), previous, previous.copy()))
+    # Every native container is already deleted, and a later call resized it.
+    for actual, saved_actual, previous, saved_previous in retained:
+        np.testing.assert_array_equal(actual, saved_actual)
+        np.testing.assert_array_equal(previous, saved_previous)
