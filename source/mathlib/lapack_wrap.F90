@@ -199,6 +199,7 @@ subroutine oqp_dgetrf_i64(m, n, a, lda, ipiv, info)
     lda_ = int(lda, blas_int)
     ! ipiv is an output: do not read uninitialized caller storage.
     allocate(ipiv_(min(m_,n_)))
+    ipiv_ = 0
     ! Call LAPACK routine dgetrf to perform LU factorization
     call dgetrf(m_, n_, a, lda_, ipiv_, info_)
     ipiv = int(ipiv_, kind(ipiv))
@@ -215,6 +216,8 @@ subroutine oqp_dgecon_i64(norm, n, a, lda, anorm, rcond, work, iwork, info)
     real(dp), intent(out) :: rcond, work(*)
     integer, intent(out) :: iwork(n), info
     integer(blas_int) :: iwork_(n), info_
+    ! LAPACK quick/scaling returns need not write integer scratch.
+    iwork_ = 0
     call dgecon(norm, int(n,blas_int), a, int(lda,blas_int), anorm, rcond, work, iwork_, info_)
     iwork = int(iwork_,kind(iwork))
     info = int(info_,kind(info))
