@@ -12,6 +12,7 @@ Runs only with mpi4py and an MPI launcher.  ``OQP_REQUIRE_MPI_TESTS=1`` (set
 in the CI MPI leg) turns the skip into a failure, so a broken MPI environment
 cannot pass silently.
 """
+import json
 import os
 import re
 import shutil
@@ -111,6 +112,47 @@ class TestLauncherProbe(unittest.TestCase):
 
         with mock.patch("builtins.__import__", side_effect=fake_import):
             self.assertIsNone(_launcher())
+
+
+class TestTripletGradientUnderMpi(unittest.TestCase):
+    """The triplet gradient (utddft_fxc, utddft_gxc, utddft_xc_gradient with
+    the f_xc moving-grid term) at 2 ranks equals the serial gradient."""
+
+    def setUp(self):
+        self.launcher = _launcher()
+        if self.launcher is None:
+            if REQUIRED:
+                self.fail("OQP_REQUIRE_MPI_TESTS=1 but mpi4py, oqp or an MPI launcher is missing")
+            self.skipTest("mpi4py, the compiled OpenQP runtime and an MPI launcher are needed")
+
+    def _grad(self, td_type, nrank):
+        text = _deck("b3lypv5", td_type, 3)
+        text = text.replace("runtype=energy", "runtype=grad").replace(
+            "[guess]\ntype=huckel\n", "[guess]\ntype=huckel\nsave_mol=true\n")
+        text += "\n[properties]\ngrad=1\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "job.inp").write_text(text)
+            env = dict(os.environ, OMP_NUM_THREADS="1")
+            cmd = [sys.executable, "-m", "oqp.pyoqp", "job.inp"]
+            if nrank > 1:
+                cmd = [self.launcher, "-n", str(nrank), "--oversubscribe", "--bind-to", "none"] + cmd
+            proc = subprocess.run(cmd, cwd=tmp, env=env, stdout=subprocess.PIPE,
+                                  stderr=subprocess.STDOUT, timeout=900)
+            res = Path(tmp) / "job.json"
+            data = json.loads(res.read_text()) if res.exists() else {}
+            return proc.returncode, data.get("grad"), proc.stdout.decode(errors="ignore")[-1500:]
+
+    def test_triplet_gradient_independent_of_rank_count(self):
+        for td_type in ("tda", "rpa"):
+            with self.subTest(td=td_type):
+                rc0, g0, d0 = self._grad(td_type, 1)
+                rc2, g2, d2 = self._grad(td_type, 2)
+                self.assertEqual(rc0, 0, d0)
+                self.assertEqual(rc2, 0, d2)
+                self.assertIsNotNone(g0, d0)
+                self.assertIsNotNone(g2, d2)
+                for a, b in zip(g0, g2):
+                    self.assertAlmostEqual(a, b, delta=1e-7)
 
 
 if __name__ == "__main__":

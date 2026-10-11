@@ -1081,6 +1081,22 @@ contains
                 ff_s, &
                 g_r, g_s, g_t)
 
+        if (dat%do_weight_derivative) then
+          ! Second variation of the XC energy along the spin-resolved
+          ! rho(X+Y) (both spins), the integrand whose quadrature weights move
+          ! with the nuclei; spin-resolved form of the grad_f_xc_np term:
+          !   f_r.rho_X + f_s.sigma_X + d_s.sigma_XX [+ f_t.tau_X].
+          dat%probe_value(i,j,mythread) = dat%probe_value(i,j,mythread) &
+                                      + dot_product(f_r,rhoab)
+          if (xce%funTyp /= OQP_FUNTYP_LDA) &
+            dat%probe_value(i,j,mythread) = dat%probe_value(i,j,mythread) &
+                                        + dot_product(f_s,sigma) &
+                                        + dot_product(d_s,ssigma)
+          if (xce%funTyp == OQP_FUNTYP_MGGA) &
+            dat%probe_value(i,j,mythread) = dat%probe_value(i,j,mythread) &
+                                        + dot_product(f_t,tauab)
+        end if
+
 !        if (maxval(abs([dsaa,dsbb,dsab,dsba]))<xce%threshold) then
 !          f_s = 0
 !          g_s = 0
@@ -1202,7 +1218,7 @@ contains
     type(response_cache_t), target, intent(inout), optional :: cache
 
     integer :: i, j, imtx, nbf, nxcder
-    logical :: doFxc, requested_weight_derivative, requested_weight_only
+    logical :: doFxc, requested_weight_derivative, requested_weight_only, with_ground
     real(kind=fp) :: shell_gradient(3)
 
     nbf = ubound(da,1)
@@ -1213,9 +1229,14 @@ contains
     requested_weight_only = .false.
     if (present(weight_derivative_only)) &
       requested_weight_only = weight_derivative_only
-    if (requested_weight_derivative .and. doFxc) &
-      call show_message('XC moving-grid response is available only for '// &
-                        'the linear-probe branch (xa/xb absent).', with_abort)
+    ! With xa/xb the moving-grid response covers the f_xc term (grad_f_xc);
+    ! the ground state must then be excluded and handled by its own sweep,
+    ! as for the linear probe.
+    with_ground = .true.
+    if (present(include_ground_state)) with_ground = include_ground_state
+    if (requested_weight_derivative .and. doFxc .and. with_ground) &
+      call show_message('XC moving-grid response with xa/xb requires '// &
+                        'include_ground_state=.false. (separate reference sweep).', with_abort)
     if (requested_weight_only .and. .not. requested_weight_derivative) &
       call show_message('XC weight_derivative_only requires '// &
                         'include_weight_derivative=.true..', with_abort)
