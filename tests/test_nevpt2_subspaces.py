@@ -237,9 +237,9 @@ def test_checked_f3_failure_reaches_python(monkeypatch, status):
         sc._f3ca_f3ac(np.zeros((1,)*4), np.zeros((1,)*8))
 
 
-def test_actual_native_allocation_failures_and_recovery(tmp_path):
-    """Fail each f3 scratch allocation and the fused dm4, then reuse the library."""
-    import os
+@pytest.fixture
+def malloc_fault_shim(tmp_path):
+    """Compile the startup-loaded, glibc-only allocation interceptor."""
     import platform
     import subprocess
     import sys
@@ -249,7 +249,49 @@ def test_actual_native_allocation_failures_and_recovery(tmp_path):
     shim = tmp_path / 'malloc_fault.so'
     source = Path(__file__).with_name('native_malloc_fault.c')
     subprocess.run(['cc', '-shared', '-fPIC', '-O0', str(source),
-                    '-o', str(shim)], check=True, capture_output=True)
+                    '-o', str(shim), '-ldl'], check=True, capture_output=True)
+    return shim
+
+
+def test_malloc_fault_shim_survives_late_tls_modules(malloc_fault_shim, tmp_path):
+    """Growing glibc's DTV must not recurse through the allocator interceptor."""
+    import os
+    import shutil
+    import subprocess
+    import sys
+
+    source = tmp_path / 'late_tls.c'
+    source.write_text('static _Thread_local volatile int value;\n'
+                      'int touch_tls(void) { return ++value; }\n')
+    module = tmp_path / 'late_tls.so'
+    subprocess.run(['cc', '-shared', '-fPIC', '-O0', str(source),
+                    '-o', str(module)], check=True, capture_output=True)
+    # Each distinct object gets a TLS module ID. Exceed the loader's initial
+    # spare DTV slots without relying on a particular BLAS library's TLS use.
+    modules = [tmp_path / f'late_tls_{i}.so' for i in range(64)]
+    for path in modules:
+        shutil.copyfile(module, path)
+    program = r"""
+import ctypes, sys
+objects = [ctypes.CDLL(path) for path in sys.argv[1:]]
+for obj in objects:
+    obj.touch_tls.restype = ctypes.c_int
+    assert obj.touch_tls() == 1
+    assert obj.touch_tls() == 2
+"""
+    env = os.environ.copy()
+    env['LD_PRELOAD'] = str(malloc_fault_shim)
+    run = subprocess.run([sys.executable, '-c', program, *map(str, modules)],
+                         env=env, text=True, capture_output=True, timeout=30)
+    assert run.returncode == 0, run.stdout + run.stderr
+
+
+def test_actual_native_allocation_failures_and_recovery(malloc_fault_shim):
+    """Fail each f3 scratch allocation and the fused dm4, then reuse the library."""
+    import os
+    import subprocess
+    import sys
+
     program = r"""
 import ctypes, sys
 import numpy as np
@@ -259,6 +301,14 @@ fault = ctypes.CDLL(sys.argv[1])
 fault.oqp_test_arm_malloc.argtypes = [ctypes.c_size_t, ctypes.c_int]
 fault.oqp_test_malloc_failures.restype = ctypes.c_int
 lib, ffi = sc._koopmans_lib()
+fault.oqp_test_set_malloc_owner.argtypes = [ctypes.c_void_p]
+fault.oqp_test_set_malloc_owner.restype = ctypes.c_int
+owner = int(ffi.cast('uintptr_t', lib.nevpt2_f3ca_f3ac_checked))
+assert fault.oqp_test_set_malloc_owner(owner) == 1
+outside = ctypes.CDLL(None)
+outside.malloc.argtypes = [ctypes.c_size_t]
+outside.malloc.restype = ctypes.c_void_p
+outside.free.argtypes = [ctypes.c_void_p]
 n = 3
 rng = np.random.default_rng(470)
 g = rng.normal(size=(n,)*4)
@@ -270,6 +320,11 @@ assert int(lib.nevpt2_f3ca_f3ac_checked(*args)) == 0
 expected = fca.copy(), fac.copy()
 for ordinal in range(3):
     fault.oqp_test_arm_malloc(8*n**4, ordinal)
+    # A same-size allocation outside liboqp must not consume the fault ordinal.
+    other = outside.malloc(8*n**4)
+    assert other is not None
+    outside.free(other)
+    assert fault.oqp_test_malloc_failures() == 0
     assert int(lib.nevpt2_f3ca_f3ac_checked(*args)) == -1, ordinal
     assert fault.oqp_test_malloc_failures() == 1, ordinal
     fault.oqp_test_arm_malloc(0, -1)
@@ -288,8 +343,8 @@ fault.oqp_test_arm_malloc(0, -1)
 assert int(lib.nevpt2_make_f3(*fargs)) == 0
 """
     env = os.environ.copy()
-    env['LD_PRELOAD'] = str(shim)
-    run = subprocess.run([sys.executable, '-c', program, str(shim)],
+    env['LD_PRELOAD'] = str(malloc_fault_shim)
+    run = subprocess.run([sys.executable, '-c', program, str(malloc_fault_shim)],
                          env=env, text=True, capture_output=True, timeout=60)
     assert run.returncode == 0, run.stdout + run.stderr
 
