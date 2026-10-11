@@ -227,12 +227,6 @@ jobs:
             name: tagarray-memory-${{ github.run_id }}-${{ github.run_attempt }}
             path: tagarray-memory/
             if-no-files-found: ignore
-         # The example suite above validates numerical references end to end, but
-         # it never touches the pure-Python layer -- the tests/ pytest suite was
-         # not executed by CI at all, so everything under pyoqp/oqp (the analysis
-         # toolkit, the interop/export APIs, the input handling) could regress
-         # silently. Run it on one leg: it is Python-only, so a second OS or the
-         # MPI leg would re-run identical assertions against the same code.
          - name: Pin CASPT2 direct engines on two MPI ranks
            timeout-minutes: 5
            if: ${{ matrix.MPI == 'ON' && matrix.os == 'ubuntu-24.04' }}
@@ -246,6 +240,12 @@ jobs:
             test -n "$ddx_lib"
             export LD_LIBRARY_PATH="$(dirname "$ddx_lib"):${LD_LIBRARY_PATH:-}"
             mpiexec --oversubscribe -n 2 python -m mpi4py tests/caspt2_direct_mpi.py "$(mktemp -d)"
+         # The example suite above validates numerical references end to end, but
+         # it never touches the pure-Python layer -- the tests/ pytest suite was
+         # not executed by CI at all, so everything under pyoqp/oqp (the analysis
+         # toolkit, the interop/export APIs, the input handling) could regress
+         # silently. Run it on one leg: it is Python-only, so a second OS or the
+         # MPI leg would re-run identical assertions against the same code.
          - name: Run Python test suite
            if: ${{ matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
            env:

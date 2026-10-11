@@ -13,17 +13,73 @@ _CAS = {"active_electrons": "2", "active_orbitals": "2", "frozen_core": "1",
 
 
 @pytest.mark.parametrize("engine", ["direct", "python", "fortran"])
-def test_options_and_preflight_accept_single_state_energy(engine):
+@pytest.mark.parametrize("h0", [None, "fock", "caspt2"])
+def test_options_and_preflight_accept_single_state_energy(engine, h0):
     from oqp.library.caspt2_dyall import _caspt2_options
     from oqp.utils.input_checker import CheckReport, _check_pt2
 
     config = {"input": {"method": "caspt2", "runtype": "energy"},
               "pt2": {"engine": engine, "reference": "casci"}}
+    if h0 is not None:
+        config["pt2"]["h0"] = h0
     options = _caspt2_options(config)
     assert options.engine == ("direct" if engine == "python" else engine)
+    assert options.h0 == "fock"
     report = CheckReport()
     _check_pt2(config, report)
     assert not [item for item in report.diagnostics if item.severity == "ERROR"]
+
+
+@pytest.mark.parametrize("engine", ["direct", "python", "fortran"])
+@pytest.mark.parametrize("runtype", [None, "energy", "grad", "optimize"])
+def test_schema_preserves_runtype_before_direct_validation(engine, runtype):
+    from oqp.library.caspt2_dyall import _caspt2_options
+    from oqp.molecule.oqpdata import OQP_CONFIG_SCHEMA
+    from oqp.utils.input_checker import CheckReport, _check_pt2
+    from oqp.utils.input_parser import OQPConfigParser
+
+    parser = OQPConfigParser(schema=OQP_CONFIG_SCHEMA)
+    raw = {"input": {"method": "caspt2", "system": _H4},
+           "pt2": {"reference": "casci", "engine": engine}}
+    if runtype is not None:
+        raw["input"]["runtype"] = runtype
+    parser.load_dict(raw)
+    config = parser.validate()
+    assert config["input"]["runtype"] == (runtype or "energy")
+    report = CheckReport()
+    _check_pt2(config, report)
+    engine_errors = [item for item in report.diagnostics
+                     if item.severity == "ERROR" and item.path == "pt2.engine"]
+    if runtype in {"grad", "optimize"}:
+        assert engine_errors
+        with pytest.raises(ValueError, match="single-state CASPT2 energy"):
+            _caspt2_options(config)
+    else:
+        assert not engine_errors
+        assert _caspt2_options(config).h0 == "fock"
+
+
+@pytest.mark.parametrize("engine", ["direct", "python", "fortran", "dense"])
+@pytest.mark.parametrize("targets", ["", "0", "1", "0,1"])
+def test_single_state_target_count_matches_runtime(engine, targets):
+    from oqp.library.caspt2_dyall import _caspt2_options, _reference_roots
+    from oqp.utils.input_checker import CheckReport, _check_pt2
+
+    config = {"input": {"method": "caspt2", "runtype": "energy"},
+              "ci": {"nroot": 2},
+              "pt2": {"engine": engine, "reference": "casci",
+                      "target_roots": targets}}
+    options = _caspt2_options(config)
+    report = CheckReport()
+    _check_pt2(config, report)
+    errors = [item for item in report.diagnostics if item.severity == "ERROR"]
+    if targets == "0,1":
+        assert any(item.path == "pt2.target_roots" for item in errors)
+        with pytest.raises(ValueError, match="single-state"):
+            _reference_roots(options)
+    else:
+        assert not errors
+        assert _reference_roots(options) == [int(targets or "0")]
 
 
 @pytest.mark.parametrize("changes", [

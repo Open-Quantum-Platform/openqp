@@ -5406,6 +5406,15 @@ def _check_pt2(config: dict[str, Any], report: CheckReport) -> None:
             value=target_roots,
             action="Remove duplicate PT2 root slots.",
         )
+    if normalized_variant == "caspt2" and len(parsed_target_roots) > 1:
+        report.add(
+            "ERROR",
+            "pt2.target_roots",
+            "Single-state PT2 corrects exactly one target root at a time.",
+            value=target_roots,
+            expected="one root slot (or leave unset for root 0)",
+            action="Select one target root, or use a multistate PT2 method.",
+        )
     # A one-element explicit list passes the count/bounds checks below, and
     # _reference_roots then honours it -- so the runtime diagonalises a 1x1
     # effective Hamiltonian and still reports an MS/XMS result.
