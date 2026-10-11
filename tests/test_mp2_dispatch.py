@@ -15,6 +15,25 @@ import pytest
 import oqp
 from oqp.pyoqp import Runner
 
+
+def _assert_bounds_runtime():
+    record = os.environ.get('OQP_MP2_BOUNDS_RECORD')
+    if os.environ.get('OQP_REQUIRE_MP2_BOUNDS') == '1':
+        assert record, 'CI must provide the MP2 bounds-checked package record'
+    if record:
+        import runpy
+        from oqp.runtime import library_path
+        guard = runpy.run_path(str(Path(__file__).with_name('native') / 'check_mp2_bounds_build.py'))
+        assert oqp.RTLD, 'bounds evidence requires the recorded package dlopen path'
+        # Use the root retained at import/dlopen time, not a fresh resolution
+        # that could follow an environment change after the library was loaded.
+        guard['assert_runtime'](record, library_path(oqp.oqp_root, oqp.suffix))
+
+
+@pytest.fixture(scope='module', autouse=True)
+def bounds_checked_runtime():
+    _assert_bounds_runtime()
+
 WATER = 'O 0 0 0; H 0 .757 .587; H 0 -.757 .587'
 OH = 'O 0 0 0; H 0 0 .97'
 COMPONENTS = r'E\(MP2, (?:same-spin aa|same-spin bb|opp-spin  ab|correlation|total)\)\s*=\s*([-+0-9.eE]+)'
@@ -382,6 +401,7 @@ def test_n5_pin_on_production_integrals(tmp_path, monkeypatch, scf, mult, atoms)
     np.testing.assert_allclose(result[:4], [eaa, ebb, eab, eaa+ebb+eab+sa+sb], rtol=0, atol=1e-9)
 
 if __name__ == '__main__':
+    _assert_bounds_runtime()
     if sys.argv[2] == 'threads':
         _thread_child(Path(sys.argv[1]), int(sys.argv[3]))
     else:

@@ -19,6 +19,7 @@ def worker(directory, stage, library):
     comm = MPI.COMM_WORLD
     assert comm.Get_size() == 2
     tests = runpy.run_path(str(ROOT / 'test_mp2_dispatch.py'))
+    tests['_assert_bounds_runtime']()
     tests['_allocation_child'](Path(directory), stage, library, comm=comm, fault_rank=1)
     comm.Barrier()
     if comm.Get_rank() == 0:
@@ -31,10 +32,13 @@ def memory_worker(directory, case):
     import numpy as np
     import oqp
     comm = MPI.COMM_WORLD
-    local = comm.Split_type(MPI.COMM_TYPE_SHARED)
-    assert local.Get_size() == comm.Get_size(), 'test requires one node'
-    local.Free()
+    # Shared-memory splits can return singleton groups on one physical node.
+    # Establish this fixture's co-location independently; production budgets
+    # use the conservative world count rather than trusting that split.
+    processors = comm.allgather(MPI.Get_processor_name())
+    assert len(set(processors)) == 1, 'test requires one processor identity'
     tests = runpy.run_path(str(ROOT / 'test_mp2_dispatch.py'))
+    tests['_assert_bounds_runtime']()
     runner, log = tests['_run'](Path(directory), 'memory', method='hf', usempi=True)
     reference_energy = runner.mol.data._data.mol_energy.energy
     os.environ['OQP_MP2_MAX_JBUILDS'] = '4000'

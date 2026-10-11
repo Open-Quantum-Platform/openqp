@@ -48,6 +48,16 @@ endif()
 message(STATUS ${SOURCES})
 message(STATUS "CMAKE_INSTALL_LIBDIR = ${CMAKE_INSTALL_LIBDIR}")
 add_library(oqp ${SOURCES})
+# Instrument the actual MP2 implementation without changing external-library
+# compiler flags or their cache key. This is a build diagnostic, not a method.
+option(OQP_MP2_BOUNDS_CHECK "Check production MP2 array bounds" OFF)
+if(OQP_MP2_BOUNDS_CHECK)
+  if(NOT CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
+    message(FATAL_ERROR "OQP_MP2_BOUNDS_CHECK requires GNU Fortran")
+  endif()
+  set_property(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/mp2_lib.F90"
+               APPEND PROPERTY COMPILE_OPTIONS "-fcheck=bounds")
+endif()
 # The log banner prints this; PROJECT_VERSION comes from the VERSION in the
 # top-level project() call, which the release-metadata test keeps in sync with
 # pyproject.toml.

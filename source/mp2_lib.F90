@@ -222,8 +222,9 @@ contains
 
     success = .false.
     ! The memory probe and explicit budget apply to a node. Each rank owns
-    ! its transformation arrays; count only ranks sharing this node. This
-    ! communicator operation must precede every rank-dependent early return.
+    ! its transformation arrays. local_size supplies a conservative upper
+    ! bound using all communicator ranks, even if shared-node discovery fails.
+    ! Determine it before every rank-dependent early return.
     local_ranks = driver%pe%local_size()
     if (nocc_l <= 0 .or. nvir_l <= 0 .or. (.not. same_spin .and. .not. do_opposite)) then
       success = .true.
@@ -263,8 +264,9 @@ contains
               16.0_dp*npair) / 1.073741824e9_dp
     avail_gb = oqp_available_memory_gb()
     if (oqp_budget_includes_resident()) full_gb = full_gb + packed_bytes/1.073741824e9_dp
-    ! For a live probe the packed stores on all local ranks are already
+    ! For a live probe the packed stores on ranks on this node are already
     ! resident and subtracted. A flat budget must include them once per rank.
+    ! The communicator-wide multiplier can overestimate a multi-node budget.
     full_gb = real(local_ranks,dp)*full_gb
     do_full = avail_gb > 0.0_dp .and. full_gb < 0.25_dp*OQP_MEMORY_SAFETY_FRACTION*avail_gb
     ! A one-spin full tensor cannot represent distinct alpha/beta orbitals.
@@ -301,7 +303,7 @@ contains
                              same_spin, do_opposite, e_same, e_opp, success)
     type(par_env_t), intent(inout) :: pe
     integer, intent(in) :: nt, nbf, npair, nocc, nvir
-    real(dp), intent(in) :: g(*), cmo(nbf,nbf), energy(nbf)
+    real(dp), intent(in) :: g(:), cmo(nbf,nbf), energy(nbf)
     logical, intent(in) :: same_spin, do_opposite
     real(dp), intent(out) :: e_same, e_opp
     logical, intent(out) :: success
@@ -379,7 +381,7 @@ contains
                                 e_same, e_opp, success)
     type(par_env_t), intent(inout) :: pe
     integer, intent(in) :: nt, nbf, npair, nocc_l, nvir_l, nocc_o, nvir_o
-    real(dp), intent(in) :: g(*), cmo_l(nbf,nbf), e_l(nbf), cmo_o(nbf,nbf), e_o(nbf)
+    real(dp), intent(in) :: g(:), cmo_l(nbf,nbf), e_l(nbf), cmo_o(nbf,nbf), e_o(nbf)
     logical, intent(in) :: same_spin, do_opposite
     real(dp), intent(out) :: e_same, e_opp
     logical, intent(out) :: success
