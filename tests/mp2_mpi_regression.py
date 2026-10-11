@@ -81,8 +81,9 @@ def memory_worker(directory, case):
 
 
 def main(directory):
-    from mpi4py import MPI
-    assert MPI.COMM_WORLD.Get_size() == 1, 'launch the parent outside mpiexec'
+    # Only workers initialize MPI. Singleton MPI_Init in this launcher can
+    # stall before mpiexec, and initialized parents cannot safely spawn on
+    # every supported MPI runtime.
     launcher = shutil.which('mpiexec') or shutil.which('mpirun')
     assert launcher, 'MPI launcher required'
     assert sys.platform in ('linux', 'darwin'), 'native interposer platform unsupported'
