@@ -8,7 +8,8 @@ and the full suite runs after every merge to main (push trigger in CI.yml).
 
 Selection, from ``git diff --name-only BASE...HEAD``:
 
-* changed test files ``tests/test_*.py`` that still exist;
+* changed test files ``tests/test_*.py`` that still exist, and every test file
+  that names one (tests import helpers from other test modules);
 * for each changed Python module under ``pyoqp/oqp``, every test file whose
   source names the module (``oqp.a.b`` or its last component as a word);
 * for each changed native source under ``source/`` or ``include/``, every test
@@ -139,6 +140,9 @@ def select(paths):
         if re.match(r"^tests/test_[^/]+\.py$", p):
             if (ROOT / p).exists():
                 selected.add(ROOT / p)
+            # Test modules also serve helpers to other tests
+            # (``from test_symmetry_metadata import load_molecule_module``).
+            selected |= tests_naming({Path(p).stem}, sources)
             continue
         if p.startswith("pyoqp/oqp/") and p.endswith(".py"):
             mod = p[len("pyoqp/"):-len(".py")].replace("/", ".")

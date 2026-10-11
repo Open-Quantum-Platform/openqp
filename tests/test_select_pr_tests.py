@@ -34,6 +34,13 @@ class SelectPrTestsTests(unittest.TestCase):
             if (ROOT / smoke).exists():
                 self.assertIn(smoke, chosen)
 
+    def test_changed_test_module_selects_the_tests_that_import_it(self):
+        chosen = self.sel.select(["tests/test_symmetry_metadata.py"])
+        self.assertIsNotNone(chosen)
+        for importer in ("tests/test_full_group_tier_declines_for_dft.py",
+                         "tests/test_response_symmetry_staging_gates.py"):
+            self.assertIn(importer, chosen)
+
     def test_python_module_change_selects_tests_that_name_it(self):
         chosen = self.sel.select(["pyoqp/oqp/utils/input_checker.py"])
         self.assertIsNotNone(chosen)
