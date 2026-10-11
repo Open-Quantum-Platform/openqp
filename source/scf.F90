@@ -186,7 +186,6 @@ contains
     ! MOM (Maximum Overlap Method) Parameters
     !==============================================================================
     logical :: do_mom            ! Flag to enable MOM method
-    logical :: initial_mom_iter  ! Flag for first MOM iteration
     logical :: mom_active        ! Flag indicating MOM is currently active
     real(kind=dp), allocatable :: mo_a_prev(:,:)  ! Previous alpha MO coefficients
     real(kind=dp), allocatable :: mo_e_a_prev(:)  ! Previous alpha orbital energies
@@ -430,17 +429,20 @@ contains
     do_mom = infos%control%mom
 
     if (do_mom) then
-      initial_mom_iter = .true.
       mom_active = .false.
 
-      ! Allocate storage for previous iteration's orbitals
-      allocate(mo_a_prev(nbf,nbf), source=0.0_dp)
-      allocate(mo_e_a_prev(nbf), source=0.0_dp)
+      ! The reference of the first MOM step is the guess: its orbitals built
+      ! the density of the first Fock. Without it the first step had nothing
+      ! to compare with and kept the aufbau fill of iteration 1, which loses
+      ! a non-aufbau guess (swapmo, a supplied excited-state solution) before
+      ! MOM can act on it.
+      allocate(mo_a_prev, source=mo_a)
+      allocate(mo_e_a_prev, source=mo_energy_a)
 
       ! For UHF, we need separate storage for beta orbitals
       if (scf_type == scf_uhf) then
-        allocate(mo_b_prev(nbf,nbf), source=0.0_dp)
-        allocate(mo_e_b_prev(nbf), source=0.0_dp)
+        allocate(mo_b_prev, source=mo_b)
+        allocate(mo_e_b_prev, source=mo_energy_b)
       end if
     end if
     !==============================================================================
@@ -1211,7 +1213,7 @@ contains
                       mo_b, mo_energy_b, mo_a_prev, mo_e_a_prev, &
                       mo_b_prev, mo_e_b_prev,&
                       smat_full, work1, work2,&
-                      mom_active, initial_mom_iter, &
+                      mom_active, &
                       .false., IW)
       !----------------------------------------------------------------------------
       ! Apply XAS if enabled
@@ -1543,7 +1545,7 @@ contains
                         mo_a_prev, mo_e_a_prev,                                    &
                         mo_b_prev, mo_e_b_prev,                                    &
                         smat_full, work1, work2,                                   &
-                        mom_active, initial_mom_iter,                              &
+                        mom_active,                                                &
                         do_print, IW)
     use precision, only : dp
     use types,     only : information
@@ -1557,7 +1559,7 @@ contains
     real(dp),         intent(inout), optional :: mo_b(:,:), mo_energy_b(:)
     real(dp),         intent(in)            :: smat_full(:,:)
     real(dp),         intent(inout)         :: work1(:,:), work2(:,:)
-    logical,          intent(inout)         :: mom_active, initial_mom_iter
+    logical,          intent(inout)         :: mom_active
     logical,          intent(in)            :: do_print
     integer,          intent(in)            :: IW
     real(dp),         intent(inout)         :: mo_a_prev(:,:), mo_e_a_prev(:)
@@ -1572,7 +1574,7 @@ contains
       mom_active = .true.
     end if
 
-    if (mom_active .and. .not. initial_mom_iter) then
+    if (mom_active) then
       ! Alpha
       call apply_mom(infos, mo_a_prev, mo_e_a_prev, &
                      mo_a, mo_energy_a, smat_full, nelec_a, &
@@ -1594,7 +1596,6 @@ contains
       mo_e_b_prev = mo_energy_b
     end if
 
-    initial_mom_iter = .false.
   end subroutine handle_mom
 
 
