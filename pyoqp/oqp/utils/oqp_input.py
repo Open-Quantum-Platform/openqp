@@ -2179,20 +2179,21 @@ def _validate_semantics(spec: CalculationSpec) -> None:
         if model in {
             "tddft", "tda", "tda-hf", "tdhf", "tddftb", "tda-dftb"
         } and state.label and not state.label.startswith("S"):
-            # The closed-shell RPA/TDA response has a triplet path for
-            # energies only (no Coulomb term, f_aa - f_ab kernel): energy(T0)
-            # selects it.  Triplet gradients, Z-vectors and Hessians do not
-            # exist, so every other triplet target stays rejected.
-            triplet_energy = (
+            # The closed-shell RPA/TDA response has a triplet path (no
+            # Coulomb term, f_aa - f_ab kernel) for energies, gradients and
+            # geometry optimizations: energy(T0), grad(Tn), opt(Tn).  Triplet
+            # Hessians, NACs and dynamics do not exist and stay rejected.
+            triplet_ok = (
                 model in {"tddft", "tda", "tda-hf", "tdhf"}
                 and state.label.startswith("T")
-                and driver.name == "energy"
+                and driver.name in {"energy", "grad", "optimize"}
             )
-            if not triplet_energy:
+            if not triplet_ok:
                 raise OQPInputError(
                     "Conventional TD calculations support singlet labels only, "
-                    "apart from closed-shell triplet energies via energy(T0); "
-                    "use mrsf or sf for triplet-state gradients and dynamics"
+                    "apart from closed-shell triplet energies, gradients and "
+                    "optimizations (energy(T0), grad(Tn), opt(Tn)); "
+                    "use mrsf or sf for other triplet-state workflows"
                 )
         if model == "mrsf-dftb" and state.label and state.label.startswith("Q"):
             raise OQPInputError("MRSF-TDDFTB supports singlet or triplet labels, not quintet")
