@@ -152,3 +152,26 @@ def test_direct_guards_are_explicit_errors(tmp_path):
         _run_caspt2(tmp_path, "term_guard", system=_H4, basis="sto-3g",
                     cas=_CAS, pt2={"reference": "casci", "engine": "direct",
                                   "max_terms": "1", "nproc": "1"})
+
+
+def test_word_boundary_empty_external_and_memory_budget():
+    from oqp.library.caspt2_dyall import CASPT2Options
+    from oqp.library.qdpt2_direct import direct_qdpt2, _stream_fortran
+
+    # Exact supported word boundary with dimensionally valid operands. An
+    # empty-electron reference has no generated external configurations.
+    n = 63
+    h = np.zeros((n, n))
+    g = np.zeros((n, n, n, n))
+    eps = np.linspace(-1.0, 1.0, n)
+    coeffs = np.ones((1, 1))
+    options = CASPT2Options(engine="direct", nproc=1)
+    result = direct_qdpt2(h, g, coeffs, np.zeros(1), [0], eps,
+                         np.zeros((n, n)), 0, 0, (0, 0), n, 0,
+                         [0], options, False, max_memory=512)
+    assert result["n_external"] == 0 and result["e2"][0] == 0
+    # Reject the working-memory requirement before allocating streamed terms.
+    word = np.array([15], dtype=np.uint64)
+    with pytest.raises(ValueError, match="max_memory"):
+        _stream_fortran(h, g, eps, n, 0, 4, word, word,
+                         coeffs, 30_000_000, 1, max_memory=1)
