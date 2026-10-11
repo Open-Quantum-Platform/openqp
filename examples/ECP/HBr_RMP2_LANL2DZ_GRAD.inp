@@ -1,0 +1,33 @@
+[input]
+system=
+ 35 0.0 0.0 0.0
+ 1 0.0 0.0 1.407611
+
+charge=0
+method=mp2
+basis=LANL2DZ
+ispher=true
+runtype=grad
+functional=
+
+[mp2]
+variant=mp2
+
+[guess]
+type=huckel
+save_mol=false
+
+[scf]
+type=rhf
+multiplicity=1
+maxit=50
+conv=1.0e-10
+incremental=false
+save_molden=false
+
+[symmetry]
+enabled=false
+use_integral_symmetry=false
+
+[properties]
+grad=0
