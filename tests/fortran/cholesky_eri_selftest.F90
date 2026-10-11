@@ -12,8 +12,9 @@ module cholesky_eri_selftest_mod
 !>   would not catch a wrong pivot or a mis-indexed column; a reconstruction
 !>   does.
 !>
-!>   Results are written to /tmp/cholesky_eri_selftest.out.
+!>   Results are written to $OQP_SELFTEST_DIR/cholesky_eri_selftest.out.
 
+  use selftest_output, only: selftest_output_path
   implicit none
   character(len=*), parameter :: module_name = "cholesky_eri_selftest_mod"
 
@@ -120,7 +121,7 @@ contains
       end do
     end do
 
-    open(newunit=iu, file='/tmp/cholesky_eri_selftest.out', status='replace')
+    open(newunit=iu, file=selftest_output_path('cholesky_eri_selftest.out'), status='replace')
     write(iu,'(A,I0)')    'nbf          = ', nbf
     write(iu,'(A,I0)')    'npair        = ', npair
     write(iu,'(A,I0)')    'nchol        = ', nchol

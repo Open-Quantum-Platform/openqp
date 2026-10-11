@@ -14,7 +14,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
 
 INPUT = """[input]
 system=
@@ -39,7 +38,6 @@ H2O = """   8   0.000000000   0.000000000   0.117300000
 
 def _runtime_available():
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
         os.environ.setdefault("OMP_NUM_THREADS", "2")
         import oqp  # noqa: F401
         from oqp.pyoqp import Runner  # noqa: F401

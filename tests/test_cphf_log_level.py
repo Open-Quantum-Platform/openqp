@@ -11,7 +11,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
 
 DECK = """[input]
 system=
@@ -62,7 +61,6 @@ SUMMARY = re.compile(r"converged +\d+ of +\d+ right-hand sides in +\d+ - +\d+ it
 
 def _runtime_available():
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         import oqp  # noqa: F401
         from oqp.pyoqp import Runner  # noqa: F401

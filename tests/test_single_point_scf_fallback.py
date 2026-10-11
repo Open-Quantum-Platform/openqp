@@ -4,6 +4,8 @@ import types
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import isolate_modules
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -161,6 +163,7 @@ class SlottedMolEnergy:
 
 class TestSinglePointScfFallback(unittest.TestCase):
     def setUp(self):
+        self.addCleanup(isolate_modules())
         install_single_point_stubs()
         self.single_point = load_module(
             "single_point_under_test",
