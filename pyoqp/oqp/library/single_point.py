@@ -9,8 +9,8 @@ import shutil
 import hashlib
 import platform
 import subprocess
-import multiprocessing
 import numpy as np
+from multiprocessing.pool import ThreadPool
 from numpy import linalg as la
 from oqp.molecule import Molecule
 from oqp.utils.mpi_utils import MPIManager, MPIPool
@@ -729,6 +729,54 @@ class SinglePoint(Calculator):
             for i, j in zip(swapmo_array[::2], swapmo_array[1::2]):
                 og_val[[i - 1, j - 1]] = og_val[[j - 1, i - 1]]
                 og_vec[[i - 1, j - 1]] = og_vec[[j - 1, i - 1]]
+            # A supplied guess (JSON, resident orbitals) is a solution in its
+            # own right and may be accepted on the first build, so its density
+            # must belong to the swapped orbitals. A computed guess only starts
+            # the iterations; there the swap names the occupation that
+            # rstctmo/MOM follow from the guess density, which is left as it is
+            # (the delta-CHP core-hole examples converge from that start).
+            from oqp.library.guess import GUESS_SUPPLIED
+            if int(self.mol.data._data.control.guess) == GUESS_SUPPLIED:
+                self._rebuild_guess_density()
+
+    def _rebuild_guess_density(self):
+        """Rebuild the guess densities from the (swapped) supplied orbitals.
+
+        A supplied guess carries its own OQP::DM_A/DM_B, read before swapmo
+        runs, and the SCF may accept orbitals and density together on its
+        first build.  Swapping only the orbital rows left a density of the
+        unswapped occupation next to orbitals of the swapped one: a JSON
+        ground state with swapmo=1,6 converged on the first build at the
+        ground-state energy while publishing core-hole orbitals.  Same occupation
+        convention as get_ab_initio_density (source/guess.F90): RHF DM_A is the
+        doubly occupied total density, ROHF builds both spins from the alpha
+        orbitals, UHF from its own spin orbitals.  swapmo acts on the alpha
+        set, so RHF/ROHF beta orbitals follow it.
+        """
+        data = self.mol.data
+        ctrl = data._data.control
+        prop = data._data.mol_prop
+        scftype = int(ctrl.scftype)
+        na, nb, nocc = int(prop.nelec_A), int(prop.nelec_B), int(prop.nocc)
+        vec_a = data["OQP::VEC_MO_A"]                    # rows are MOs
+        nbf = vec_a.shape[1]
+        tril = np.tril_indices(nbf)
+
+        def packed(vec, nel, occ):
+            occupied = vec[:nel]
+            return (occ * occupied.T @ occupied)[tril]
+
+        if scftype in (1, 3):
+            data["OQP::VEC_MO_B"][:] = vec_a
+            data["OQP::E_MO_B"][:] = data["OQP::E_MO_A"]
+        dm_a = data["OQP::DM_A"]
+        dm_b = data["OQP::DM_B"]
+        if scftype == 1:
+            dm_a[:] = packed(vec_a, nocc, 2.0).reshape(dm_a.shape)
+            return
+        dm_a[:] = packed(vec_a, na, 1.0).reshape(dm_a.shape)
+        vec_b = vec_a if scftype == 3 else data["OQP::VEC_MO_B"]
+        dm_b[:] = packed(vec_b, nb, 1.0).reshape(dm_b.shape)
 
     def reference(self, do_init_scf=True):
         if is_tb_method(self.method):
@@ -985,9 +1033,21 @@ class SinglePoint(Calculator):
         stability = getattr(self, 'stability', scf_config.get('stability', False))
         trah_stab_default = scf_config.get('trh_stab', False)
 
+        # TRAH minimises over orbital rotations and never re-diagonalises, so it
+        # cannot keep a MOM or rstctmo (non-aufbau) occupation: from such a
+        # stationary point it descends to a lower state and reports convergence.
+        # The native driver refuses the combination; never route one there.
+        occupation_constrained = (bool(scf_config.get('rstctmo', False))
+                                  or bool(scf_config.get('mom', False)))
+
         # --- SCF manager: converger_type=auto|ml picks the primary from system features ---
         if str(primary).lower() in ('auto', 'ml'):
             primary, stability = self._select_converger(str(primary).lower(), stability)
+            if occupation_constrained and str(primary).lower() == 'trah':
+                dump_log(self.mol, section='',
+                         title='PyOQP SCF manager: TRAH cannot keep the MOM/rstctmo '
+                               'occupation; using diis')
+                primary = 'diis'
         primary = self._apply_selected_converger(primary)
 
         # --- Stage 1: primary converger ---
@@ -1013,17 +1073,14 @@ class SinglePoint(Calculator):
         # Drop the primary and de-duplicate while preserving order.
         _seen = set()
         chain = [c for c in chain if c != primary and not (c in _seen or _seen.add(c))]
-        # TRAH is not occupation constrained and may rotate a MOM/rstctmo
-        # core-hole reference into a different electronic state.  Keep the
-        # occupation-preserving recovery stages, but never silently enter TRAH
-        # for a restricted-orbital calculation.
-        rstctmo = bool(scf_config.get('rstctmo', False))
-        if rstctmo and 'trah' in chain:
+        # Keep the occupation-preserving recovery stages, but never enter TRAH
+        # for a MOM/rstctmo calculation (see occupation_constrained above).
+        if occupation_constrained and 'trah' in chain:
             chain = [c for c in chain if c != 'trah']
             dump_log(
                 self.mol,
-                title='PyOQP: TRAH recovery disabled because scf.rstctmo=true; '
-                      'TRAH cannot preserve the requested orbital ordering',
+                title='PyOQP: TRAH recovery disabled because scf.mom/rstctmo=true; '
+                      'TRAH cannot preserve the requested orbital occupation',
                 section='input',
             )
         for conv in chain:
@@ -1058,7 +1115,7 @@ class SinglePoint(Calculator):
         td_type = str(getattr(self, 'td', '')).lower()
         spin_flip_reference = self.method == 'tdhf' and td_type in ('sf', 'mrsf', 'umrsf')
         ground_state_target = self.method in ('hf', 'ccsd', 'ccsd(t)')
-        if (converged and stability and not rstctmo and primary != 'trah'
+        if (converged and stability and not occupation_constrained and primary != 'trah'
                 and (ground_state_target or spin_flip_reference)):
             e_pre = self.mol.mol_energy.energy
             mol_energy_snapshot = self._snapshot_mol_energy_state()
@@ -1203,10 +1260,19 @@ class SinglePoint(Calculator):
         if getattr(self.mol, 'symmetry_metadata', None):
             self.mol.stage_response_symmetry()
 
+        # Clear the previous solve's imaginary-root flags first: a TD solve
+        # that raises or exhausts its retries returns before they are set
+        # again, and get_results() would mask energies with stale flags.
+        self.mol.td_imaginary_states = ()
+        # Invalidate the previous TD outputs as well: if this solve raises or
+        # breaks down, get_results() must not publish the earlier run's
+        # excitation energies as the current result.
+        self.mol.energies = list(ref_energy)
+        self.mol.td_output_valid = False
         self.tddft()
-        energies = ref_energy + [ex + ref_energy[0] for ex in self.mol.data['OQP::td_energies']]
 
-        # check convergence
+        # Check convergence before reading the TD output tags: a Davidson
+        # breakdown returns before OQP::td_energies is written.
         td_flag = self.mol.mol_energy.Davidson_converged
 
         if self.method != 'hf' and not td_flag:
@@ -1218,7 +1284,28 @@ class SinglePoint(Calculator):
             # so a failed Davidson looked like a successful run.
             raise RuntimeError("TD Davidson did not converge — stopping current run.")
 
+
+        energies = ref_energy + [ex + ref_energy[0] for ex in self.mol.data['OQP::td_energies']]
+
+        # RPA roots with omega^2 < 0 (unstable reference): td_energies holds
+        # |omega|, so the state energy above is not a physical state.  Only
+        # the conventional RPA driver writes this tag.
+        if str(self.mol.config.get('tdhf', {}).get('type', 'rpa')).lower() == 'rpa':
+            try:
+                flags = self.mol.data['OQP::td_imaginary']
+            except AttributeError:
+                flags = ()
+            self.mol.td_imaginary_states = tuple(
+                n + 1 for n, flag in enumerate(flags) if flag > 0.5)
+        # The solver never converges an imaginary root and has no energy for
+        # it: keep the unconverged |omega| out of the state energies (NaN), and
+        # let get_results() publish the per-root status.
+        for n in self.mol.td_imaginary_states:
+            if n < len(energies):
+                energies[n] = float('nan')
+
         self.mol.energies = energies
+        self.mol.td_output_valid = True
 
         # Metadata-only state irrep labels (no-op unless symmetry enabled).
         if getattr(self.mol, 'symmetry_metadata', None):
@@ -1756,6 +1843,13 @@ class Gradient(Calculator):
 
         if self.nstate < max(self.grads):
             raise ValueError(f'Gradient requested state {max(self.grads)} > the highest computed state {self.nstate}')
+
+        imaginary = set(getattr(self.mol, 'td_imaginary_states', ()) or ())
+        if self.td == 'rpa' and imaginary.intersection(self.grads):
+            raise RuntimeError(
+                'Gradient requested for RPA root(s) %s with omega^2 < 0 (imaginary, '
+                'not converged; the SCF reference is unstable).'
+                % ', '.join(str(i) for i in sorted(imaginary.intersection(self.grads))))
 
         grads = np.zeros((self.nstate + 1, self.natom, 3))
         for i in self.grads:
@@ -2537,13 +2631,7 @@ class Hessian(Calculator):
             for idx, coord in enumerate(shifted_coord)
         ]
 
-        ## adjust multiprocessing if necessary
-        if self.mpi_manager.use_mpi:
-            ncpu = np.amin([ndim, self.mpi_manager.comm.size])
-            pool = MPIPool(processes=ncpu)
-        else:
-            ncpu = np.amin([ndim, nproc])
-            pool = multiprocessing.Pool(processes=ncpu)
+        pool, ncpu = _displacement_pool(self.mpi_manager, ndim, nproc)
 
         dump_log(self.mol,
                  title='',
@@ -2555,14 +2643,18 @@ class Hessian(Calculator):
         grads = [[] for _ in range(ndim)]
         flags = []
         n = 0
-        for val in pool.imap_unordered(grad_wrapper, variables_wrapper):
-            if self.mpi_manager.rank == 0:
-                n += 1
-                idx, grad, flag, timing = val
-                grads[idx] = grad
-                flags.append(flag)
-                dump_log(self.mol, title=None, section='hess_worker', info=[n, idx, flag, timing])
-                dump_data(self.mol, (n, idx, np.sum(grad ** 2) ** 2, timing), title='NUM_HESS', fpath=self.mol.log_path)
+        try:
+            for val in pool.imap_unordered(grad_wrapper, variables_wrapper):
+                if self.mpi_manager.rank == 0:
+                    n += 1
+                    idx, grad, flag, timing = val
+                    grads[idx] = grad
+                    flags.append(flag)
+                    dump_log(self.mol, title=None, section='hess_worker', info=[n, idx, flag, timing])
+                    dump_data(self.mol, (n, idx, np.sum(grad ** 2) ** 2, timing), title='NUM_HESS', fpath=self.mol.log_path)
+        except BaseException:
+            _abort_displacements(pool)
+            raise
 
         pool.close()
 
@@ -2616,6 +2708,53 @@ class Hessian(Calculator):
             shutil.rmtree(dir_hess)
 
         return hessian, flags
+
+
+def _displacement_pool(mpi_manager, ntask, nproc):
+    """Pool that runs the finite-difference displacement workers.
+
+    Under MPI the ranks are the workers (MPIPool).  Without MPI each worker
+    only writes an input file and waits on ``_run_oqp_external`` -- the
+    electronic structure runs in that subprocess -- so the workers are threads
+    of this process, not ``multiprocessing.Pool`` processes.
+
+    A process pool under the spawn start method (the macOS default) or
+    forkserver (Linux's default from Python 3.14) unpickles each task in a
+    process that has not imported ``oqp``, so every worker re-imported ``oqp``
+    -- liboqp, MPI_Init -- just to resolve ``grad_wrapper``, with whatever
+    ``sys.path`` the parent held.  When that import failed (pytest had
+    put the unbuilt source tree ``pyoqp/`` first on ``sys.path``, so the child
+    found an ``oqp`` with no liboqp), the worker died inside the pool's task
+    ``get()``.  ``multiprocessing.Pool`` replaces a dead worker but never
+    resubmits the task it had taken, so all 12 displacements of an OH Hessian
+    were lost one per replacement worker and ``imap_unordered`` waited forever
+    with the last replacement idle at 0% CPU.  Threads share the parent's
+    already-imported modules, need no pickling, and an exception in a worker
+    reaches the caller instead of being swallowed.
+
+    When that exception propagates, callers must call ``_abort_displacements``
+    so that no queued displacement starts and no running one is still active
+    when the exception reaches the caller.
+    """
+    if mpi_manager.use_mpi:
+        ncpu = int(min(ntask, mpi_manager.comm.size))
+        return MPIPool(processes=ncpu), ncpu
+    ncpu = int(min(ntask, nproc))
+    return ThreadPool(processes=ncpu), ncpu
+
+
+def _abort_displacements(pool):
+    """Stop a displacement driver after a worker raised.
+
+    ``terminate()`` drops the queued displacements; ``join()`` then waits for
+    the ones already running to finish, so no displaced job is still writing
+    into the driver's scratch directory when the exception reaches the
+    caller.  Nothing is signalled: the jobs stay in the driver's process
+    group, so a Ctrl-C or a supervisor's killpg reaches them as before, and a
+    job is never killed by a PID that might have been reused.
+    """
+    pool.terminate()
+    pool.join()
 
 
 def _run_oqp_external(inp, env_overrides=None):
@@ -3578,13 +3717,7 @@ class NAC(Calculator):
             for idx, coord in enumerate(shifted_coord)
         ]
 
-        ## adjust multiprocessing if necessary
-        if self.mpi_manager.use_mpi:
-            ncpu = np.amin([ndim, self.mpi_manager.comm.size])
-            pool = MPIPool(processes=ncpu)
-        else:
-            ncpu = np.amin([ndim, nproc])
-            pool = multiprocessing.Pool(processes=ncpu)
+        pool, ncpu = _displacement_pool(self.mpi_manager, ndim, nproc)
 
         dump_log(self.mol,
                  title='',
@@ -3596,14 +3729,18 @@ class NAC(Calculator):
         dcm = [[] for _ in range(ndim)]
         flags = []
         n = 0
-        for val in pool.imap_unordered(nacme_wrapper, variables_wrapper):
-            if self.mpi_manager.rank == 0:
-                n += 1
-                idx, dcme, flag, timing = val
-                dcm[idx] = dcme.reshape(-1)  # 1D nstate x nstate
-                flags.append(flag)
-                dump_log(self.mol, title=None, section='nacv_worker', info=[n, idx, flag, timing])
-                dump_data(self.mol, (n, idx, np.sum(dcme ** 2) ** 2, timing), title='NUM_NACV', fpath=self.mol.log_path)
+        try:
+            for val in pool.imap_unordered(nacme_wrapper, variables_wrapper):
+                if self.mpi_manager.rank == 0:
+                    n += 1
+                    idx, dcme, flag, timing = val
+                    dcm[idx] = dcme.reshape(-1)  # 1D nstate x nstate
+                    flags.append(flag)
+                    dump_log(self.mol, title=None, section='nacv_worker', info=[n, idx, flag, timing])
+                    dump_data(self.mol, (n, idx, np.sum(dcme ** 2) ** 2, timing), title='NUM_NACV', fpath=self.mol.log_path)
+        except BaseException:
+            _abort_displacements(pool)
+            raise
 
         pool.close()
 

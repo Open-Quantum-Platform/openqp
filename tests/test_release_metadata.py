@@ -67,9 +67,10 @@ class ReleaseMetadataTests(unittest.TestCase):
         self.assertNotIn("publish_existing_artifacts", workflow)
 
     def test_packaged_policy_files_trigger_distribution_ci(self):
+        # The only path-filtered trigger is the `release`-labelled pull request.
         workflow = (ROOT / ".github" / "workflows" / "build_wheels.yml").read_text()
-        self.assertEqual(workflow.count('- "CONTRIBUTING.md"'), 2)
-        self.assertEqual(workflow.count('- "SUSTAINABILITY.md"'), 2)
+        self.assertEqual(workflow.count('- "CONTRIBUTING.md"'), 1)
+        self.assertEqual(workflow.count('- "SUSTAINABILITY.md"'), 1)
 
     def test_publication_requires_the_complete_configured_wheel_matrix(self):
         workflow = (ROOT / ".github" / "workflows" / "build_wheels.yml").read_text()

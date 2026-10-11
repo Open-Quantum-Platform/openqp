@@ -2174,6 +2174,25 @@ def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
             action="Choose one of the implemented DIIS types.",
         )
 
+    # TRAH minimises over orbital rotations without re-diagonalising, so it
+    # cannot keep the non-aufbau occupation MOM or rstctmo selects; from such
+    # a stationary point it descends to a lower state.  scf_driver refuses it.
+    occupation_rule = [key for key in ("mom", "rstctmo")
+                       if _is_true(_get(config, "scf", key, False))]
+    if occupation_rule:
+        for option, value in (("converger_type", converger),
+                              ("init_converger", init_converger)):
+            if value == "trah":
+                report.add(
+                    "ERROR",
+                    f"scf.{option}",
+                    "TRAH cannot keep the orbital occupation selected by "
+                    f"scf.{occupation_rule[0]}.",
+                    value=value,
+                    expected="diis or soscf",
+                    action=f"Use {option}=diis or soscf with scf.{occupation_rule[0]}.",
+                )
+
     # Match init_scf_converger() in source/scf.F90.  A nonzero vshift selects
     # the C-DIIS/E-DIIS/C-DIIS cascade for every DIIS subtype, while SOSCF and
     # TRAH never construct the simplex solver.  An explicitly configured
@@ -2319,21 +2338,31 @@ def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
             wiki=WIKI_HELP["tdhf.type"],
         )
 
-    # The conventional RPA/TDA response (tdhf_energy, tdhf_z_vector,
-    # tdhf_gradient) builds only the closed-shell singlet A and B matrices: the
-    # Coulomb term is always present and the XC kernel is the alpha-plus-beta
-    # one.  There is no triplet (exchange-only, alpha-minus-beta kernel) path,
-    # so a triplet request silently returns the singlet roots.
-    if td_type in {"rpa", "tda"} and int(td_mult) != 1:
+    # The conventional RPA/TDA response builds the closed-shell singlet A and B
+    # matrices (Coulomb term, alpha-plus-beta kernel).  tdhf_energy also has the
+    # closed-shell triplet branch (no Coulomb term, alpha-minus-beta kernel),
+    # but tdhf_z_vector and tdhf_gradient do not: triplets are energy-only and
+    # need the closed-shell RHF/RKS reference.
+    if td_type in {"rpa", "tda"} and int(td_mult) not in (1, 3):
         report.add(
             "ERROR",
             "tdhf.multiplicity",
-            "Conventional RPA/TDA response computes singlet excited states only; "
-            "closed-shell triplet response is not implemented and would return the singlet roots.",
+            "Conventional RPA/TDA response computes singlet (1) or, for energies, triplet (3) excited states.",
             value=td_mult,
-            expected="1",
-            action="Set [tdhf] multiplicity=1, or use [tdhf] type=mrsf (or sf) "
-                   "with an ROHF triplet reference for triplet states.",
+            expected="1 or 3",
+            action="Set [tdhf] multiplicity=1 or 3.",
+            wiki=WIKI_HELP["tdhf.type"],
+        )
+    if td_type in {"rpa", "tda"} and int(td_mult) == 3 and (runtype != "energy" or scf_type != "rhf"):
+        report.add(
+            "ERROR",
+            "tdhf.multiplicity",
+            "Closed-shell triplet RPA/TDA is implemented for energies on an RHF/RKS reference only; "
+            "triplet gradients, Z-vectors and open-shell references are not implemented.",
+            value=f"{runtype}/{scf_type}/{td_mult}",
+            expected="input.runtype=energy and scf.type=rhf",
+            action="Use runtype=energy with scf.type=rhf, or [tdhf] type=mrsf with an ROHF triplet reference "
+                   "for triplet gradients.",
             wiki=WIKI_HELP["tdhf.type"],
         )
 

@@ -15,6 +15,7 @@ layout) that the stub-based unit tests cannot.
 import importlib.util
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 BRANCH_ROOT = Path(__file__).resolve().parents[1]
@@ -133,7 +134,8 @@ def check(condition, message, failures):
 
 
 def main():
-    workdir = sys.argv[1] if len(sys.argv) > 1 else '/tmp/oqp_symmetry_smoke'
+    workdir = sys.argv[1] if len(sys.argv) > 1 else tempfile.mkdtemp(prefix='oqp_symmetry_smoke_')
+    print(f'workdir: {workdir}')
     failures = []
 
     graft_branch_methods()
