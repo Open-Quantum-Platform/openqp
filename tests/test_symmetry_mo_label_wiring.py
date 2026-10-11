@@ -6,6 +6,8 @@ from pathlib import Path
 import numpy as np
 import unittest
 
+from oqp_module_isolation import isolate_modules
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -207,6 +209,9 @@ class TestRotatedFrameLabeling(unittest.TestCase):
 
 
 class TestMoleculeMoLabelWiring(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(isolate_modules())
+
     def _build_molecule(self, scf_type="rhf"):
         detect = load_module(
             "oqp_symmetry_detect_molabel_under_test",

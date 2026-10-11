@@ -10,6 +10,7 @@ name: Build and release distributions
         type: choice
         options:
           - build
+          - smoke
           - publish_pypi
       release_tag:
         description: "Exact published release tag (required for publish_pypi)"
@@ -27,32 +28,10 @@ name: Build and release distributions
         description: "Type: publish OpenQP to PyPI"
         required: false
         type: string
-  # Run the smoke build on pushes to main so the bundled-externals cache is
-  # populated on the DEFAULT branch. GitHub Actions caches are branch-scoped: a
-  # PR branch can only restore caches from its own branch or from main, and the
-  # wheel build otherwise never ran on main -- so every fresh PR cold-rebuilt all
-  # externals (incl. ~15 min of reference LAPACK). Warming it here lets PRs
-  # restore via the restore-keys prefix instead.
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/build_wheels.yml"
-      - ".github/actions/setup-oneapi-windows/**"
-      - "CMakeLists.txt"
-      - "CONTRIBUTING.md"
-      - "LICENSE"
-      - "LICENSING.md"
-      - "MANIFEST.in"
-      - "SUSTAINABILITY.md"
-      - "THIRD_PARTY_NOTICES.md"
-      - "pyproject.toml"
-      - "basis_sets/**"
-      - "cmake/**"
-      - "external/**"
-      - "include/**"
-      - "licenses/**"
-      - "pyoqp/**"
-      - "source/**"
+  # Wheels are built on demand: a release, a manual run (action build for
+  # the full matrix, smoke for one Linux wheel), or a pull request labelled
+  # `release`.  Plain pull requests and pushes to main build nothing here;
+  # CI.yml builds and tests the same sources.
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
     paths:
@@ -82,7 +61,11 @@ permissions:
 jobs:
   build_sdist:
     name: Build source distribution
-    if: github.event_name != 'workflow_dispatch' || inputs.action == 'build'
+    if: >-
+      github.event_name == 'release'
+      || (github.event_name == 'pull_request'
+          && contains(github.event.pull_request.labels.*.name, 'release'))
+      || (github.event_name == 'workflow_dispatch' && inputs.action == 'build')
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -104,11 +87,8 @@ jobs:
 
   build_wheel_smoke:
     name: Build Linux wheel smoke
-    # Runs on PRs, and on pushes to main to warm the bundled-externals cache.
-    if: >-
-      github.event_name == 'push'
-      || (github.event_name == 'pull_request'
-          && !contains(github.event.pull_request.labels.*.name, 'release'))
+    # On demand only: a manual run with action smoke.
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'smoke'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
