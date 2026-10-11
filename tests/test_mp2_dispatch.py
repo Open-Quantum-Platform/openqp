@@ -143,26 +143,25 @@ def test_allocator_failure_runs_real_fallback(tmp_path, stage):
 def _allocation_child(tmp_path, stage, library):
     import ctypes
     interposer = ctypes.CDLL(library)
-    interposer.mp2_test_arm.argtypes = [ctypes.c_size_t, ctypes.c_int]
+    interposer.mp2_test_arm.argtypes = [ctypes.c_size_t, ctypes.c_int, ctypes.c_size_t]
     interposer.mp2_test_failures.restype = ctypes.c_int
-    scf, mult, atoms = ('rhf', 1, WATER) if stage == 'full_scratch' else ('uhf', 2, OH)
+    scf, mult, atoms = ('rhf', 1, WATER) if stage == 'full_scratch' else ('uhf', 2, 'Li 0 0 0')
     os.environ['OQP_MP2_MAX_JBUILDS'] = '4000'
     runner, log = _run(tmp_path, 'alloc_' + stage, scf, mult, atoms)
     reference = _components(log)
     scf_energy = float(re.findall(r'E\(reference, SCF\)\s*=\s*([-+0-9.eE]+)', log.read_text())[-1])
     nbf = int(runner.mol.data.get_basis()['nbf'])
     npair = nbf * (nbf + 1) // 2
-    nocca, noccb = 5, 4
+    nocca, noccb = 2, 1
     nt = int(os.environ.get('OMP_NUM_THREADS', '1'))
     # Full scratch failure falls back to occupied-virtual. Other failures
     # are induced at n5 even with an affordable direct-J fallback by using
-    # the real >120 default crossover on an expanded OH basis.
+    # the real >120 default crossover on a 127-AO Li basis.
     if stage != 'full_scratch':
-        # For a small molecule only, this child requests n5 via a negative
-        # cap; direct-J would then be forbidden. Use the actual large basis
-        # to leave the default direct-J guard affordable instead.
+        # The 127-AO default crossover leaves the direct-J guard affordable.
+        # Li has nonzero alpha SS and OS terms, with an actual beta trial.
         runner, log = _run(tmp_path, 'alloc_large_' + stage, scf, mult, atoms,
-                           basis='aug-cc-pvqz', method='hf')
+                           basis='aug-cc-pv5z', method='hf')
         nbf = int(runner.mol.data.get_basis()['nbf'])
         assert nbf > 120
         npair = nbf * (nbf + 1) // 2
@@ -190,7 +189,7 @@ def _allocation_child(tmp_path, stage, library):
     else:
         size, occurrence = 8*npair*noccb*(nbf-noccb), 1
         os.environ['OQP_MEMORY_LIMIT_GB'] = '2'
-    interposer.mp2_test_arm(size, occurrence)
+    interposer.mp2_test_arm(size, occurrence, 8*npair*(npair+1)//2)
     oqp.mp2_energy(runner.mol)
     assert interposer.mp2_test_failures() == 1
     text = log.read_text()

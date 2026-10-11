@@ -8,9 +8,11 @@
 #include <errno.h>
 static _Atomic size_t target_bytes;
 static _Atomic int countdown;
+static _Atomic size_t start_bytes;
 static _Atomic int failures;
-void mp2_test_arm(size_t bytes, int occurrence) {
+void mp2_test_arm(size_t bytes, int occurrence, size_t start) {
     atomic_store(&failures, 0);
+    atomic_store(&start_bytes, start);
     atomic_store(&countdown, occurrence);
     atomic_store(&target_bytes, bytes);
 }
@@ -20,7 +22,8 @@ static void *mp2_test_malloc(size_t bytes)
 #else
 void *malloc(size_t bytes)
 #endif {
-    if (bytes == atomic_load(&target_bytes) && atomic_load(&countdown) > 0) {
+    if (atomic_load(&start_bytes) == bytes) atomic_store(&start_bytes, 0);
+    if (atomic_load(&start_bytes) == 0 && bytes == atomic_load(&target_bytes) && atomic_load(&countdown) > 0) {
         if (atomic_fetch_sub(&countdown, 1) == 1) {
             atomic_fetch_add(&failures, 1);
             errno = ENOMEM;
