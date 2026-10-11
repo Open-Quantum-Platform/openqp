@@ -1264,6 +1264,11 @@ class SinglePoint(Calculator):
         # that raises or exhausts its retries returns before they are set
         # again, and get_results() would mask energies with stale flags.
         self.mol.td_imaginary_states = ()
+        # Invalidate the previous TD outputs as well: if this solve raises or
+        # breaks down, get_results() must not publish the earlier run's
+        # excitation energies as the current result.
+        self.mol.energies = list(ref_energy)
+        self.mol.td_output_valid = False
         self.tddft()
 
         # Check convergence before reading the TD output tags: a Davidson
@@ -1300,6 +1305,7 @@ class SinglePoint(Calculator):
                 energies[n] = float('nan')
 
         self.mol.energies = energies
+        self.mol.td_output_valid = True
 
         # Metadata-only state irrep labels (no-op unless symmetry enabled).
         if getattr(self.mol, 'symmetry_metadata', None):

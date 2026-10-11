@@ -2367,6 +2367,10 @@ class Molecule:
             data['td_energies'] = [None if n + 1 in _imaginary else e
                                    for n, e in enumerate(data['td_energies'])]
             data['td_imaginary'] = list(_imaginary)
+        # A conventional TD solve that raised or broke down leaves the tag of
+        # an earlier run in place; SinglePoint.excitation marks that state.
+        if getattr(self, 'td_output_valid', True) is False:
+            data['td_energies'] = None
 
         # Surface the spin-resolved excitation ladders as public regression
         # keys when present (a SOC run computes both). The public td_energies
