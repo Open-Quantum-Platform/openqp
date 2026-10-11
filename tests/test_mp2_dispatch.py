@@ -201,5 +201,62 @@ def _allocation_child(tmp_path, stage, library):
     print('REAL_ALLOCATE_FAILURE_AND_FALLBACK_PASS')
 
 
+
+@pytest.mark.parametrize('scf,mult,atoms', [('rhf', 1, WATER), ('uhf', 2, OH), ('rohf', 2, OH)])
+def test_n5_pin_on_production_integrals(tmp_path, monkeypatch, scf, mult, atoms):
+    """Independent NumPy contraction of the engine's own AO/MO inputs.
+
+    The UHF alpha/beta occupied-virtual tensor has distinct pair dimensions;
+    exchanging its free indices cannot hide behind spatial tensor symmetry.
+    """
+    monkeypatch.setenv('OQP_MP2_MAX_JBUILDS', '0')
+    runner, log = _run(tmp_path, 'kernel_pin', scf, mult, atoms)
+    result = _components(log)
+    mol = runner.mol
+    nbf = int(mol.data.get_basis()['nbf'])
+    na, nb = (5, 5) if scf == 'rhf' else (5, 4)
+
+    def semicanonical(spin, nocc):
+        coeff = np.array(mol.data['OQP::VEC_MO_' + spin], copy=True).reshape(nbf, nbf).T
+        packed = np.array(mol.data['OQP::FOCK_' + spin], copy=True)
+        fock = np.zeros((nbf, nbf))
+        rows, cols = np.tril_indices(nbf)
+        fock[rows, cols] = packed
+        fock[cols, rows] = packed
+        fmo = coeff.T @ fock @ coeff
+        eo, uo = np.linalg.eigh(fmo[:nocc, :nocc])
+        ev, uv = np.linalg.eigh(fmo[nocc:, nocc:])
+        semimo = np.column_stack((coeff[:, :nocc] @ uo, coeff[:, nocc:] @ uv))
+        energies = np.concatenate((eo, ev))
+        fov = (semimo.T @ fock @ semimo)[:nocc, nocc:]
+        singles = np.sum(fov*fov / (eo[:, None]-ev[None, :]))
+        return semimo, energies, singles
+
+    ca, ea, sa = semicanonical('A', na)
+    cb, eb, sb = semicanonical('A' if scf == 'rhf' else 'B', nb)
+    # Own copies above must precede a new tag allocation: no borrowed NumPy
+    # view is retained across native backing-record replacement.
+    oqp.int2e(mol)
+    eri = np.array(mol.data['OQP::ERI_AO'], copy=True).reshape((nbf,)*4)
+
+    def ovov(cl, nl, cr, nr):
+        return np.einsum('ui,va,wj,xb,uvwx->iajb', cl[:, :nl], cl[:, nl:],
+                         cr[:, :nr], cr[:, nr:], eri, optimize=True)
+
+    def denominator(el, nl, er, nr):
+        return (el[:nl, None, None, None] - el[None, nl:, None, None] +
+                er[None, None, :nr, None] - er[None, None, None, nr:])
+
+    aa, bb, ab = ovov(ca, na, ca, na), ovov(cb, nb, cb, nb), ovov(ca, na, cb, nb)
+    eaa = .25*np.sum((aa-aa.transpose(0, 3, 2, 1))**2 / denominator(ea, na, ea, na))
+    ebb = .25*np.sum((bb-bb.transpose(0, 3, 2, 1))**2 / denominator(eb, nb, eb, nb))
+    eab = np.sum(ab*ab / denominator(ea, na, eb, nb))
+    if scf != 'rhf':
+        assert ab.shape[0] != ab.shape[2]
+        # Confirm that a one-spin OS transform gives a different energy.
+        wrong = np.sum(ovov(ca, na, ca, nb)**2 / denominator(ea, na, eb, nb))
+        assert abs(wrong-eab) > 1e-5
+    np.testing.assert_allclose(result[:4], [eaa, ebb, eab, eaa+ebb+eab+sa+sb], rtol=0, atol=1e-9)
+
 if __name__ == '__main__':
     _allocation_child(Path(sys.argv[1]), sys.argv[2], sys.argv[3])
