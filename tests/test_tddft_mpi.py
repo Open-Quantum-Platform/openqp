@@ -39,7 +39,9 @@ def _launcher():
     try:
         import mpi4py  # noqa: F401
         import oqp  # noqa: F401
-    except (ImportError, OSError):  # not installed, or liboqp/libmpi not loadable
+    except (ImportError, OSError, RuntimeError):
+        # not installed, or liboqp/libmpi not loadable (oqp.runtime raises
+        # RuntimeError when it cannot load the native library)
         return None
     return shutil.which("mpiexec") or shutil.which("mpirun")
 
@@ -89,6 +91,26 @@ class TestTddftUnderMpi(unittest.TestCase):
                     self.assertEqual(len(e), 4, d)
                     for a, b in zip(e0, e):
                         self.assertAlmostEqual(a, b, delta=1e-6)
+
+
+class TestLauncherProbe(unittest.TestCase):
+    """The probe treats an unloadable runtime as "MPI unavailable"; only
+    OQP_REQUIRE_MPI_TESTS turns that into a failure (setUp above)."""
+
+    def test_runtime_loader_error_means_unavailable(self):
+        import builtins
+        from unittest import mock
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "mpi4py":
+                return mock.MagicMock()
+            if name == "oqp":
+                raise RuntimeError("cannot load liboqp")
+            return real_import(name, *args, **kwargs)
+
+        with mock.patch("builtins.__import__", side_effect=fake_import):
+            self.assertIsNone(_launcher())
 
 
 if __name__ == "__main__":
