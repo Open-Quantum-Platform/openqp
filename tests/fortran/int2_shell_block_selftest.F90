@@ -492,7 +492,46 @@ subroutine int2_mrsf_shared_selftest(comm, use_mpi, ranks, threads, error, check
       nullify(data%d3);deallocate(density,reference_sp)
     end if
     end do ! storage layouts, including transition without clean
-    call data%clean();call data%clean()
+    call data%clean()
+    ! Leave a CAM calculation after its first pass, while the borrowed density
+    ! is still live. Cleanup owns only the accumulator images; it must neither
+    ! overwrite nor release the caller's density. Re-enter with private storage
+    ! and FP32 disabled after repeated cleanup of the shared FP32 case.
+    nbf=2;nf=1;nmatrix=ncoul+3
+    basis%nbf=nbf;basis%nshell=nbf
+    basis%naos=[1,1];basis%ao_offset=[1,2]
+    allocate(density(nf,nmatrix,nbf,nbf),reference(nf,nmatrix,nbf,nbf))
+    do j=1,nbf
+      do i=1,nbf
+        do c=1,nmatrix
+          density(1,c,i,j)=real(7*i-3*j+5*c,dp)/16.0_dp
+        end do
+      end do
+    end do
+    reference=density
+    do route=1,2
+      data%d3=>density
+      data%shared_exchange=route==1
+      data%num_passes=2;data%cur_pass=1
+      call mrsf_set_fp32(merge(1,0,route==1))
+      call data%parallel_start(basis,int(threads))
+      if(.not.associated(data%d3,density)) failures=failures+1
+      if(allocated(data%f3s).neqv.(kind==1.and.route==1)) failures=failures+1
+      call data%parallel_stop() ! non-final pass preserves owned images
+      if(.not.allocated(data%f3)) failures=failures+1
+      if(any(density/=reference)) failures=failures+1
+      call data%clean();call data%clean()
+      if(associated(data%d3)) failures=failures+1
+      if(allocated(data%f3).or.allocated(data%f3_private).or.allocated(data%f3_ex_sp).or. &
+         allocated(data%f3s).or.allocated(data%ds).or.allocated(data%ds_sp).or. &
+         allocated(data%d3_sp).or.allocated(data%dsh)) failures=failures+1
+      if(.not.allocated(density)) then
+        failures=failures+1
+      else
+        if(any(density/=reference)) failures=failures+1
+      end if
+    end do
+    deallocate(density,reference)
     deallocate(data)
   end do
   call mrsf_set_fp32(0)
