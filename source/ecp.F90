@@ -975,15 +975,20 @@ contains
   !> @brief Second nuclear derivatives of the ECP energy, contracted per shell pair.
   !> @detail hess(3(I-1)+a, 3(J-1)+b) += sum_kl dens(k,l) d^2 V_kl / dR_Ia dR_Jb,
   !>         with dens in the raw Cartesian order of @ref ecp_raw_ints.  The
-  !>         derivative matrices are never stored, so the memory is that of dens
-  !>         and one 3N x 3N accumulator per thread.
+  !>         derivative matrices are never stored, so the memory is that of dens,
+  !>         one 3N x 3N accumulator and a 9 x 9 block per shell pair for at most
+  !>         DEFAULT_PAIR_BLOCK pairs at a time.  The result does not depend on the
+  !>         number of threads.
   !> @param[in]    dens  Symmetric density, nraw x nraw, raw Cartesian order.
   !> @param[inout] hess  Cartesian Hessian (3*natm x 3*natm), incremented.
-  subroutine ecp_hess_contract(basis, coord, dens, hess)
+  !> @param[in]    pair_block  Pairs per batch (default DEFAULT_PAIR_BLOCK); the result
+  !>               is bitwise independent of it.  For tests of the batching.
+  subroutine ecp_hess_contract(basis, coord, dens, hess, pair_block)
     type(basis_set), intent(in) :: basis
     real(dp), intent(in) :: coord(:,:)
     real(dp), intent(in) :: dens(:,:)
     real(dp), intent(inout) :: hess(:,:)
+    integer, intent(in), optional :: pair_block
 
     integer, allocatable :: off(:)
     integer :: nraw
@@ -991,7 +996,7 @@ contains
 
     if (.not. basis%ecp_params%is_ecp) return
     call raw_offsets(basis, off, nraw)
-    call ecp_centres(basis, coord, 2, off, nraw, dummy, dens, hess)
+    call ecp_centres(basis, coord, 2, off, nraw, dummy, dens, hess, pair_block)
   end subroutine ecp_hess_contract
 
   !> Offsets of the shells in the raw Cartesian order and its dimension
@@ -1012,7 +1017,7 @@ contains
   !> Loop over ECP centres and shell pairs.  Without dens/hess the derivative
   !> matrices are added to res; with them (deriv = 2 only) they are contracted
   !> into hess instead and res is not referenced.
-  subroutine ecp_centres(basis, coord, deriv, off, nraw, res, dens, hess)
+  subroutine ecp_centres(basis, coord, deriv, off, nraw, res, dens, hess, pair_block)
     use blas_thread, only: blas_thread_count, blas_thread_set
 !$  use omp_lib, only: omp_get_max_threads, omp_set_num_threads, omp_in_parallel
     type(basis_set), intent(in) :: basis
@@ -1022,13 +1027,17 @@ contains
     real(dp), intent(inout) :: res(:)
     real(dp), intent(in), optional :: dens(:,:)
     real(dp), intent(inout), optional :: hess(:,:)
+    integer, intent(in), optional :: pair_block
 
     type(tables_t) :: tab
     type(gtab_t), allocatable :: gt(:)
     integer, allocatable :: toff(:)
-    integer :: natm, nsh, lbmax, le, lecp, ic, nc, it, iat, iatc, s1, s2
+    integer :: natm, nsh, lbmax, le, lecp, ic, nc, it, iat, iatc, s1, s2, ip, npair, ib0, nb, k, nblk
+    integer, allocatable :: ps1(:), ps2(:)
     real(dp) :: c(3)
-    real(dp), allocatable :: hloc(:,:)
+    real(dp), allocatable :: hloc(:,:), h9(:,:,:)
+    !> shell pairs whose 9 x 9 Hessian blocks are held at once
+    integer, parameter :: DEFAULT_PAIR_BLOCK = 4096
     logical :: contract
     integer :: nOmpThreads
     integer(c_int64_t) :: nBlasThreads
@@ -1047,11 +1056,27 @@ contains
     natm = size(coord, 2)
     nsh = basis%nshell
     contract = present(hess)
+    ! shell pairs, largest shells first: their pairs are the most expensive
+    npair = nsh*(nsh + 1)/2
     if (contract) then
       allocate(hloc(3*natm, 3*natm), source=0.0_dp)
+      ! A pair touches only its two shell atoms and the ECP atom, so its
+      ! Hessian contribution is one 9 x 9 block (see scatter)
+      nblk = DEFAULT_PAIR_BLOCK
+      if (present(pair_block)) nblk = max(1, pair_block)
+      allocate(h9(9, 9, min(nblk, npair)))
     else
       allocate(hloc(1, 1), source=0.0_dp)
     end if
+    allocate(ps1(npair), ps2(npair))
+    ip = 0
+    do s1 = nsh, 1, -1
+      do s2 = 1, s1
+        ip = ip + 1
+        ps1(ip) = s1
+        ps2(ip) = s2
+      end do
+    end do
 
     nc = size(basis%ecp_params%n_expo)
     allocate(toff(nc + 1))
@@ -1087,17 +1112,31 @@ contains
 
       call build_gtabs(tab, basis, coord, c, lecp, deriv, gt)
 
-      ! largest shells first: their pairs are the most expensive (load balance)
       if (contract) then
-        !$omp parallel do num_threads(nOmpThreads) schedule(dynamic) private(s1, s2) reduction(+:hloc)
-        do s1 = nsh, 1, -1
-          do s2 = 1, s1
+        ! Each pair writes its own 9 x 9 block under a dynamic schedule; the
+        ! blocks are then added to hloc serially in pair order.  The sum is
+        ! therefore independent of the schedule and of the thread count.
+        ! schedule(dynamic) with reduction(+:hloc) summed a run-dependent
+        ! subset of pairs per thread and combined the private copies in
+        ! run-dependent order, so repeated calls differed in the last bits.
+        do ib0 = 1, npair, nblk
+          nb = min(nblk, npair - ib0 + 1)
+          h9(:, :, 1:nb) = 0.0_dp
+          !$omp parallel do num_threads(nOmpThreads) schedule(dynamic) private(ip)
+          do k = 1, nb
+            ip = ib0 + k - 1
             call shell_pair(tab, basis, coord, c, iatc, toff(ic) + 1, toff(ic + 1), lecp, &
-                            deriv, gt, s1, s2, off, nraw, natm, res, dens, hloc)
+                            deriv, gt, ps1(ip), ps2(ip), off, nraw, natm, res, dens, h9(:, :, k))
+          end do
+          !$omp end parallel do
+          do k = 1, nb
+            ip = ib0 + k - 1
+            call add_pair_block(h9(:, :, k), &
+                [basis%origin(ps1(ip)), basis%origin(ps2(ip)), iatc], hloc)
           end do
         end do
-        !$omp end parallel do
       else
+        ! largest shells first: their pairs are the most expensive (load balance)
         !$omp parallel do num_threads(nOmpThreads) schedule(dynamic) private(s1, s2)
         do s1 = nsh, 1, -1
           do s2 = 1, s1
@@ -1123,6 +1162,32 @@ contains
 
     if (contract) hess(1:3*natm, 1:3*natm) = hess(1:3*natm, 1:3*natm) + hloc
   end subroutine ecp_centres
+
+  !> Add one shell pair's 9 x 9 Hessian block, indexed by (centre A,B,C) x
+  !> (x,y,z) as in scatter, to the Cartesian Hessian.  Entries with gi > gj
+  !> are zero in the block; the transpose is filled here, as scatter did.
+  subroutine add_pair_block(b9, atomof, hess)
+    real(dp), intent(in) :: b9(9, 9)
+    integer, intent(in) :: atomof(3)
+    real(dp), intent(inout) :: hess(:,:)
+    integer :: x, y, ix, iy, gi, gj
+    real(dp) :: v
+
+    do x = 1, 3
+      do y = 1, 3
+        do ix = 1, 3
+          do iy = 1, 3
+            gi = 3*(atomof(x) - 1) + ix
+            gj = 3*(atomof(y) - 1) + iy
+            if (gi > gj) cycle
+            v = b9(3*(x - 1) + ix, 3*(y - 1) + iy)
+            hess(gi, gj) = hess(gi, gj) + v
+            if (gi /= gj) hess(gj, gi) = hess(gj, gi) + v
+          end do
+        end do
+      end do
+    end do
+  end subroutine add_pair_block
 
   !> Type-2 projection tables of every atom that carries shells, for one ECP
   !>   g(t, lm, N, lam) = sum_{s <= t, deg s = N} c_t(s) 4pi sum_mu Y_lam,mu(A^) om2(s, lm, lam mu)
@@ -1543,7 +1608,8 @@ contains
 
   !> Value and derivative blocks from the weighted tuple integrals, added to res;
   !> with dens and hess (deriv = 2), the second-derivative elements are instead
-  !> contracted with dens and added to hess
+  !> contracted with dens and added to hess, this pair's 9 x 9 block indexed by
+  !> (centre A,B,C) x (x,y,z) (only entries with gi <= gj are set)
   subroutine scatter(iw, nw, la, lb, deriv, iata, iatb, iatc, s1, s2, off, nraw, natm, res, dens, hess)
     integer, intent(in) :: nw, la, lb, deriv, iata, iatb, iatc, s1, s2, nraw, natm
     real(dp), intent(in) :: iw(:,:,:)
@@ -1554,7 +1620,7 @@ contains
 
     integer, parameter :: W1 = 1, WA = 2, WB = 3, WAA = 4, WAB = 5, WBB = 6
     integer :: ca_, cb_, ta, tb, ka(3), kb(3), k, k2, row, col, nca, ncb
-    integer :: x, y, ix, iy, kk, gi, gj, iat, jat, mat, n0
+    integer :: x, y, ix, iy, kk, gi, gj, iat, jat, mat, n0, bi, bj
     integer(8) :: nn
     real(dp) :: val, dA(3), dB(3), AA(3,3), AB(3,3), BB(3,3), m9(9,9), wd
     integer :: atomof(3)
@@ -1628,9 +1694,10 @@ contains
                   else
                     wd = 2.0_dp*dens(row, col)
                   end if
-                  val = wd*m9(3*(x - 1) + ix, 3*(y - 1) + iy)
-                  hess(gi, gj) = hess(gi, gj) + val
-                  if (gi /= gj) hess(gj, gi) = hess(gj, gi) + val
+                  ! hess is this pair's 9 x 9 block (add_pair_block maps it)
+                  bi = 3*(x - 1) + ix
+                  bj = 3*(y - 1) + iy
+                  hess(bi, bj) = hess(bi, bj) + wd*m9(bi, bj)
                   cycle
                 end if
                 if (iat == jat) then
