@@ -155,6 +155,14 @@ def test_w_encoding_limit_and_reordered_determinants():
     expected = np.zeros_like(actual)
     expected[30, 30, 0] = 1.4
     np.testing.assert_array_equal(actual, expected)
+    # At the bit-width boundary, the sole occupied spatial orbital has two
+    # electrons: its one-/two-body coefficients are 2 and 1 respectively.
+    f = np.zeros((1, 31, 31))
+    g = np.zeros((1, 31, 31, 31, 31))
+    f[0, 30, 30] = 0.3
+    g[0, 30, 30, 30, 30] = -0.2
+    amp = _mf_hess_amp(det, f, g, actual, np.ones((1, 1)))
+    np.testing.assert_allclose(amp, [[0.7 * (2 * 0.3 - 0.2)]], rtol=0, atol=1e-14)
     dets, stack = _excitation_matrices_python(4, 2, 1)
     order = np.random.default_rng(15).permutation(len(dets))
     ci = np.random.default_rng(16).normal(size=len(dets))
@@ -185,5 +193,3 @@ def test_amplitude_chunk_boundary_and_partial_last_chunk():
         reference = _apply_active_operator(f[k], g[k], stack, reference_w) @ vecs
         np.testing.assert_allclose(actual[k], reference, rtol=0,
                                    atol=1e-13 * max(1.0, np.abs(reference).max()))
-
-
