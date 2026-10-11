@@ -192,6 +192,7 @@ module types
     integer(c_int64_t) :: xc_incdft         = 0         !< incremental DFT (experimental)
     real(c_double)     :: grad_cutoff       = 1.0d-10   !< 2e-derivative Schwarz cutoff (gradient)
     real(c_double)     :: mrsf_resp_cutoff  = 1.0d-8    !< MRSF response 2e cutoff
+    logical(c_bool)    :: mrsf_shared_f3    = .false. !< shared exchange storage (opt-in)
     integer(c_int64_t) :: mrsf_fp32         = 0         !< FP32 MRSF response digestion
     integer(c_int64_t) :: mrsf_zv_warmstart = 1         !< MRSF z-vector warm-start (1=on, default)
     logical(c_bool) :: qmmm_flag = .false.       !< QM/MM Flag

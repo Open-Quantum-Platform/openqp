@@ -307,6 +307,7 @@ contains
     call mrsfcbc(infos, mo_a, mo_b, wrk1, mrsf_density(1,:,:,:))
     call int2_data_st%clean()
     int2_data_st%d3 => mrsf_density(:1,:,:,:)
+    int2_data_st%shared_exchange = infos%control%mrsf_shared_f3
     int2_data_st%tamm_dancoff = .true.
     int2_data_st%scale_exchange = scale_exch
     int2_data_st%scale_coulomb = scale_exch
@@ -852,6 +853,11 @@ contains
     ! FP32 response digestion from [tdhf] fp32 (infos%control%mrsf_fp32). Also
     ! reaches the z-vector gradient, which reuses the same process-global flag.
     call mrsf_set_fp32(int(infos%control%mrsf_fp32))
+    if (infos%control%mrsf_shared_f3) then
+      write(*,'(a)') 'MRSF exchange storage: shared (tdhf.shared_f3=true)'
+    else
+      write(*,'(a)') 'MRSF exchange storage: private (tdhf.shared_f3=false)'
+    end if
 
     ! Initialize ERI (Electron Repulsion Integrals) calculations
     call int2_driver%init(basis, infos)
@@ -1060,6 +1066,7 @@ contains
         if (umrsf) then
           call int2_udata_st%clean()
           int2_udata_st%d3 => mrsf_density(:iv,:,:,:)
+          int2_udata_st%shared_exchange = infos%control%mrsf_shared_f3
           int2_udata_st%tamm_dancoff = tamm_dancoff
           int2_udata_st%scale_exchange = scale_exch
           int2_udata_st%scale_coulomb = scale_exch
@@ -1078,6 +1085,7 @@ contains
         else
           call int2_data_st%clean()
           int2_data_st%d3 => mrsf_density(:iv,:,:,:)
+          int2_data_st%shared_exchange = infos%control%mrsf_shared_f3
           int2_data_st%tamm_dancoff = tamm_dancoff
           int2_data_st%scale_exchange = scale_exch
           int2_data_st%scale_coulomb = scale_exch

@@ -7,10 +7,13 @@ module tdhf_mrsf_lib
 
     private :: int2_mrsf_update_worker, int2_umrsf_update_worker
     private :: int2_mrsf_shell_worker, int2_umrsf_shell_worker
+    private :: int2_mrsf_private_update, int2_umrsf_private_update
+    private :: int2_mrsf_private_shell, int2_umrsf_private_shell
 
     type, extends(int2_fock_data_t) :: int2_mrsf_data_t
 
-      ! Public result is also thread 1's density-dependent accumulator and
+      logical :: shared_exchange = .false. !< explicit shared-storage option
+      ! In shared mode, public result is also thread 1's density-dependent accumulator and
       ! the shared exchange image. It keeps one owner throughout every CAM pass.
       ! Exchange updates synchronize only when multiple workers are active.
       real(kind=dp), allocatable :: f3(:,:,:,:,:)
@@ -96,9 +99,13 @@ contains
       if (allocated(this%dsh)) deallocate(this%dsh)
 
       ncoul = nmatrix - 3
-      allocate(this%f3(this%nfocks, nmatrix, nbf, nbf, 1), &
-               this%f3_private(this%nfocks, ncoul, nbf, nbf, nthreads-1), &
-               this%dsh(nsh,nsh), source=0.0_dp)
+      if (this%shared_exchange) then
+        allocate(this%f3(this%nfocks, nmatrix, nbf, nbf, 1), &
+                 this%f3_private(this%nfocks, ncoul, nbf, nbf, nthreads-1), source=0.0_dp)
+      else
+        allocate(this%f3(this%nfocks, nmatrix, nbf, nbf, nthreads), source=0.0_dp)
+      end if
+      allocate(this%dsh(nsh,nsh), source=0.0_dp)
 
       ! Invalidate FP32 images even when this call switches FP32 off.
       if (allocated(this%ds_sp)) deallocate(this%ds_sp)
@@ -137,8 +144,12 @@ contains
                    this%d3_sp(this%nfocks, nmatrix, nbf, nbf))
           this%ds_sp = real(this%ds, sp)
           this%d3_sp = real(this%d3, sp)
-          allocate(this%f3s(this%nfocks, 4, nbf, nbf, nthreads), &
-                   this%f3_ex_sp(this%nfocks, 3, nbf, nbf), source=0.0_sp)
+          if (this%shared_exchange) then
+            allocate(this%f3s(this%nfocks, 4, nbf, nbf, nthreads), &
+                     this%f3_ex_sp(this%nfocks, 3, nbf, nbf), source=0.0_sp)
+          else
+            allocate(this%f3s(this%nfocks, nmatrix, nbf, nbf, nthreads), source=0.0_sp)
+          end if
         end select
       end if
     end if
@@ -157,6 +168,27 @@ contains
     class(int2_mrsf_data_t), intent(inout) :: this
 
     if (this%cur_pass /= this%num_passes) return
+
+    if (.not.this%shared_exchange) then
+      ! Preserve the full private worker layout; fold only one AO pair at a
+      ! time so conversion and addition do not create another full result.
+      do nu = 1, size(this%f3,4)
+        do mu = 1, size(this%f3,3)
+          do t = 2, size(this%f3,5)
+            this%f3(:,:,mu,nu,1) = this%f3(:,:,mu,nu,1) + this%f3(:,:,mu,nu,t)
+          end do
+          if (allocated(this%f3s)) then
+            do t = 1, size(this%f3s,5)
+              this%f3(:,:,mu,nu,1) = this%f3(:,:,mu,nu,1) + real(this%f3s(:,:,mu,nu,t),dp)
+            end do
+          end if
+        end do
+      end do
+      if (allocated(this%f3s)) deallocate(this%f3s)
+      call this%pe%allreduce(this%f3(:,:,:,:,1),size(this%f3(:,:,:,:,1)))
+      this%nthreads = 1
+      return
+    end if
 
     nmatrix = size(this%f3,2)
     ncoul = nmatrix - 3
@@ -287,7 +319,11 @@ contains
     implicit none
     class(int2_mrsf_data_t), intent(inout) :: this
     type(int2_storage_t), intent(inout) :: buf
-    call int2_mrsf_update_worker(this, buf)
+    if (this%shared_exchange) then
+      call int2_mrsf_update_worker(this, buf)
+    else
+      call int2_mrsf_private_update(this, buf)
+    end if
   end subroutine int2_mrsf_data_t_update
 
   subroutine int2_mrsf_update_worker(this, buf)
@@ -517,7 +553,11 @@ contains
     implicit none
     class(int2_umrsf_data_t), intent(inout) :: this
     type(int2_storage_t), intent(inout) :: buf
-    call int2_umrsf_update_worker(this, buf)
+    if (this%shared_exchange) then
+      call int2_umrsf_update_worker(this, buf)
+    else
+      call int2_umrsf_private_update(this, buf)
+    end if
   end subroutine int2_umrsf_data_t_update
 
   subroutine int2_umrsf_update_worker(this, buf)
@@ -4230,7 +4270,11 @@ contains
     class(int2_mrsf_data_t), intent(inout) :: this
     type(int2_shell_block_t), intent(in) :: shell_block
     integer, intent(in) :: thread_id
-    call int2_mrsf_shell_worker(this, shell_block, thread_id)
+    if (this%shared_exchange) then
+      call int2_mrsf_shell_worker(this, shell_block, thread_id)
+    else
+      call int2_mrsf_private_shell(this, shell_block, thread_id)
+    end if
   end subroutine int2_mrsf_consume_shell
 
   subroutine int2_mrsf_shell_worker(this, shell_block, thread_id)
@@ -4570,7 +4614,11 @@ contains
     class(int2_umrsf_data_t), intent(inout) :: this
     type(int2_shell_block_t), intent(in) :: shell_block
     integer, intent(in) :: thread_id
-    call int2_umrsf_shell_worker(this, shell_block, thread_id)
+    if (this%shared_exchange) then
+      call int2_umrsf_shell_worker(this, shell_block, thread_id)
+    else
+      call int2_umrsf_private_shell(this, shell_block, thread_id)
+    end if
   end subroutine int2_umrsf_consume_shell
 
   subroutine int2_umrsf_shell_worker(this, shell_block, thread_id)
@@ -4828,5 +4876,651 @@ contains
 
 
   end subroutine int2_umrsf_shell_worker
+
+! Private workers retain the established computation loops.
+  subroutine int2_mrsf_private_update(this, buf)
+
+    implicit none
+
+    class(int2_mrsf_data_t), intent(inout) :: this
+    type(int2_storage_t), intent(inout) :: buf
+    integer :: i, j, k, l, n, v, c
+    real(kind=dp) :: val, xval, cval
+    integer :: mythread
+
+    mythread = buf%thread_id
+
+    if (.not.this%tamm_dancoff) return
+
+    associate ( f3 => this%f3(:,:,:,:,mythread), &
+                d3 => this%d3, &
+                ds => this%ds, &
+                nf => this%nfocks &
+      )
+
+      ! f3(nF,1:7,:,:) !> 1=ado2v, 2=ado1v, 3=adco1, 4=adco2, 5=ao21v, 6=aco12, 7=agdlr
+      ! d3(nF,1:7,:,:) !> 1= bo2v, 2= bo1v, 3= bco1, 4= bco2, 5= o21v, 6= co12, 7= ball
+      ! ds(nF,1:4,:,:) !> symmetrized Coulomb density (d3+d3^T), precomputed once
+
+      if (this%cur_pass==1 .and. allocated(this%f3s)) then
+        ! Opt-in FP32 accumulation (OQP_MRSF_FP32): same algebra as the FP64
+        ! path below but operands/accumulator are single precision. Folded back
+        ! to FP64 in parallel_stop. ~few-ueV perturbation, convergence unchanged.
+        block
+          real(kind=sp) :: cs, xs
+          associate (f3s => this%f3s(:,:,:,:,mythread), &
+                     ds_sp => this%ds_sp, d3_sp => this%d3_sp)
+          do n = 1, buf%ncur
+            i = buf%ids(1,n); j = buf%ids(2,n); k = buf%ids(3,n); l = buf%ids(4,n)
+            val = buf%ints(n)
+            cs = real(val*this%scale_coulomb, sp)
+            xs = real(val*this%scale_exchange, sp)
+            do c = 1, 4
+              do v = 1, nf
+                f3s(v,c,i,j) = f3s(v,c,i,j) + cs*ds_sp(v,c,k,l)
+                f3s(v,c,j,i) = f3s(v,c,j,i) + cs*ds_sp(v,c,k,l)
+                f3s(v,c,k,l) = f3s(v,c,k,l) + cs*ds_sp(v,c,i,j)
+                f3s(v,c,l,k) = f3s(v,c,l,k) + cs*ds_sp(v,c,i,j)
+              end do
+            end do
+            do c = 1, 7
+              do v = 1, nf
+                f3s(v,c,i,k) = f3s(v,c,i,k) - xs*d3_sp(v,c,j,l)
+                f3s(v,c,k,i) = f3s(v,c,k,i) - xs*d3_sp(v,c,l,j)
+                f3s(v,c,i,l) = f3s(v,c,i,l) - xs*d3_sp(v,c,j,k)
+                f3s(v,c,l,i) = f3s(v,c,l,i) - xs*d3_sp(v,c,k,j)
+                f3s(v,c,j,k) = f3s(v,c,j,k) - xs*d3_sp(v,c,i,l)
+                f3s(v,c,k,j) = f3s(v,c,k,j) - xs*d3_sp(v,c,l,i)
+                f3s(v,c,j,l) = f3s(v,c,j,l) - xs*d3_sp(v,c,i,k)
+                f3s(v,c,l,j) = f3s(v,c,l,j) - xs*d3_sp(v,c,k,i)
+              end do
+            end do
+          end do
+          end associate
+        end block
+
+      else if (this%cur_pass==1) then
+        do n = 1, buf%ncur
+          i = buf%ids(1,n); j = buf%ids(2,n); k = buf%ids(3,n); l = buf%ids(4,n)
+          val = buf%ints(n)
+          xval = val * this%scale_exchange
+          cval = val * this%scale_coulomb
+
+          ! Coulomb (components 1:4): the 8 permutational contributions collapse
+          ! to 4 distinct Fock targets, each reading one symmetric ds slab.
+          ! Explicit loops (stride-1 v inner) vectorize and avoid array temporaries.
+          do c = 1, 4
+            do v = 1, nf
+              f3(v,c,i,j) = f3(v,c,i,j) + cval*ds(v,c,k,l)
+              f3(v,c,j,i) = f3(v,c,j,i) + cval*ds(v,c,k,l)
+              f3(v,c,k,l) = f3(v,c,k,l) + cval*ds(v,c,i,j)
+              f3(v,c,l,k) = f3(v,c,l,k) + cval*ds(v,c,i,j)
+            end do
+          end do
+          ! Exchange (components 1:7): 8 distinct targets (no symmetry to fold).
+          do c = 1, 7
+            do v = 1, nf
+              f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,j,l)
+              f3(v,c,k,i) = f3(v,c,k,i) - xval*d3(v,c,l,j)
+              f3(v,c,i,l) = f3(v,c,i,l) - xval*d3(v,c,j,k)
+              f3(v,c,l,i) = f3(v,c,l,i) - xval*d3(v,c,k,j)
+              f3(v,c,j,k) = f3(v,c,j,k) - xval*d3(v,c,i,l)
+              f3(v,c,k,j) = f3(v,c,k,j) - xval*d3(v,c,l,i)
+              f3(v,c,j,l) = f3(v,c,j,l) - xval*d3(v,c,i,k)
+              f3(v,c,l,j) = f3(v,c,l,j) - xval*d3(v,c,k,i)
+            end do
+          end do
+        end do
+
+      else if (this%cur_pass==2) then
+        do n = 1, buf%ncur
+          i = buf%ids(1,n); j = buf%ids(2,n); k = buf%ids(3,n); l = buf%ids(4,n)
+          xval = buf%ints(n) * this%scale_exchange
+          do v = 1, nf
+            f3(v,7,i,k) = f3(v,7,i,k) - xval*d3(v,7,j,l)
+            f3(v,7,k,i) = f3(v,7,k,i) - xval*d3(v,7,l,j)
+            f3(v,7,i,l) = f3(v,7,i,l) - xval*d3(v,7,j,k)
+            f3(v,7,l,i) = f3(v,7,l,i) - xval*d3(v,7,k,j)
+            f3(v,7,j,k) = f3(v,7,j,k) - xval*d3(v,7,i,l)
+            f3(v,7,k,j) = f3(v,7,k,j) - xval*d3(v,7,l,i)
+            f3(v,7,j,l) = f3(v,7,j,l) - xval*d3(v,7,i,k)
+            f3(v,7,l,j) = f3(v,7,l,j) - xval*d3(v,7,k,i)
+          end do
+        end do
+      end if
+
+    end associate
+
+    buf%ncur = 0
+
+  end subroutine
+
+  subroutine int2_umrsf_private_update(this, buf)
+
+    implicit none
+
+    class(int2_umrsf_data_t), intent(inout) :: this
+    type(int2_storage_t), intent(inout) :: buf
+    integer :: i, j, k, l, n, v, c
+    real(kind=dp) :: val, xval, cval
+    integer :: mythread
+
+    mythread = buf%thread_id
+
+    if (.not.this%tamm_dancoff) return
+
+    associate ( f3 => this%f3(:,:,:,:,mythread), &
+                d3 => this%d3, &
+                ds => this%ds, &
+                nf => this%nfocks &
+      )
+
+      ! f3/d3(nF,1:11,:,:): 1:8 alpha/beta pairs of the MRSF Coulomb+exchange
+      ! columns, 9:10 mixed alpha/beta spin-pair channels, 11 = agdlr.
+      ! ds(nF,1:8,:,:) = d3+d3^T for the Coulomb columns, precomputed once.
+      ! Explicit loops with the stride-1 v index innermost: the former
+      ! whole-slice assignments read the pointer d3, which the compiler cannot
+      ! prove disjoint from f3, so each of them could build an array temporary.
+
+      if (this%cur_pass==1) then
+        do n = 1, buf%ncur
+          i = buf%ids(1,n); j = buf%ids(2,n); k = buf%ids(3,n); l = buf%ids(4,n)
+          val = buf%ints(n)
+          xval = val * this%scale_exchange
+          cval = val * this%scale_coulomb
+
+          ! Coulomb (columns 1:8): the 8 permutational contributions collapse
+          ! to 4 distinct Fock targets, each reading one symmetric ds slab:
+          ! f(ij)+=c[d(kl)+d(lk)], f(ji) likewise, f(kl)+=c[d(ij)+d(ji)], f(lk) likewise.
+          do c = 1, 8
+            do v = 1, nf
+              f3(v,c,i,j) = f3(v,c,i,j) + cval*ds(v,c,k,l)
+              f3(v,c,j,i) = f3(v,c,j,i) + cval*ds(v,c,k,l)
+              f3(v,c,k,l) = f3(v,c,k,l) + cval*ds(v,c,i,j)
+              f3(v,c,l,k) = f3(v,c,l,k) + cval*ds(v,c,i,j)
+            end do
+          end do
+
+          ! Exchange (columns 1:8 and the general column 11).
+          do c = 1, 8
+            do v = 1, nf
+              f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,j,l)
+              f3(v,c,k,i) = f3(v,c,k,i) - xval*d3(v,c,l,j)
+              f3(v,c,i,l) = f3(v,c,i,l) - xval*d3(v,c,j,k)
+              f3(v,c,l,i) = f3(v,c,l,i) - xval*d3(v,c,k,j)
+              f3(v,c,j,k) = f3(v,c,j,k) - xval*d3(v,c,i,l)
+              f3(v,c,k,j) = f3(v,c,k,j) - xval*d3(v,c,l,i)
+              f3(v,c,j,l) = f3(v,c,j,l) - xval*d3(v,c,i,k)
+              f3(v,c,l,j) = f3(v,c,l,j) - xval*d3(v,c,k,i)
+            end do
+          end do
+          do v = 1, nf
+            f3(v,11,i,k) = f3(v,11,i,k) - xval*d3(v,11,j,l)
+            f3(v,11,k,i) = f3(v,11,k,i) - xval*d3(v,11,l,j)
+            f3(v,11,i,l) = f3(v,11,i,l) - xval*d3(v,11,j,k)
+            f3(v,11,l,i) = f3(v,11,l,i) - xval*d3(v,11,k,j)
+            f3(v,11,j,k) = f3(v,11,j,k) - xval*d3(v,11,i,l)
+            f3(v,11,k,j) = f3(v,11,k,j) - xval*d3(v,11,l,i)
+            f3(v,11,j,l) = f3(v,11,j,l) - xval*d3(v,11,i,k)
+            f3(v,11,l,j) = f3(v,11,l,j) - xval*d3(v,11,k,i)
+          end do
+
+          ! Mixed alpha/beta spin-pair channels use the GAMESS-compatible
+          ! exchange permutation for UMRSF open-shell pair densities.
+          do c = 9, 10
+            do v = 1, nf
+              f3(v,c,i,l) = f3(v,c,i,l) - xval*d3(v,c,k,j)
+              f3(v,c,l,i) = f3(v,c,l,i) - xval*d3(v,c,j,k)
+              f3(v,c,k,j) = f3(v,c,k,j) - xval*d3(v,c,i,l)
+              f3(v,c,j,k) = f3(v,c,j,k) - xval*d3(v,c,l,i)
+              f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,l,j)
+              f3(v,c,k,i) = f3(v,c,k,i) - xval*d3(v,c,j,l)
+              f3(v,c,l,j) = f3(v,c,l,j) - xval*d3(v,c,i,k)
+              f3(v,c,j,l) = f3(v,c,j,l) - xval*d3(v,c,k,i)
+            end do
+          end do
+        end do
+
+      else if (this%cur_pass==2) then
+        ! In pass 2 only the general component agdlr (column 11) is updated,
+        ! as in the MRSF version (column 7 there).
+        do n = 1, buf%ncur
+          i = buf%ids(1,n); j = buf%ids(2,n); k = buf%ids(3,n); l = buf%ids(4,n)
+          xval = buf%ints(n) * this%scale_exchange
+          do v = 1, nf
+            f3(v,11,i,k) = f3(v,11,i,k) - xval*d3(v,11,j,l)
+            f3(v,11,k,i) = f3(v,11,k,i) - xval*d3(v,11,l,j)
+            f3(v,11,i,l) = f3(v,11,i,l) - xval*d3(v,11,j,k)
+            f3(v,11,l,i) = f3(v,11,l,i) - xval*d3(v,11,k,j)
+            f3(v,11,j,k) = f3(v,11,j,k) - xval*d3(v,11,i,l)
+            f3(v,11,k,j) = f3(v,11,k,j) - xval*d3(v,11,l,i)
+            f3(v,11,j,l) = f3(v,11,j,l) - xval*d3(v,11,i,k)
+            f3(v,11,l,j) = f3(v,11,l,j) - xval*d3(v,11,k,i)
+          end do
+        end do
+      end if
+
+    end associate
+
+    buf%ncur = 0
+
+  end subroutine int2_umrsf_private_update
+
+  subroutine int2_mrsf_private_shell(this, shell_block, thread_id)
+
+    implicit none
+
+    class(int2_mrsf_data_t), intent(inout) :: this
+    type(int2_shell_block_t), intent(in) :: shell_block
+    integer, intent(in) :: thread_id
+    integer :: ba,bb,bc,bd,bmaxb,bmaxd,bnij,bnkl,swap_index
+    logical :: bab,bcd,bsame
+    integer :: i, j, k, l, n, v, c
+    real(kind=dp) :: val, xval, cval
+    integer :: mythread
+
+    bab=shell_block%shells(1)==shell_block%shells(2)
+    bcd=shell_block%shells(3)==shell_block%shells(4)
+    bsame=all(shell_block%shells(1:2)==shell_block%shells(3:4))
+    mythread = thread_id
+
+    if (.not.this%tamm_dancoff) return
+
+    associate ( f3 => this%f3(:,:,:,:,mythread), &
+                d3 => this%d3, &
+                ds => this%ds, &
+                nf => this%nfocks &
+      )
+
+      ! f3(nF,1:7,:,:) !> 1=ado2v, 2=ado1v, 3=adco1, 4=adco2, 5=ao21v, 6=aco12, 7=agdlr
+      ! d3(nF,1:7,:,:) !> 1= bo2v, 2= bo1v, 3= bco1, 4= bco2, 5= o21v, 6= co12, 7= ball
+      ! ds(nF,1:4,:,:) !> symmetrized Coulomb density (d3+d3^T), precomputed once
+
+      if (this%cur_pass==1 .and. allocated(this%f3s)) then
+        ! Opt-in FP32 accumulation (OQP_MRSF_FP32): same algebra as the FP64
+        ! path below but operands/accumulator are single precision. Folded back
+        ! to FP64 in parallel_stop. ~few-ueV perturbation, convergence unchanged.
+        block
+          real(kind=sp) :: cs, xs
+          associate (f3s => this%f3s(:,:,:,:,mythread), &
+                     ds_sp => this%ds_sp, d3_sp => this%d3_sp)
+        bnij=0
+        do ba=1,shell_block%dims(1)
+          bmaxb=shell_block%dims(2)
+          if (bab) bmaxb=ba
+          do bb=1,bmaxb
+            bnij=bnij+1
+            bnkl=bnij
+            do bc=1,shell_block%dims(3)
+              bmaxd=shell_block%dims(4)
+              if (bcd) bmaxd=bc
+              if (bsame) then
+                bmaxd=min(bmaxd,bnkl)
+                if (bmaxd==0) exit
+                bnkl=bnkl-bmaxd
+              end if
+              do bd=1,bmaxd
+                val=shell_block%values(bd,bc,bb,ba)
+                if (val==0.0_dp) cycle
+                i=shell_block%offsets(1)+ba
+                j=shell_block%offsets(2)+bb
+                k=shell_block%offsets(3)+bc
+                l=shell_block%offsets(4)+bd
+                if (i<j) then
+                  swap_index=i; i=j; j=swap_index
+                end if
+                if (k<l) then
+                  swap_index=k; k=l; l=swap_index
+                end if
+                if (i<k) then
+                  swap_index=i; i=k; k=swap_index
+                  swap_index=j; j=l; l=swap_index
+                else if (i==k .and. j<l) then
+                  swap_index=j; j=l; l=swap_index
+                end if
+
+            cs = real(val*this%scale_coulomb, sp)
+            xs = real(val*this%scale_exchange, sp)
+            do c = 1, 4
+              do v = 1, nf
+                f3s(v,c,i,j) = f3s(v,c,i,j) + cs*ds_sp(v,c,k,l)
+                f3s(v,c,j,i) = f3s(v,c,j,i) + cs*ds_sp(v,c,k,l)
+                f3s(v,c,k,l) = f3s(v,c,k,l) + cs*ds_sp(v,c,i,j)
+                f3s(v,c,l,k) = f3s(v,c,l,k) + cs*ds_sp(v,c,i,j)
+              end do
+            end do
+            do c = 1, 7
+              do v = 1, nf
+                f3s(v,c,i,k) = f3s(v,c,i,k) - xs*d3_sp(v,c,j,l)
+                f3s(v,c,k,i) = f3s(v,c,k,i) - xs*d3_sp(v,c,l,j)
+                f3s(v,c,i,l) = f3s(v,c,i,l) - xs*d3_sp(v,c,j,k)
+                f3s(v,c,l,i) = f3s(v,c,l,i) - xs*d3_sp(v,c,k,j)
+                f3s(v,c,j,k) = f3s(v,c,j,k) - xs*d3_sp(v,c,i,l)
+                f3s(v,c,k,j) = f3s(v,c,k,j) - xs*d3_sp(v,c,l,i)
+                f3s(v,c,j,l) = f3s(v,c,j,l) - xs*d3_sp(v,c,i,k)
+                f3s(v,c,l,j) = f3s(v,c,l,j) - xs*d3_sp(v,c,k,i)
+              end do
+            end do
+              end do
+            end do
+          end do
+        end do
+          end associate
+        end block
+
+      else if (this%cur_pass==1) then
+        bnij=0
+        do ba=1,shell_block%dims(1)
+          bmaxb=shell_block%dims(2)
+          if (bab) bmaxb=ba
+          do bb=1,bmaxb
+            bnij=bnij+1
+            bnkl=bnij
+            do bc=1,shell_block%dims(3)
+              bmaxd=shell_block%dims(4)
+              if (bcd) bmaxd=bc
+              if (bsame) then
+                bmaxd=min(bmaxd,bnkl)
+                if (bmaxd==0) exit
+                bnkl=bnkl-bmaxd
+              end if
+              do bd=1,bmaxd
+                val=shell_block%values(bd,bc,bb,ba)
+                if (val==0.0_dp) cycle
+                i=shell_block%offsets(1)+ba
+                j=shell_block%offsets(2)+bb
+                k=shell_block%offsets(3)+bc
+                l=shell_block%offsets(4)+bd
+                if (i<j) then
+                  swap_index=i; i=j; j=swap_index
+                end if
+                if (k<l) then
+                  swap_index=k; k=l; l=swap_index
+                end if
+                if (i<k) then
+                  swap_index=i; i=k; k=swap_index
+                  swap_index=j; j=l; l=swap_index
+                else if (i==k .and. j<l) then
+                  swap_index=j; j=l; l=swap_index
+                end if
+
+          xval = val * this%scale_exchange
+          cval = val * this%scale_coulomb
+
+          ! Coulomb (components 1:4): the 8 permutational contributions collapse
+          ! to 4 distinct Fock targets, each reading one symmetric ds slab.
+          ! Explicit loops (stride-1 v inner) vectorize and avoid array temporaries.
+          do c = 1, 4
+            do v = 1, nf
+              f3(v,c,i,j) = f3(v,c,i,j) + cval*ds(v,c,k,l)
+              f3(v,c,j,i) = f3(v,c,j,i) + cval*ds(v,c,k,l)
+              f3(v,c,k,l) = f3(v,c,k,l) + cval*ds(v,c,i,j)
+              f3(v,c,l,k) = f3(v,c,l,k) + cval*ds(v,c,i,j)
+            end do
+          end do
+          ! Exchange (components 1:7): 8 distinct targets (no symmetry to fold).
+          do c = 1, 7
+            do v = 1, nf
+              f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,j,l)
+              f3(v,c,k,i) = f3(v,c,k,i) - xval*d3(v,c,l,j)
+              f3(v,c,i,l) = f3(v,c,i,l) - xval*d3(v,c,j,k)
+              f3(v,c,l,i) = f3(v,c,l,i) - xval*d3(v,c,k,j)
+              f3(v,c,j,k) = f3(v,c,j,k) - xval*d3(v,c,i,l)
+              f3(v,c,k,j) = f3(v,c,k,j) - xval*d3(v,c,l,i)
+              f3(v,c,j,l) = f3(v,c,j,l) - xval*d3(v,c,i,k)
+              f3(v,c,l,j) = f3(v,c,l,j) - xval*d3(v,c,k,i)
+            end do
+          end do
+              end do
+            end do
+          end do
+        end do
+
+      else if (this%cur_pass==2) then
+        bnij=0
+        do ba=1,shell_block%dims(1)
+          bmaxb=shell_block%dims(2)
+          if (bab) bmaxb=ba
+          do bb=1,bmaxb
+            bnij=bnij+1
+            bnkl=bnij
+            do bc=1,shell_block%dims(3)
+              bmaxd=shell_block%dims(4)
+              if (bcd) bmaxd=bc
+              if (bsame) then
+                bmaxd=min(bmaxd,bnkl)
+                if (bmaxd==0) exit
+                bnkl=bnkl-bmaxd
+              end if
+              do bd=1,bmaxd
+                val=shell_block%values(bd,bc,bb,ba)
+                if (val==0.0_dp) cycle
+                i=shell_block%offsets(1)+ba
+                j=shell_block%offsets(2)+bb
+                k=shell_block%offsets(3)+bc
+                l=shell_block%offsets(4)+bd
+                if (i<j) then
+                  swap_index=i; i=j; j=swap_index
+                end if
+                if (k<l) then
+                  swap_index=k; k=l; l=swap_index
+                end if
+                if (i<k) then
+                  swap_index=i; i=k; k=swap_index
+                  swap_index=j; j=l; l=swap_index
+                else if (i==k .and. j<l) then
+                  swap_index=j; j=l; l=swap_index
+                end if
+
+          xval = val * this%scale_exchange
+          do v = 1, nf
+            f3(v,7,i,k) = f3(v,7,i,k) - xval*d3(v,7,j,l)
+            f3(v,7,k,i) = f3(v,7,k,i) - xval*d3(v,7,l,j)
+            f3(v,7,i,l) = f3(v,7,i,l) - xval*d3(v,7,j,k)
+            f3(v,7,l,i) = f3(v,7,l,i) - xval*d3(v,7,k,j)
+            f3(v,7,j,k) = f3(v,7,j,k) - xval*d3(v,7,i,l)
+            f3(v,7,k,j) = f3(v,7,k,j) - xval*d3(v,7,l,i)
+            f3(v,7,j,l) = f3(v,7,j,l) - xval*d3(v,7,i,k)
+            f3(v,7,l,j) = f3(v,7,l,j) - xval*d3(v,7,k,i)
+          end do
+              end do
+            end do
+          end do
+        end do
+      end if
+
+    end associate
+
+
+
+  end subroutine
+
+  subroutine int2_umrsf_private_shell(this, shell_block, thread_id)
+
+    implicit none
+
+    class(int2_umrsf_data_t), intent(inout) :: this
+    type(int2_shell_block_t), intent(in) :: shell_block
+    integer, intent(in) :: thread_id
+    integer :: ba,bb,bc,bd,bmaxb,bmaxd,bnij,bnkl,swap_index
+    logical :: bab,bcd,bsame
+    integer :: i, j, k, l, n, v, c
+    real(kind=dp) :: val, xval, cval
+    integer :: mythread
+
+    bab=shell_block%shells(1)==shell_block%shells(2)
+    bcd=shell_block%shells(3)==shell_block%shells(4)
+    bsame=all(shell_block%shells(1:2)==shell_block%shells(3:4))
+    mythread = thread_id
+
+    if (.not.this%tamm_dancoff) return
+
+    associate ( f3 => this%f3(:,:,:,:,mythread), &
+                d3 => this%d3, &
+                ds => this%ds, &
+                nf => this%nfocks &
+      )
+
+      ! f3/d3(nF,1:11,:,:): 1:8 alpha/beta pairs of the MRSF Coulomb+exchange
+      ! columns, 9:10 mixed alpha/beta spin-pair channels, 11 = agdlr.
+      ! ds(nF,1:8,:,:) = d3+d3^T for the Coulomb columns, precomputed once.
+      ! Explicit loops with the stride-1 v index innermost: the former
+      ! whole-slice assignments read the pointer d3, which the compiler cannot
+      ! prove disjoint from f3, so each of them could build an array temporary.
+
+      if (this%cur_pass==1) then
+        bnij=0
+        do ba=1,shell_block%dims(1)
+          bmaxb=shell_block%dims(2)
+          if (bab) bmaxb=ba
+          do bb=1,bmaxb
+            bnij=bnij+1
+            bnkl=bnij
+            do bc=1,shell_block%dims(3)
+              bmaxd=shell_block%dims(4)
+              if (bcd) bmaxd=bc
+              if (bsame) then
+                bmaxd=min(bmaxd,bnkl)
+                if (bmaxd==0) exit
+                bnkl=bnkl-bmaxd
+              end if
+              do bd=1,bmaxd
+                val=shell_block%values(bd,bc,bb,ba)
+                if (val==0.0_dp) cycle
+                i=shell_block%offsets(1)+ba
+                j=shell_block%offsets(2)+bb
+                k=shell_block%offsets(3)+bc
+                l=shell_block%offsets(4)+bd
+                if (i<j) then
+                  swap_index=i; i=j; j=swap_index
+                end if
+                if (k<l) then
+                  swap_index=k; k=l; l=swap_index
+                end if
+                if (i<k) then
+                  swap_index=i; i=k; k=swap_index
+                  swap_index=j; j=l; l=swap_index
+                else if (i==k .and. j<l) then
+                  swap_index=j; j=l; l=swap_index
+                end if
+
+          xval = val * this%scale_exchange
+          cval = val * this%scale_coulomb
+
+          ! Coulomb (columns 1:8): the 8 permutational contributions collapse
+          ! to 4 distinct Fock targets, each reading one symmetric ds slab:
+          ! f(ij)+=c[d(kl)+d(lk)], f(ji) likewise, f(kl)+=c[d(ij)+d(ji)], f(lk) likewise.
+          do c = 1, 8
+            do v = 1, nf
+              f3(v,c,i,j) = f3(v,c,i,j) + cval*ds(v,c,k,l)
+              f3(v,c,j,i) = f3(v,c,j,i) + cval*ds(v,c,k,l)
+              f3(v,c,k,l) = f3(v,c,k,l) + cval*ds(v,c,i,j)
+              f3(v,c,l,k) = f3(v,c,l,k) + cval*ds(v,c,i,j)
+            end do
+          end do
+
+          ! Exchange (columns 1:8 and the general column 11).
+          do c = 1, 8
+            do v = 1, nf
+              f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,j,l)
+              f3(v,c,k,i) = f3(v,c,k,i) - xval*d3(v,c,l,j)
+              f3(v,c,i,l) = f3(v,c,i,l) - xval*d3(v,c,j,k)
+              f3(v,c,l,i) = f3(v,c,l,i) - xval*d3(v,c,k,j)
+              f3(v,c,j,k) = f3(v,c,j,k) - xval*d3(v,c,i,l)
+              f3(v,c,k,j) = f3(v,c,k,j) - xval*d3(v,c,l,i)
+              f3(v,c,j,l) = f3(v,c,j,l) - xval*d3(v,c,i,k)
+              f3(v,c,l,j) = f3(v,c,l,j) - xval*d3(v,c,k,i)
+            end do
+          end do
+          do v = 1, nf
+            f3(v,11,i,k) = f3(v,11,i,k) - xval*d3(v,11,j,l)
+            f3(v,11,k,i) = f3(v,11,k,i) - xval*d3(v,11,l,j)
+            f3(v,11,i,l) = f3(v,11,i,l) - xval*d3(v,11,j,k)
+            f3(v,11,l,i) = f3(v,11,l,i) - xval*d3(v,11,k,j)
+            f3(v,11,j,k) = f3(v,11,j,k) - xval*d3(v,11,i,l)
+            f3(v,11,k,j) = f3(v,11,k,j) - xval*d3(v,11,l,i)
+            f3(v,11,j,l) = f3(v,11,j,l) - xval*d3(v,11,i,k)
+            f3(v,11,l,j) = f3(v,11,l,j) - xval*d3(v,11,k,i)
+          end do
+
+          ! Mixed alpha/beta spin-pair channels use the GAMESS-compatible
+          ! exchange permutation for UMRSF open-shell pair densities.
+          do c = 9, 10
+            do v = 1, nf
+              f3(v,c,i,l) = f3(v,c,i,l) - xval*d3(v,c,k,j)
+              f3(v,c,l,i) = f3(v,c,l,i) - xval*d3(v,c,j,k)
+              f3(v,c,k,j) = f3(v,c,k,j) - xval*d3(v,c,i,l)
+              f3(v,c,j,k) = f3(v,c,j,k) - xval*d3(v,c,l,i)
+              f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,l,j)
+              f3(v,c,k,i) = f3(v,c,k,i) - xval*d3(v,c,j,l)
+              f3(v,c,l,j) = f3(v,c,l,j) - xval*d3(v,c,i,k)
+              f3(v,c,j,l) = f3(v,c,j,l) - xval*d3(v,c,k,i)
+            end do
+          end do
+              end do
+            end do
+          end do
+        end do
+
+      else if (this%cur_pass==2) then
+        ! In pass 2 only the general component agdlr (column 11) is updated,
+        ! as in the MRSF version (column 7 there).
+        bnij=0
+        do ba=1,shell_block%dims(1)
+          bmaxb=shell_block%dims(2)
+          if (bab) bmaxb=ba
+          do bb=1,bmaxb
+            bnij=bnij+1
+            bnkl=bnij
+            do bc=1,shell_block%dims(3)
+              bmaxd=shell_block%dims(4)
+              if (bcd) bmaxd=bc
+              if (bsame) then
+                bmaxd=min(bmaxd,bnkl)
+                if (bmaxd==0) exit
+                bnkl=bnkl-bmaxd
+              end if
+              do bd=1,bmaxd
+                val=shell_block%values(bd,bc,bb,ba)
+                if (val==0.0_dp) cycle
+                i=shell_block%offsets(1)+ba
+                j=shell_block%offsets(2)+bb
+                k=shell_block%offsets(3)+bc
+                l=shell_block%offsets(4)+bd
+                if (i<j) then
+                  swap_index=i; i=j; j=swap_index
+                end if
+                if (k<l) then
+                  swap_index=k; k=l; l=swap_index
+                end if
+                if (i<k) then
+                  swap_index=i; i=k; k=swap_index
+                  swap_index=j; j=l; l=swap_index
+                else if (i==k .and. j<l) then
+                  swap_index=j; j=l; l=swap_index
+                end if
+
+          xval = val * this%scale_exchange
+          do v = 1, nf
+            f3(v,11,i,k) = f3(v,11,i,k) - xval*d3(v,11,j,l)
+            f3(v,11,k,i) = f3(v,11,k,i) - xval*d3(v,11,l,j)
+            f3(v,11,i,l) = f3(v,11,i,l) - xval*d3(v,11,j,k)
+            f3(v,11,l,i) = f3(v,11,l,i) - xval*d3(v,11,k,j)
+            f3(v,11,j,k) = f3(v,11,j,k) - xval*d3(v,11,i,l)
+            f3(v,11,k,j) = f3(v,11,k,j) - xval*d3(v,11,l,i)
+            f3(v,11,j,l) = f3(v,11,j,l) - xval*d3(v,11,i,k)
+            f3(v,11,l,j) = f3(v,11,l,j) - xval*d3(v,11,k,i)
+          end do
+              end do
+            end do
+          end do
+        end do
+      end if
+
+    end associate
+
+
+
+  end subroutine int2_umrsf_private_shell
 
 end module tdhf_mrsf_lib

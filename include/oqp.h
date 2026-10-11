@@ -182,6 +182,7 @@ struct control_parameters {
     int64_t   xc_incdft;
     double    grad_cutoff;
     double    mrsf_resp_cutoff;
+    bool      mrsf_shared_f3;
     int64_t   mrsf_fp32;
     int64_t   mrsf_zv_warmstart;
     bool      qmmm_flag;

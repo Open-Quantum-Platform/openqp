@@ -42,6 +42,34 @@ class SharedMRSFFockTests(unittest.TestCase):
                 self.assertEqual(covered, worker.count("!$omp atomic update"),
                                  "atomic exchange can run without serial dispatch")
 
+    def test_private_storage_is_the_default(self):
+        source = (Path(__file__).resolve().parents[1] /
+                  "source" / "tdhf_mrsf_lib.F90").read_text()
+        self.assertRegex(source, r"logical :: shared_exchange = \.false\.")
+        for entry, private in (("int2_mrsf_data_t_update", "int2_mrsf_private_update"),
+                               ("int2_umrsf_data_t_update", "int2_umrsf_private_update"),
+                               ("int2_mrsf_consume_shell", "int2_mrsf_private_shell"),
+                               ("int2_umrsf_consume_shell", "int2_umrsf_private_shell")):
+            routine = re.search(r"(?ms)^  subroutine " + entry +
+                                r"\(.*?^  end subroutine[^\n]*", source).group()
+            self.assertIn("if (this%shared_exchange) then", routine)
+            self.assertIn("call " + private + "(", routine)
+
+    def test_compact_api_and_installed_control_select_storage(self):
+        from oqp import OpenQP
+        from oqp.molecule.oqpdata import OQP_CONFIG_SCHEMA, OQPData
+
+        self.assertEqual(OQP_CONFIG_SCHEMA["tdhf"]["shared_f3"]["default"], "False")
+        job = OpenQP(project="shared_f3_api").molecule("H 0 0 0; H 0 0 0.74")
+        job.settings.tdhf(shared_f3=True)
+        self.assertEqual(job.to_input_dict()["tdhf"]["shared_f3"], "True")
+        data = OQPData(silent=1)
+        self.assertFalse(data._data.control.mrsf_shared_f3)
+        data.parse_section({"tdhf": {"shared_f3": True}}, "tdhf")
+        self.assertTrue(data._data.control.mrsf_shared_f3)
+        data.parse_section({"tdhf": {"shared_f3": False}}, "tdhf")
+        self.assertFalse(data._data.control.mrsf_shared_f3)
+
     def test_signed_channels_fp32_cam_resize_and_cleanup(self):
         import oqp
 
@@ -60,7 +88,7 @@ class SharedMRSFFockTests(unittest.TestCase):
             error = oqp.ffi.new("double *")
             checks, failures = oqp.ffi.new("int *"), oqp.ffi.new("int *")
             check(comm, use_mpi, ranks, threads, error, checks, failures)
-            self.assertEqual(checks[0], 26)
+            self.assertEqual(checks[0], 78)
             self.assertEqual(failures[0], 0)
             self.assertEqual(error[0], 0.0)
 

@@ -190,7 +190,9 @@ contains
         select type(new)
         type is(int2_mrsf_data_t)
           delta=maxval(abs(old%f3-new%f3))
-          if (size(old%f3_private)>0) delta=max(delta,maxval(abs(old%f3_private-new%f3_private)))
+          if (allocated(old%f3_private)) then
+            if (size(old%f3_private)>0) delta=max(delta,maxval(abs(old%f3_private-new%f3_private)))
+          end if
           if (allocated(old%f3s)) delta=max(delta,real(maxval(abs(old%f3s-new%f3s)),dp))
           if (allocated(old%f3_ex_sp)) delta=max(delta,real(maxval(abs(old%f3_ex_sp-new%f3_ex_sp)),dp))
         end select
@@ -198,7 +200,9 @@ contains
         select type(new)
         type is(int2_umrsf_data_t)
           delta=maxval(abs(old%f3-new%f3))
-          if (size(old%f3_private)>0) delta=max(delta,maxval(abs(old%f3_private-new%f3_private)))
+          if (allocated(old%f3_private)) then
+            if (size(old%f3_private)>0) delta=max(delta,maxval(abs(old%f3_private-new%f3_private)))
+          end if
         end select
       end select
     end subroutine
@@ -303,7 +307,7 @@ subroutine int2_mrsf_shared_selftest(comm, use_mpi, ranks, threads, error, check
   real(dp), allocatable :: reference(:,:,:,:)
   real(sp), allocatable :: reference_sp(:,:,:,:)
   real(sp) :: xs
-  integer :: kind,route,trial,pass,t,ncoul,nmatrix,nbf,nf,flag,v,c,i,j,k,l
+  integer :: kind,layout,route,trial,pass,t,ncoul,nmatrix,nbf,nf,flag,v,c,i,j,k,l
   integer :: ao_sizes(3),nf_sizes(3),flags(3),target(2,8),read_at(2,8),a
   real(dp) :: val,xval,cval,global_factor,delta
   ao_sizes=[4,8,3]; nf_sizes=[2,3,1]; flags=[1,0,1]
@@ -319,6 +323,8 @@ subroutine int2_mrsf_shared_selftest(comm, use_mpi, ranks, threads, error, check
     if(data%pe%size/=ranks) failures=failures+1
     if(data%pe%use_mpi.neqv.use_mpi) failures=failures+1
     ncoul=merge(4,8,kind==1);nmatrix=ncoul+3
+    do layout=1,3
+    data%shared_exchange=layout==2
     do route=1,2
       do trial=1,3
         nbf=ao_sizes(trial);nf=nf_sizes(trial);flag=flags(trial)
@@ -341,13 +347,20 @@ subroutine int2_mrsf_shared_selftest(comm, use_mpi, ranks, threads, error, check
         do pass=1,2
           data%cur_pass=pass
           call data%parallel_start(basis,int(threads))
-          if(size(data%f3,2)/=nmatrix.or.size(data%f3,5)/=1) failures=failures+1
-          if(size(data%f3_private,2)/=ncoul.or.size(data%f3_private,5)/=threads-1) failures=failures+1
-          ! Exactly ncoul*T+3 DP images: no second full result at finalization.
-          if(size(data%f3)+size(data%f3_private)/=nf*(ncoul*threads+3)*nbf*nbf) failures=failures+1
+          if(size(data%f3,2)/=nmatrix) failures=failures+1
+          if(data%shared_exchange) then
+            if(size(data%f3,5)/=1) failures=failures+1
+            if(size(data%f3_private,2)/=ncoul.or.size(data%f3_private,5)/=threads-1) failures=failures+1
+            ! Exactly ncoul*T+3 DP images: no second full result at finalization.
+            if(size(data%f3)+size(data%f3_private)/=nf*(ncoul*threads+3)*nbf*nbf) failures=failures+1
+          else
+            if(size(data%f3,5)/=threads) failures=failures+1
+            if(allocated(data%f3_private)) failures=failures+1
+            if(size(data%f3)/=nf*nmatrix*threads*nbf*nbf) failures=failures+1
+          end if
           if(pass==1) then
             if(allocated(data%f3s).neqv.(kind==1.and.flag==1)) failures=failures+1
-            if(allocated(data%f3_ex_sp).neqv.(kind==1.and.flag==1)) failures=failures+1
+            if(allocated(data%f3_ex_sp).neqv.(kind==1.and.flag==1.and.data%shared_exchange)) failures=failures+1
           end if
           ! All distinct AO indices when available; small repeated-index case too.
           i=nbf;j=merge(3,2,nbf>=4);k=2;l=1
@@ -402,14 +415,18 @@ subroutine int2_mrsf_shared_selftest(comm, use_mpi, ranks, threads, error, check
           end do
           if(kind==1.and.flag==1.and.pass==1) then
             if(any(data%f3(:,ncoul+1:nmatrix,:,:,1)/=0.0_dp)) failures=failures+1
-            if(.not.any(data%f3_ex_sp/=0.0_sp)) failures=failures+1
+            if(data%shared_exchange) then
+              if(.not.any(data%f3_ex_sp/=0.0_sp)) failures=failures+1
+            else
+              if(.not.any(data%f3s(:,ncoul+1:nmatrix,:,:,:)/=0.0_sp)) failures=failures+1
+            end if
           end if
           call data%parallel_stop()
           checks=checks+1
           if(pass==1) then
-            if(.not.allocated(data%f3_private)) failures=failures+1
+            if(allocated(data%f3_private).neqv.data%shared_exchange) failures=failures+1
           else
-            if(size(data%f3,2)/=nmatrix.or.size(data%f3,5)/=1) failures=failures+1
+            if(size(data%f3,2)/=nmatrix.or.size(data%f3,5)/=merge(1,int(threads),data%shared_exchange)) failures=failures+1
             if(allocated(data%f3_private).or.allocated(data%f3s).or.allocated(data%f3_ex_sp)) failures=failures+1
             if(.not.any(reference(:,nmatrix,:,:)/=0.0_dp)) failures=failures+1
             delta=maxval(abs(data%f3(:,:,:,:,1)-reference))
@@ -462,7 +479,11 @@ subroutine int2_mrsf_shared_selftest(comm, use_mpi, ranks, threads, error, check
           call data%consume_shell(shell(1),1)
         end if
         if(any(data%f3(:,ncoul+1:nmatrix,:,:,1)/=0.0_dp)) failures=failures+1
-        delta=real(maxval(abs(data%f3_ex_sp-reference_sp)),dp)
+        if(data%shared_exchange) then
+          delta=real(maxval(abs(data%f3_ex_sp-reference_sp)),dp)
+        else
+          delta=real(maxval(abs(data%f3s(:,5:7,:,:,1)-reference_sp)),dp)
+        end if
         error=max(error,delta);checks=checks+1
         if(delta/=0.0_dp) failures=failures+1
         call data%parallel_stop()
@@ -470,6 +491,7 @@ subroutine int2_mrsf_shared_selftest(comm, use_mpi, ranks, threads, error, check
       end do
       nullify(data%d3);deallocate(density,reference_sp)
     end if
+    end do ! storage layouts, including transition without clean
     call data%clean();call data%clean()
     deallocate(data)
   end do

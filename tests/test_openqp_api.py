@@ -133,6 +133,7 @@ SCHEMA = {
         "nstate": {"type": int, "default": "1"},
         "multiplicity": {"type": int, "default": "1"},
         "conv": {"type": float, "default": "1.0e-6"},
+        "shared_f3": {"type": bool, "default": "False"},
     },
     "dftb": {
         "backend": {"type": _string, "default": "native"},
@@ -730,6 +731,14 @@ $$$$
                 variant="sos-mp2",
                 opposite_spin_scale=1.1,
             )
+
+    def test_shared_f3_is_available_through_settings(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="shared_f3").molecule("H 0 0 0; H 0 0 0.74")
+        job.settings.tdhf(shared_f3=True)
+        self.assertEqual(job.to_input_dict()["tdhf"]["shared_f3"], "True")
+        job.tdhf.shared_f3 = False
+        self.assertEqual(job.to_input_dict()["tdhf"]["shared_f3"], "False")
 
     def test_mrsf_helper_uses_openqp_defaults(self):
         openqp = load_openqp_module()

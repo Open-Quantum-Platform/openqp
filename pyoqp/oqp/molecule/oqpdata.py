@@ -484,6 +484,7 @@ OQP_CONFIG_SCHEMA = {
         # MRSF performance knobs (see utils/perf_levels.py). 'auto' defers to the
         # [input] perf preset; an explicit value overrides it.
         'resp_cutoff': {'type': string, 'default': 'auto'},
+        'shared_f3': {'type': bool, 'default': 'False'},
         'fp32': {'type': string, 'default': 'auto'},
         'zv_warmstart': {'type': string, 'default': 'auto'},
     },
@@ -1092,6 +1093,7 @@ class OQPData:
             "z_solver": "set_tdhf_z_solver",
             "gmres_dim": "set_tdhf_gmres_dim",
             "resp_cutoff": "set_tdhf_resp_cutoff",
+            "shared_f3": "set_tdhf_shared_f3",
             "fp32": "set_tdhf_fp32",
             "zv_warmstart": "set_tdhf_zv_warmstart",
         },
@@ -1405,6 +1407,10 @@ class OQPData:
         f = _perf_parse_float(v)
         if f is not None:
             self._data.control.mrsf_resp_cutoff = f
+
+    def set_tdhf_shared_f3(self, v):
+        """Use shared MRSF/UMRSF exchange storage during the energy response."""
+        self._data.control.mrsf_shared_f3 = bool(v)
 
     def set_tdhf_fp32(self, v):
         """FP32 MRSF response digestion (on/off/auto)."""
