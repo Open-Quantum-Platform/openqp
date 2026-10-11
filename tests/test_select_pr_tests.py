@@ -41,10 +41,13 @@ class SelectPrTestsTests(unittest.TestCase):
                          "tests/test_response_symmetry_staging_gates.py"):
             self.assertIn(importer, chosen)
 
-    def test_python_module_change_selects_tests_that_name_it(self):
-        chosen = self.sel.select(["pyoqp/oqp/utils/input_checker.py"])
-        self.assertIsNotNone(chosen)
-        self.assertIn("tests/test_tdhf_input_checker.py", chosen)
+    def test_python_module_change_runs_the_full_suite(self):
+        # runfunc is reached through Runner (oqp.pyoqp) in test_casci.py,
+        # which never names it.
+        for path in ("pyoqp/oqp/library/runfunc.py", "pyoqp/oqp/utils/input_checker.py",
+                     "pyoqp/requirements.txt"):
+            with self.subTest(path=path):
+                self.assertIsNone(self.sel.select([path]))
 
     def test_native_source_change_runs_the_full_suite(self):
         for path in ("source/ecp.F90", "source/tdhf_hessian.F90", "include/oqp.h"):
@@ -80,11 +83,6 @@ class SelectPrTestsTests(unittest.TestCase):
         chosen = self.sel.select([unread])
         self.assertIsNotNone(chosen)
         self.assertEqual(sorted(chosen), sorted(s for s in self.sel.SMOKE if (ROOT / s).exists()))
-
-    def test_re_exported_class_selects_tests_that_use_it(self):
-        chosen = self.sel.select(["pyoqp/oqp/analysis/transition_density.py"])
-        if chosen is not None:
-            self.assertIn("tests/test_excited_toolkit.py", chosen)
 
     def test_tests_subdirectory_file_selects_its_driver(self):
         chosen = self.sel.select(["tests/fortran/test_guess_orbital_phase.F90"])

@@ -10,8 +10,10 @@ Selection, from ``git diff --name-only BASE...HEAD``:
 
 * changed test files ``tests/test_*.py`` that still exist, and every test file
   that names one (tests import helpers from other test modules);
-* for each changed Python module under ``pyoqp/oqp``, every test file whose
-  source names the module (``oqp.a.b`` or its last component as a word);
+* any change under ``pyoqp/`` runs the full suite: tests reach modules through
+  their importers (Runner in oqp.pyoqp dispatches to oqp.library.runfunc), and
+  following imports transitively selects more than ``MAX_SELECTED`` files for
+  every module measured (runfunc, input_checker, transition_density: 256);
 * any change under ``source/`` or ``include/`` runs the full suite: a native
   routine is reached through other routines and Python wrappers whose tests
   never name its file (e.g. tdhf_hessian through the Hessian drivers);
@@ -27,7 +29,6 @@ depends on: the test harness (conftest, shared helpers, known_failures), this
 script or the workflows, the build (CMakeLists, pyproject, cmake/, external/),
 or when the selection would exceed ``MAX_SELECTED`` files anyway.
 """
-import ast
 import os
 import re
 import subprocess
@@ -62,7 +63,7 @@ FULL_SUITE_PATTERNS = [
     r"^pyproject\.toml$",
     r"^cmake/",
     r"^external/",
-    r"^pyoqp/requirements",
+    r"^pyoqp/",
     r"^source/",
     r"^include/",
 ]
@@ -101,26 +102,6 @@ def tests_naming(words, sources):
     return hits
 
 
-def public_names(path):
-    """Top-level public names a module defines (classes, functions, assignments).
-
-    Tests often reach a module through a package re-export
-    (``from oqp.interop import MRSFExcitedStates``) without naming the module,
-    so the names it defines are searched for as well.
-    """
-    try:
-        tree = ast.parse((ROOT / path).read_text(errors="ignore"))
-    except (OSError, SyntaxError):
-        return set()
-    names = set()
-    for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            names.add(node.name)
-        elif isinstance(node, ast.Assign):
-            names |= {t.id for t in node.targets if isinstance(t, ast.Name)}
-    return {n for n in names if not n.startswith("_")}
-
-
 # Documentation and repository metadata.  They run no code, but tests read some
 # of them (README.md, docs/logging.md, .gitignore), so a change selects every
 # test that names the file and is test-neutral only when none does.
@@ -149,12 +130,7 @@ def select(paths):
             # (``from test_symmetry_metadata import load_molecule_module``).
             selected |= tests_naming({Path(p).stem}, sources)
             continue
-        if p.startswith("pyoqp/oqp/") and p.endswith(".py"):
-            mod = p[len("pyoqp/"):-len(".py")].replace("/", ".")
-            if mod.endswith(".__init__"):
-                mod = mod[: -len(".__init__")]
-            words = {mod, mod.rsplit(".", 1)[-1]} | public_names(p)
-        elif p.startswith("tests/"):
+        if p.startswith("tests/"):
             # test data/drivers in tests/ subdirectories
             # (tests/fortran/x.F90 is driven by the test file that names x)
             words = {Path(p).stem}
