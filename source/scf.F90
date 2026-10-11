@@ -185,6 +185,8 @@ contains
     real(kind=dp) :: vshift        ! Virtual orbital energy shift
     real(kind=dp) :: H_U_gap       ! HOMO-LUMO gap
     logical :: vshift_last_iter    ! Flag for last iteration with vshift
+    logical :: fock_shifted        ! A level shift entered some Fock of this SCF
+    logical :: probe_failed        ! The zero-VSHIFT build missed conv; DIIS restarts next build
 
     !==============================================================================
     ! MOM (Maximum Overlap Method) Parameters
@@ -463,6 +465,8 @@ contains
     !==============================================================================
     vshift = infos%control%vshift
     vshift_last_iter = .false.
+    fock_shifted = .false.
+    probe_failed = .false.
 
     !==============================================================================
     ! Initialize SCF Calculation
@@ -822,6 +826,7 @@ contains
         call form_rohf_fock(pfock(:,1),pfock(:,2), mo_a, smat_full, &
                                 nelec_a, nelec_b, nbf, vshift, work1, work2)
         shift_applied = (vshift /= 0.0_dp)
+        if (shift_applied) fock_shifted = .true.
         ! Unshifted effective Fock of the first build (see cold_first_iter).
         if (iter == 1 .and. shift_applied) then
           fock_noshift = rohf_bak
@@ -839,6 +844,7 @@ contains
         ! Turn off level shifting for the final iteration if requested
         if (vshift_last_iter) vshift = 0.0_dp
         shift_applied = (vshift > 0.0_dp)
+        if (shift_applied) fock_shifted = .true.
         ! Keep the unshifted first build (see cold_first_iter).
         if (iter == 1 .and. shift_applied) fock_noshift = pfock
 
@@ -920,6 +926,19 @@ contains
                      mo_e_b=mo_energy_b)
           end select
       else
+        ! After a failed zero-VSHIFT build (see below) the subspace holds that
+        ! unshifted Fock next to shifted ones; restart it on this shifted build.
+        if (probe_failed) then
+          call conv%init(ldim=nbf, &
+                         maxvec=maxdiis, &
+                         subconvergers=[conv_cdiis], &
+                         thresholds   =[ethr_cdiis_big], &
+                         overlap=smat_full, &
+                         overlap_sqrt=qmat, &
+                         num_focks=diis_nfocks, &
+                         verbose=int(infos%control%verbose))
+          probe_failed = .false.
+        end if
         ! DIIS: Only pass Fock and density matrices
         call conv%add_data( &
                  f=pfock(:,1:diis_nfocks), &
@@ -1111,9 +1130,13 @@ contains
       !  - xc_reuse_now (IncDFT): never converge on an iteration whose XC was reused
       !    (stale); the next iteration forces a full XC build so the fixed point is exact.
       !  - cold_first_iter: see above.
+      !  - shift_applied after iteration 1: V-DIIS zeroes vshift only after the
+      !    build, so this Fock can still carry the shift; only the iteration-1
+      !    exit keeps an unshifted copy (fock_noshift). Build once more.
       if ((abs(diis_error) < infos%control%conv) .and. (vshift == 0.0_dp) &
           .and. (.not. ps_force_iter) .and. (.not. xc_reuse_now) &
-          .and. (.not. cold_first_iter)) then
+          .and. (.not. cold_first_iter) &
+          .and. .not. (shift_applied .and. iter > 1 .and. .not. (use_soscf .or. use_trah))) then
         ! Fully converged - exit loop
         if (do_pfon) then
           if (pfon%temp > 1.0_dp + 1.0e-6_dp) then
@@ -1145,6 +1168,23 @@ contains
               mo_energy_b = mo_energy_a
             end if
           end if
+          ! The loop leaves before it diagonalises the Fock it has just tested,
+          ! so the orbitals in hand diagonalise the previous DIIS Fock. After a
+          ! level shift (the build before "a last SCF with zero VSHIFT", or
+          ! shifted Focks still in the V-DIIS subspace) that Fock carried the
+          ! shift, and every virtual energy kept +vshift (ROHF: open shells
+          ! +vshift/2). The orbitals built the converged density and energy,
+          ! so they are kept; only their energies are taken from this
+          ! unshifted Fock (ROHF: the effective Fock formed with vshift = 0).
+          ! UHF is rediagonalised after the loop.
+          if (fock_shifted .and. iter > 1 .and. .not. (use_soscf .or. use_trah) .and. &
+              scf_type /= scf_uhf .and. int2_driver%pe%rank == 0) then
+            call fock_diagonal_energies(pfock(:,1), mo_a, mo_energy_a, nbf)
+            if (scf_type == scf_rohf) then
+              mo_b = mo_a
+              mo_energy_b = mo_energy_a
+            end if
+          end if
           call handle_soscf_trah_rohf(use_soscf, use_trah, scf_type, pfock, rohf_bak, &
                                       mo_a, mo_b, mo_energy_a, mo_energy_b, &
                                       qmat, smat_full, nelec_a, nelec_b, nbf, nbf_tri, vshift, &
@@ -1153,13 +1193,26 @@ contains
           exit
         end if
       elseif ((abs(diis_error) < infos%control%conv) .and. (vshift /= 0.0_dp)) then
-        ! Converged but need one more iteration with vshift=0
+        ! Converged but need one more iteration with vshift=0. Switch the
+        ! shift off here: under SOSCF/TRAH the ROHF Fock (and with it the
+        ! vshift_last_iter reset) is formed only on iteration 1, so the shift
+        ! would otherwise stay on and convergence could never be accepted.
         write(IW,"(3x,64('-')/10x,'Performing a last SCF with zero VSHIFT.')")
         vshift_last_iter = .true.
-      elseif (vshift_last_iter) then
-        ! Only for ROHF case the final iteration with vshift=0 complete - exit loop
-        call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
-        exit
+        vshift = 0.0_dp
+      elseif (vshift_last_iter .and. (abs(diis_error) >= infos%control%conv)) then
+        ! The zero-shift build missed the tolerance: the shifted run had only
+        ! dipped below it. Restore the shift and keep iterating; leaving the
+        ! loop here reported convergence for an unconverged state. DIIS must
+        ! not extrapolate across this unshifted Fock and the shifted ones: the
+        ! coefficients can turn the shift negative and swap occupied and
+        ! virtual orbitals (NO ROHF, vshift 2.6: -129.70 -> -114.7 Eh). The
+        ! next orbitals therefore come from this Fock itself, and DIIS
+        ! restarts on the next (shifted) build.
+        write(IW,"(3x,64('-')/10x,'Zero-VSHIFT build not converged; level shift restored.')")
+        vshift_last_iter = .false.
+        vshift = infos%control%vshift
+        if (.not. (use_soscf .or. use_trah)) probe_failed = .true.
       end if
 
       !----------------------------------------------------------------------------
@@ -1220,7 +1273,8 @@ contains
       else
         ! DIIS: Retrieve updated Fock directly
         ! Form the interpolated the Fock/Density matrix
-        call conv_res%get_fock(matrix=pfock(:,1:diis_nfocks), istat=stat)
+        if (.not. probe_failed) &
+          call conv_res%get_fock(matrix=pfock(:,1:diis_nfocks), istat=stat)
         ! A first-iteration SD result normally diagonalises this Fock. For a
         ! second-order solver that would refill supplied orbitals by energy and
         ! can change the occupation of a converged non-Aufbau ROHF solution.
