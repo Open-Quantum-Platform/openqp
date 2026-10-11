@@ -25,7 +25,8 @@ int32_t oqp_rdm_test_alloc_begin(int32_t ordinal)
     const char *enable = getenv("OQP_RDM_TEST_ALLOCATIONS");
     const char *test = getenv("PYTEST_CURRENT_TEST");
     if (!enable || strcmp(enable, "1") || !test ||
-        !strstr(test, "test_rdm_fallback.py::"))
+        (!strstr(test, "test_rdm_fallback.py::") &&
+         !strstr(test, "rdm_posix_allocator.py::test_rdm_never_changes_foreign_blas_policy")))
         return 1;
     if (probe.enabled)
         return 2;
@@ -49,6 +50,14 @@ int32_t oqp_rdm_test_alloc_end(struct oqp_rdm_test_alloc_stats *stats)
 int32_t oqp_rdm_test_alloc_active(void)
 {
     return probe.enabled;
+}
+
+/* Called on the controller's owning OS thread after the OpenMP barrier.
+ * Workers never access the controller's TLS. */
+void oqp_rdm_test_contraction_record(int32_t team)
+{
+    if (probe.enabled && team > probe.stats.max_contraction_team)
+        probe.stats.max_contraction_team = team;
 }
 
 int32_t oqp_rdm_test_alloc_request(int64_t n1, int64_t n2, int64_t n3,

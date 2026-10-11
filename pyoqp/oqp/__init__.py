@@ -92,6 +92,7 @@ for attr_name in dir(lib):
             'oqp_rpa_residual_selftest',
             'oqp_rdm_test_alloc_begin', 'oqp_rdm_test_alloc_end',
             'oqp_rdm_test_alloc_active', 'oqp_rdm_test_alloc_request',
+            'oqp_rdm_test_contraction_record',
         ):
             globals()[attr_name] = _oqp_wrapper(attr_value)
         else:

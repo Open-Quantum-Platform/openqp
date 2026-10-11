@@ -30,6 +30,7 @@ module fci_sigma_strings_mod
 
   use, intrinsic :: iso_c_binding, only: c_int32_t, c_int64_t, c_double
 !$ use omp_lib
+  use blas_thread, only: blas_thread_count
   implicit none
   private
   ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
@@ -78,6 +79,7 @@ module fci_sigma_strings_mod
 
   ! Internal C TLS bridges; normal callers do not arm the test controller.
   public :: oqp_rdm_test_alloc_active, oqp_rdm_test_alloc_request
+  public :: oqp_rdm_test_contraction_record
   interface
     function oqp_rdm_test_alloc_active() result(enabled) bind(C, name="oqp_rdm_test_alloc_active")
       import c_int32_t
@@ -90,6 +92,10 @@ module fci_sigma_strings_mod
       integer(c_int32_t), value :: element_bytes
       integer(c_int32_t) :: failed
     end function oqp_rdm_test_alloc_request
+    subroutine oqp_rdm_test_contraction_record(team) bind(C, name="oqp_rdm_test_contraction_record")
+      import c_int32_t
+      integer(c_int32_t), value :: team
+    end subroutine oqp_rdm_test_contraction_record
   end interface
 
 contains
@@ -357,7 +363,8 @@ contains
     integer(i8) :: row_bytes, gram_bytes, partial_bytes, available_bytes
     integer(i8) :: grow0, growlen
     integer :: gi
-    logical :: probe_allocations
+    integer(c_int32_t) :: contraction_team
+    logical :: probe_allocations, parallel_contract
     real(dp), allocatable :: gloc(:, :, :), dloc(:, :)
     integer :: p, q, r, s, pq, rs, t, ierr
     real(dp) :: sgn
@@ -622,15 +629,27 @@ contains
       end do
       !$omp end parallel do
 
-      ! Contract row intervals outside an OpenMP region using the caller's
-      ! BLAS policy. Changing a process-wide BLAS count here would race with
-      ! other native kernels' save/set/restore sequences. The T construction
-      ! above remains parallel; BLAS owns any parallelism during contraction.
+      ! Use OpenMP row contractions only when BLAS reports one thread.
+      ! Otherwise BLAS owns contraction parallelism. Never change its
+      ! process-wide policy: other kernels can own a save/set/restore scope.
+      ! Unknown BLAS policies use the conservative single-worker branch.
+      ! The caller must keep its global BLAS policy fixed during this call.
       ! Keep the partial intervals and ordered sum, including their budgeted
       ! nact^2 + nact^4 doubles, so the reduction order does not change.
+      parallel_contract = .false.
+!$    parallel_contract = blas_thread_count() == 1_i8
+      contraction_team = 1_c_int32_t
       gloc = 0.0_dp
       dloc = 0.0_dp
+      !$omp parallel do num_threads(nthr) default(shared) &
+      !$omp   private(gi, grow0, growlen) &
+      !$omp   if(parallel_contract .and. nrow * int(nkl, i8) >= par_min_elems)
       do gi = 0, npartials - 1
+        ! Only the unique gi=0 iteration writes this per-call observation.
+        ! The controller is updated by the caller after the region's barrier.
+        if (probe_allocations .and. gi == 0) then
+!$        contraction_team = int(omp_get_num_threads(), c_int32_t)
+        end if
         grow0 = (nrow * int(gi, i8)) / int(npartials, i8)
         growlen = (nrow * int(gi + 1, i8)) / int(npartials, i8) - grow0
         if (growlen > 0_i8) then
@@ -641,6 +660,8 @@ contains
                      tmat(grow0 + 1_i8, 1), int(nrow_max), 1.0_dp, gloc(1, 1, gi + 1), nkl)
         end if
       end do
+      !$omp end parallel do
+      if (probe_allocations) call oqp_rdm_test_contraction_record(contraction_team)
       do gi = 1, npartials
         do t = 1, nkl
           d1(int(t, i8)) = d1(int(t, i8)) + dloc(t, gi)

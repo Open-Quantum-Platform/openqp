@@ -193,7 +193,8 @@ def allocation_probe(native, monkeypatch):
     """Portable synthetic failures at owned ALLOCATE sites, before workers start."""
     lib, ffi, _ = native
     for name in ("oqp_rdm_test_alloc_begin", "oqp_rdm_test_alloc_end",
-                 "oqp_rdm_test_alloc_active", "oqp_rdm_test_alloc_request"):
+                 "oqp_rdm_test_alloc_active", "oqp_rdm_test_alloc_request",
+                 "oqp_rdm_test_contraction_record"):
         assert hasattr(lib, name), f"Missing linked allocation controller: {name}"
     monkeypatch.setenv("OQP_RDM_TEST_ALLOCATIONS", "1")
     assert lib.oqp_rdm_test_alloc_active() == 0
@@ -233,14 +234,21 @@ def test_allocation_controller_guards_and_cleanup(allocation_probe, monkeypatch)
         assert lib.oqp_rdm_test_alloc_active() == 1
         assert lib.oqp_rdm_test_alloc_request(2, 3, 4, 8) == 1
         assert lib.oqp_rdm_test_alloc_request(2, 3, 4, 8) == 0
+        lib.oqp_rdm_test_contraction_record(1)
+        lib.oqp_rdm_test_contraction_record(4)
+        lib.oqp_rdm_test_contraction_record(0)
     assert (consumed.count, consumed.total_bytes, consumed.largest_bytes) == (2, 384, 192)
+    assert consumed.max_contraction_team == 4
     assert lib.oqp_rdm_test_alloc_active() == 0
     assert lib.oqp_rdm_test_alloc_end(stats) == 0
     assert (stats.count, stats.total_bytes, stats.largest_bytes) == (0, 0, 0)
+    assert stats.max_contraction_team == 0
     # Unarmed bridge calls cannot inject or accumulate.
     assert lib.oqp_rdm_test_alloc_request(2, 3, 4, 8) == 0
+    lib.oqp_rdm_test_contraction_record(4)
     assert lib.oqp_rdm_test_alloc_end(stats) == 0
     assert stats.count == 0
+    assert stats.max_contraction_team == 0
 
 
 def test_allocation_controller_checked_sizes(allocation_probe):

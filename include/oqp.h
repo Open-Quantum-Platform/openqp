@@ -450,22 +450,27 @@ int64_t rdm12_strings_c(int32_t norb, int64_t ndet, const int64_t *dets,
     const double *civec, double *d1, double *d2, int32_t nthreads);
 /* Internal allocation-site test controller; the caller must begin/call/end on
  * the same OS thread. Activation requires OQP_RDM_TEST_ALLOCATIONS=1 and a
- * PYTEST_CURRENT_TEST from test_rdm_fallback.py. Ordinal 0 observes requests;
+ * PYTEST_CURRENT_TEST from test_rdm_fallback.py or the named POSIX RDM BLAS
+ * policy test. Ordinal 0 observes requests;
  * 1..18 inject one failure through the native allocation-status branch.
  * begin: 0 success, 1 gate denied, 2 already active, 3 invalid ordinal.
  * end writes request statistics and clears the controller; repeated end is
  * safe and reports zeros. These are requested bytes, not measured memory.
- * The active/request procedures are internal Fortran bridges. */
+ * The active/request/record procedures are internal Fortran bridges.
+ * max_contraction_team observes the contraction region only; zero means
+ * no contraction was recorded. It is not a performance measurement. */
 struct oqp_rdm_test_alloc_stats {
     int32_t count;
     int64_t total_bytes;
     int64_t largest_bytes;
+    int32_t max_contraction_team;
 };
 int32_t oqp_rdm_test_alloc_begin(int32_t ordinal);
 int32_t oqp_rdm_test_alloc_end(struct oqp_rdm_test_alloc_stats *stats);
 int32_t oqp_rdm_test_alloc_active(void);
 int32_t oqp_rdm_test_alloc_request(int64_t n1, int64_t n2, int64_t n3,
     int32_t element_bytes);
+void oqp_rdm_test_contraction_record(int32_t team);
 /* Spin-free dm1..dm4 (PySCF make_dm1234 convention) from the determinant CI
  * vector; `upto` selects how many are produced and the caller must have
  * allocated every array it requests. Returns 0, or -1 on allocation failure. */

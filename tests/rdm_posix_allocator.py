@@ -47,19 +47,34 @@ from oqp.library import rdm
 from oqp import runtime
 lib, ffi = rdm._rdm_backend()
 assert hasattr(lib, "rdm12_strings_c"), "Missing string RDM export"
+for name in ("oqp_rdm_test_alloc_begin", "oqp_rdm_test_alloc_end",
+             "oqp_rdm_test_contraction_record"):
+    assert hasattr(lib, name), "Missing contraction observation export: " + name
 ctl = ctypes.CDLL(str(runtime.library_path(*runtime.resolve_oqp_root())))
 ctl.oqp_blas_thread_count.restype = ctypes.c_int64
+ctl.oqp_have_openmp.restype = ctypes.c_int
+have_openmp = ctl.oqp_have_openmp()
 threads, norb, na, nb = map(int, sys.argv[2:])
 dets = np.ascontiguousarray(rdm.determinant_basis(norb, (na, nb)), dtype=np.int64)
 vectors = [np.random.default_rng(742+i).standard_normal(len(dets)) for i in range(2)]
 vectors = [np.ascontiguousarray(c / np.linalg.norm(c)) for c in vectors]
+team_log = []
 def evaluate(c):
     d1 = np.empty((norb, norb))
     d2 = np.empty((norb,) * 4)
-    status = lib.rdm12_strings_c(norb, len(dets), ffi.cast("int64_t *", dets.ctypes.data),
-        ffi.cast("double *", c.ctypes.data), ffi.cast("double *", d1.ctypes.data),
-        ffi.cast("double *", d2.ctypes.data), threads)
+    policy = ctl.oqp_blas_thread_count()
+    assert lib.oqp_rdm_test_alloc_begin(0) == 0
+    stats = ffi.new("struct oqp_rdm_test_alloc_stats *")
+    try:
+        status = lib.rdm12_strings_c(norb, len(dets), ffi.cast("int64_t *", dets.ctypes.data),
+            ffi.cast("double *", c.ctypes.data), ffi.cast("double *", d1.ctypes.data),
+            ffi.cast("double *", d2.ctypes.data), threads)
+    finally:
+        assert lib.oqp_rdm_test_alloc_end(stats) == 0
     assert status == 0, status
+    expected_team = threads if have_openmp and policy == 1 and norb == 8 else 1
+    assert stats.max_contraction_team == expected_team, (policy, stats.max_contraction_team, expected_team)
+    team_log.append((policy, int(stats.max_contraction_team)))
     return d1, d2
 assert ctl.oqp_blas_thread_count() == 4, "Control fixture was not resolved"
 assert fixture.ecp_fixture_calls() == 0
@@ -79,9 +94,23 @@ assert ctl.oqp_blas_thread_count() == 2
 fixture.openblas_set_num_threads(4)
 assert fixture.ecp_fixture_calls() == 2
 assert ctl.oqp_blas_thread_count() == 4
-for c, result, previous in zip(vectors, actual, reference):
-    assert result[0].tobytes() == previous[0].tobytes()
-    assert result[1].tobytes() == previous[1].tobytes()
+results = [actual]
+# Exercise the OpenMP contraction dispatch for a confirmed one-thread BLAS
+# and the conservative unknown-policy branch, on the same input intervals.
+for policy, calls in ((1, 3), (-1, 4)):
+    fixture.openblas_set_num_threads(policy)
+    assert ctl.oqp_blas_thread_count() == policy
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results.append(list(pool.map(overlapping, vectors)))
+    assert fixture.ecp_fixture_calls() == calls, (policy, calls)
+    assert ctl.oqp_blas_thread_count() == policy
+fixture.openblas_set_num_threads(4)
+assert fixture.ecp_fixture_calls() == 5
+for c, previous, *variants in zip(vectors, reference, *results):
+    for result in variants:
+        assert result[0].tobytes() == previous[0].tobytes()
+        assert result[1].tobytes() == previous[1].tobytes()
+    result = variants[-1]
     spin = rdm._lib_rdm2(c, dets, 2*norb)
     assert spin is not None
     signed = np.zeros((norb,) * 4)
@@ -91,11 +120,14 @@ for c, result, previous in zip(vectors, actual, reference):
     assert np.max(np.abs(signed - signed.swapaxes(0,1))) > 1e-4
     np.testing.assert_allclose(result[1], signed, rtol=0, atol=2e-12)
 print("RDM setter calls=0; foreign BLAS policy and overlapping signed pins passed",
-      "threads=", threads, "norb=", norb)
+      "threads=", threads, "norb=", norb, "control_widths=", [4, 2, 1, -1],
+      "contraction_teams=", team_log)
 '''
     env = os.environ.copy()
     env["OMP_NUM_THREADS"] = str(threads)
     env["OPENBLAS_NUM_THREADS"] = "1"
+    env["OMP_DYNAMIC"] = "FALSE"
+    env["OQP_RDM_TEST_ALLOCATIONS"] = "1"
     result = subprocess.run([sys.executable, "-c", child, str(library), str(threads),
                              str(norb), str(nelec[0]), str(nelec[1])],
                             env=env, capture_output=True, text=True, timeout=90)
