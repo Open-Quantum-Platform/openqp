@@ -985,9 +985,21 @@ class SinglePoint(Calculator):
         stability = getattr(self, 'stability', scf_config.get('stability', False))
         trah_stab_default = scf_config.get('trh_stab', False)
 
+        # TRAH minimises over orbital rotations and never re-diagonalises, so it
+        # cannot keep a MOM or rstctmo (non-aufbau) occupation: from such a
+        # stationary point it descends to a lower state and reports convergence.
+        # The native driver refuses the combination; never route one there.
+        occupation_constrained = (bool(scf_config.get('rstctmo', False))
+                                  or bool(scf_config.get('mom', False)))
+
         # --- SCF manager: converger_type=auto|ml picks the primary from system features ---
         if str(primary).lower() in ('auto', 'ml'):
             primary, stability = self._select_converger(str(primary).lower(), stability)
+            if occupation_constrained and str(primary).lower() == 'trah':
+                dump_log(self.mol, section='',
+                         title='PyOQP SCF manager: TRAH cannot keep the MOM/rstctmo '
+                               'occupation; using diis')
+                primary = 'diis'
         primary = self._apply_selected_converger(primary)
 
         # --- Stage 1: primary converger ---
@@ -1013,17 +1025,14 @@ class SinglePoint(Calculator):
         # Drop the primary and de-duplicate while preserving order.
         _seen = set()
         chain = [c for c in chain if c != primary and not (c in _seen or _seen.add(c))]
-        # TRAH is not occupation constrained and may rotate a MOM/rstctmo
-        # core-hole reference into a different electronic state.  Keep the
-        # occupation-preserving recovery stages, but never silently enter TRAH
-        # for a restricted-orbital calculation.
-        rstctmo = bool(scf_config.get('rstctmo', False))
-        if rstctmo and 'trah' in chain:
+        # Keep the occupation-preserving recovery stages, but never enter TRAH
+        # for a MOM/rstctmo calculation (see occupation_constrained above).
+        if occupation_constrained and 'trah' in chain:
             chain = [c for c in chain if c != 'trah']
             dump_log(
                 self.mol,
-                title='PyOQP: TRAH recovery disabled because scf.rstctmo=true; '
-                      'TRAH cannot preserve the requested orbital ordering',
+                title='PyOQP: TRAH recovery disabled because scf.mom/rstctmo=true; '
+                      'TRAH cannot preserve the requested orbital occupation',
                 section='input',
             )
         for conv in chain:
@@ -1058,7 +1067,7 @@ class SinglePoint(Calculator):
         td_type = str(getattr(self, 'td', '')).lower()
         spin_flip_reference = self.method == 'tdhf' and td_type in ('sf', 'mrsf', 'umrsf')
         ground_state_target = self.method in ('hf', 'ccsd', 'ccsd(t)')
-        if (converged and stability and not rstctmo and primary != 'trah'
+        if (converged and stability and not occupation_constrained and primary != 'trah'
                 and (ground_state_target or spin_flip_reference)):
             e_pre = self.mol.mol_energy.energy
             mol_energy_snapshot = self._snapshot_mol_energy_state()
