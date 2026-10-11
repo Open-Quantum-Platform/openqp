@@ -10,6 +10,7 @@ direction are orientation-dependent). Gate: max |dG| <= 1e-9 Hartree/bohr.
 """
 
 import sys
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -93,7 +94,8 @@ def run_case(workdir, name, content):
 
 
 def main():
-    workdir = sys.argv[1] if len(sys.argv) > 1 else '/tmp/oqp_petite_grad'
+    workdir = sys.argv[1] if len(sys.argv) > 1 else tempfile.mkdtemp(prefix='oqp_petite_grad_')
+    print(f'workdir: {workdir}')
     failures = []
 
     for name, (system, scf, extra, tdhf) in CASES.items():

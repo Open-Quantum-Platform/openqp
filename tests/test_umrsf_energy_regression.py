@@ -6,6 +6,8 @@ import types
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import isolate_modules, stub_module
+
 
 ROOT = Path(__file__).resolve().parents[1]
 ENERGY = ROOT / "source" / "modules" / "tdhf_mrsf_energy.F90"
@@ -88,8 +90,8 @@ def _load_regression():
 
 def _load_input_checker():
     """Import input_checker.py in isolation with a minimal MPI stub."""
-    sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-    sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+    stub_module("oqp")
+    stub_module("oqp.utils")
     mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
 
     class MPIManager:
@@ -137,6 +139,9 @@ def _umrsf_guard_errors(report):
 
 
 class UMRSFEnergyRegressionTests(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(isolate_modules())
+
     def test_umrsf_xc_probe_includes_moving_grid_response(self):
         gradient = _fortran_subroutine(UMRSF_GRAD, "umrsf_grad_run_gates").replace("&", "")
         self.assertIn("include_ground_state=.false.,include_weight_derivative=.true.", gradient)

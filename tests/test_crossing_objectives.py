@@ -22,6 +22,8 @@ from pathlib import Path
 
 import numpy as np
 
+from oqp_module_isolation import isolate_modules
+
 ROOT = Path(__file__).resolve().parents[1]
 
 K, A, X0 = 1.0, 0.3, 1.5
@@ -35,23 +37,6 @@ def _load(name, relative_path):
     return module
 
 
-# Names this module injects while importing libscipy.  They are removed again
-# immediately afterwards: pytest shares one interpreter across test modules, so
-# leaving a stub (or an emptied __path__) behind would break every later import
-# of the real oqp.utils.* and oqp.library.* submodules.
-_STUBBED = (
-    "oqp",
-    "oqp.library",
-    "oqp.library.single_point",
-    "oqp.library.baeka",
-    "oqp.utils",
-    "oqp.utils.file_utils",
-    "oqp.utils.state_labels",
-    "oqp.utils.qmmm",
-    "oqp.utils.mpi_utils",
-)
-
-
 def _stub(name, is_package=False):
     module = types.ModuleType(name)
     if is_package:
@@ -62,7 +47,10 @@ def _stub(name, is_package=False):
 
 def _load_isolated(path, extra_module=None):
     """Import a pyoqp module against stubs, then restore sys.modules."""
-    saved = {name: sys.modules.get(name) for name in _STUBBED}
+    # pytest shares one interpreter across test modules: the stubs, and the
+    # source copies loaded under oqp.* names, must be gone afterwards while any
+    # real oqp module imported earlier stays in place.
+    restore = isolate_modules()
 
     _stub("oqp")
     _stub("oqp.library", is_package=True)
@@ -91,13 +79,7 @@ def _load_isolated(path, extra_module=None):
         checker = (_load(extra_module[0], extra_module[1])
                    if extra_module else None)
     finally:
-        for name, module in saved.items():
-            if module is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = module
-        sys.modules.pop("oqp.library.libscipy", None)
-        sys.modules.pop("oqp.utils.input_checker", None)
+        restore()
 
     return loaded, baeka, checker
 
