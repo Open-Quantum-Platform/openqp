@@ -26,7 +26,8 @@ subroutine functional_owner_cache_compare(a, b, error, failed) bind(C)
   real(dp), allocatable :: da(:,:), db(:,:), fa(:), fb(:), ra(:), rb(:)
   real(dp) :: energy, electrons, kinetic, reference
   integer(i8b) :: revision, previous_revision
-  integer :: step, n, nt, i, status
+  integer :: step, n, nt, i
+  integer(c_int) :: status
   character(len=20) :: name
 
   ia => oqp_handle_get_info(a)
@@ -88,7 +89,7 @@ subroutine functional_owner_cache_compare(a, b, error, failed) bind(C)
     end if
     if (step==20) infos%tddft%cam_alpha=0.31_dp
     if (step==21) infos%tddft%cam_beta=0.32_dp
-    if (step==22) infos%tddft%cam_mu=0.33_dp
+    if (step==22) infos%tddft%cam_mu=infos%tddft%cam_mu+0.01_dp
     basis=infos%basis; basis%atoms=>infos%atoms
     previous_revision=infos%functional%cache_revision
     call dft_initialize(infos,basis,grid,verbose=.false.)
@@ -104,7 +105,7 @@ subroutine functional_owner_cache_compare(a, b, error, failed) bind(C)
       deallocate(da,db,fa,fb,ra,rb)
       exit
     end if
-    call unpack_matrix(n,packed,da)
+    call unpack_matrix(packed,da)
     ! Unequal spin densities retain the signs/off-diagonals of the SCF density.
     db=0.73_dp*da
     fa=0; fb=0
