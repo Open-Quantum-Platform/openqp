@@ -495,10 +495,19 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
                      if is_mrsf(mol.config) else f'state {n}')
             return final_energy_label(dftb_summary, n, label)
 
+        imaginary = set(getattr(mol, 'td_imaginary_states', ()) or ())
+
+        def imaginary_note(n):
+            return '  imaginary (reference unstable)' if n in imaginary else ''
+
         for n, energy in enumerate(info['el']):
             annotation = final_energy_annotation(dftb_summary, n)
             loginfo += (f'   PyOQP {energy_label(n):<34} {format_energy(energy)}'
-                        f'{annotation}\n')
+                        f'{annotation}{imaginary_note(n)}\n')
+        if imaginary:
+            loginfo += ('   PyOQP WARNING: state(s) %s have omega^2 < 0 (imaginary excitation '
+                        'energy; the SCF reference is unstable); their energies use |omega|.\n'
+                        % ', '.join(str(n) for n in sorted(imaginary)))
 
         d4 = float(info['d4'])
         # Without dispersion the corrected list repeats the electronic one.
@@ -511,7 +520,7 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
             for n, energy in enumerate(mol.energies):
                 annotation = final_energy_annotation(dftb_summary, n)
                 loginfo += (f'   PyOQP {energy_label(n):<34} {format_energy(energy)}'
-                            f'{annotation}\n')
+                            f'{annotation}{imaginary_note(n)}\n')
 
     if section == 'grad':
         if not mol.config['input']['qmmm_flag']:

@@ -37,6 +37,7 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_xpy = OQP_prefix // "td_xpy"
   character(len=*), parameter, public :: OQP_td_xmy = OQP_prefix // "td_xmy"
   character(len=*), parameter, public :: OQP_td_energies = OQP_prefix // "td_energies"
+  character(len=*), parameter, public :: OQP_td_imaginary = OQP_prefix // "td_imaginary"
   character(len=*), parameter, public :: OQP_td_singlet_energies = OQP_prefix // "td_singlet_energies"    !new
   character(len=*), parameter, public :: OQP_td_triplet_energies = OQP_prefix // "td_triplet_energies"    !new
   character(len=*), parameter, public :: OQP_td_bvec_mo_s = OQP_prefix // "td_bvec_mo_s"                  !new
@@ -199,6 +200,7 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_xpy_comment = OQP_prefix // "(X+Y) vector for target state in TD-DFT calculations"
   character(len=*), parameter, public :: OQP_td_xmy_comment = OQP_prefix // "(X-Y) vector for target state in TD-DFT calculations"
   character(len=*), parameter, public :: OQP_td_energies_comment = OQP_prefix // "Responce energies"
+  character(len=*), parameter, public :: OQP_td_imaginary_comment = OQP_prefix // "1 for RPA roots with omega^2 < 0 (imaginary; td_energies holds |omega|), else 0"
   character(len=*), parameter, public :: OQP_mm_potential_comment = "MM potential"
   character(len=*), parameter, public :: OQP_partial_charges_comment = "QM partial charges"
   character(len=*), parameter, public :: OQP_mm_energy_comment = "MM energy"

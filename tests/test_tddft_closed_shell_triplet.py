@@ -192,6 +192,55 @@ class TestClosedShellTripletCAM(unittest.TestCase):
                 self.assertLess(et[0], es[0] - 0.1)
 
 
+C2H4 = ("   C 0.000000 0.000000 0.669500\n   C 0.000000 0.000000 -0.669500\n"
+        "   H 0.000000 0.928900 1.232100\n   H 0.000000 -0.928900 1.232100\n"
+        "   H 0.000000 0.928900 -1.232100\n   H 0.000000 -0.928900 -1.232100\n")
+
+
+def _full_log(text):
+    with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "job.inp").write_text(text)
+        env = dict(os.environ, OMP_NUM_THREADS="2")
+        proc = subprocess.run([sys.executable, "-m", "oqp.pyoqp", "job.inp"], cwd=tmp, env=env,
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=600)
+        log = (Path(tmp) / "job.log").read_text(errors="ignore") if (Path(tmp) / "job.log").exists() else ""
+        return proc.returncode, log
+
+
+@unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime unavailable")
+class TestImaginaryRpaRoots(unittest.TestCase):
+    """RHF ethylene is triplet-unstable: the lowest HF RPA triplet has
+    omega^2 < 0.  rpaechk keeps |omega|, so the root must be reported as
+    imaginary, not as a 0.58 eV excitation (NWChem 7.0.2 aborts on it,
+    ORCA 5.0.3 prints a different positive number).  TDA (real eigenvalue
+    3.55 eV) and a stable reference must stay unmarked."""
+
+    def _deck(self, geom, td_type):
+        return deck(geom, "cc-pvdz", None, td_type, 3, 3).replace(
+            "method=tdhf\n", "method=tdhf\nispher=true\n")
+
+    def test_unstable_rpa_triplet_root_is_marked_imaginary(self):
+        rc, log = _full_log(self._deck(C2H4, "rpa"))
+        self.assertEqual(rc, 0, log[-3000:])
+        summary = log.split("Summary of the TD-DFT calculation")[-1]
+        rows = re.findall(r"^\s*0 ->\s*(\d+)\s+(-?[\d.]+)(i?)\s.*$", summary, re.M)
+        self.assertEqual(len(rows), 3, summary[:1500])
+        self.assertEqual(rows[0][2], "i", summary[:1500])
+        self.assertEqual([r[2] for r in rows[1:]], ["", ""], summary[:1500])
+        self.assertIn("root(s) imaginary (reference unstable)", summary)
+        state1 = re.search(r"PyOQP state 1\s.*", log).group(0)
+        state2 = re.search(r"PyOQP state 2\s.*", log).group(0)
+        self.assertIn("imaginary (reference unstable)", state1)
+        self.assertNotIn("imaginary", state2)
+
+    def test_tda_and_stable_reference_are_not_marked(self):
+        for geom, td_type in ((C2H4, "tda"), (H2O, "rpa")):
+            with self.subTest(td=td_type, c2h4=geom is C2H4):
+                rc, log = _full_log(self._deck(geom, td_type))
+                self.assertEqual(rc, 0, log[-3000:])
+                self.assertNotIn("imaginary", log)
+
+
 @unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime unavailable")
 class TestClosedShellTripletThreads(unittest.TestCase):
     def test_triplet_energies_independent_of_thread_count(self):

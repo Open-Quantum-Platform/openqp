@@ -104,7 +104,7 @@ contains
     real(kind=dp), allocatable :: dxa(:,:,:), dxb(:,:,:), fxb(:,:,:)
     character(len=8) :: envval
     integer :: envlen, envstat
-    integer :: imax
+    integer :: imax, nimag
     logical :: converged
     integer :: ierr
     real(kind=dp) :: mxerr, cnvtol, scale_exch, norm
@@ -121,9 +121,9 @@ contains
     ! tagarray
     real(kind=dp), contiguous, pointer :: &
       mo_energy_a(:), mo_a(:,:), td_t(:,:), &
-      xpy(:,:), xmy(:,:), td_energies(:)
-    character(len=*), parameter :: tags_alloc(4) = (/ character(len=80) :: &
-      OQP_td_t, OQP_td_xpy, OQP_td_xmy, OQP_td_energies /)
+      xpy(:,:), xmy(:,:), td_energies(:), td_imaginary(:)
+    character(len=*), parameter :: tags_alloc(5) = (/ character(len=80) :: &
+      OQP_td_t, OQP_td_xpy, OQP_td_xmy, OQP_td_energies, OQP_td_imaginary /)
     character(len=*), parameter :: tags_alpha(2) = (/ character(len=80) :: &
       OQP_E_MO_A, OQP_VEC_MO_A /)
 
@@ -228,6 +228,7 @@ contains
     istart = 1
     iend = nvec
     iter = 0
+    imax = 0
     mxiter = infos%control%maxit_dav
     ierr = 0
 
@@ -398,7 +399,12 @@ contains
   ! A singlet-to-triplet transition carries no spin-free transition dipole.
     if (triplet) dip = 0.0_dp
 
-    call td_print_results(eex, dip, nstates)
+    ! RPA roots with omega^2 < 0 (unstable reference) come first; rpaechk
+    ! keeps |omega| in eex, so they are flagged rather than reported as
+    ! ordinary excitation energies.  TDA keeps the sign of its eigenvalues.
+    nimag = 0
+    if (.not. tamm_dancoff) nimag = min(imax, nstates)
+    call td_print_results(eex, dip, nstates, nimag)
 
     call measure_time(print_total=1, log_unit=iw)
 
@@ -427,6 +433,11 @@ contains
     xmy = vlo(:,:nstates)
 
     td_energies = eex(:nstates)
+
+    call infos%dat%alloc_or_die(OQP_td_imaginary, (/ nstates /), td_imaginary, &
+            description=OQP_td_imaginary_comment)
+    td_imaginary = 0.0_dp
+    td_imaginary(1:nimag) = 1.0_dp
     ! Bound the index; the gradient rejects a target above the solved roots.
     infos%mol_energy%excited_energy = td_energies(max(1, min(int(infos%tddft%target_state), nstates)))
 
@@ -508,7 +519,7 @@ contains
 
   end subroutine
 
-  subroutine td_print_results(energies, dip, nstates)
+  subroutine td_print_results(energies, dip, nstates, nimag)
 
     use io_constants, only: iw
     use physical_constants, only: UNITS_EV
@@ -518,6 +529,8 @@ contains
     real(kind=8) :: dip(:,:)
     real(kind=8) :: f
     integer :: nstates
+    !> Leading roots with omega^2 < 0; energies(1:nimag) hold |omega|
+    integer, intent(in) :: nimag
 
     integer :: i
     write(iw,'(/x,78("^"))')
@@ -525,9 +538,19 @@ contains
     write(iw,'(A12,A16,3A12,a14)') 'Transition', 'dE(eV)', 'DX', 'DY', 'DZ', 'Osc.str.'
 
     do i = 1, nstates
-      f = 2.0d0 / 3.0d0 * energies(i) * dot_product(dip(:,i), dip(:,i))
-      write(iw,'(3X,"0 -> ",G0,t15,F15.6, 4F12.4)') i, energies(i)/UNITS_EV, dip(1:3,i), f
+      if (i <= nimag) then
+        ! Imaginary excitation energy i*|omega|: no oscillator strength
+        write(iw,'(3X,"0 -> ",G0,t15,F15.6,"i",3F12.4,a12)') &
+          i, energies(i)/UNITS_EV, dip(1:3,i), 'imaginary'
+      else
+        f = 2.0d0 / 3.0d0 * energies(i) * dot_product(dip(:,i), dip(:,i))
+        write(iw,'(3X,"0 -> ",G0,t15,F15.6, 4F12.4)') i, energies(i)/UNITS_EV, dip(1:3,i), f
+      end if
     end do
+    if (nimag > 0) then
+      write(iw,'(/3X,"WARNING: ",G0," root(s) imaginary (reference unstable): omega^2 < 0;")') nimag
+      write(iw,'(3X,"         dE shows |omega| with suffix i. Check the stability of the SCF reference.")')
+    end if
     write(iw,'(x,78("=")/)')
 
   end subroutine

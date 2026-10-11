@@ -1206,6 +1206,18 @@ class SinglePoint(Calculator):
         self.tddft()
         energies = ref_energy + [ex + ref_energy[0] for ex in self.mol.data['OQP::td_energies']]
 
+        # RPA roots with omega^2 < 0 (unstable reference): td_energies holds
+        # |omega|, so the state energy above is not a physical state.  Only
+        # the conventional RPA driver writes this tag.
+        self.mol.td_imaginary_states = ()
+        if str(self.mol.config.get('tdhf', {}).get('type', 'rpa')).lower() == 'rpa':
+            try:
+                flags = self.mol.data['OQP::td_imaginary']
+            except AttributeError:
+                flags = ()
+            self.mol.td_imaginary_states = tuple(
+                n + 1 for n, flag in enumerate(flags) if flag > 0.5)
+
         # check convergence
         td_flag = self.mol.mol_energy.Davidson_converged
 
