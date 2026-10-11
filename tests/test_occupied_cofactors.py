@@ -84,10 +84,10 @@ def test_actual_mrsf_tlf(s, batch):
 
 
 def test_repeated_dimensions_and_nonsymmetric_occupied_overlap():
-    for n in (6, 2, 5, 1, 3, 6):
+    for n in (6, 2, 0, 5, 1, 3, 6):
         s = np.eye(n) + np.arange(n*n).reshape(n, n) * 0.002
         actual, previous, used = _call(s)
-        assert used is (n != 1)
+        assert used is (n > 1)
         np.testing.assert_allclose(actual, _cofactors(s), rtol=2e-13, atol=1e-15)
         np.testing.assert_allclose(actual, previous, rtol=2e-13, atol=1e-15)
 
