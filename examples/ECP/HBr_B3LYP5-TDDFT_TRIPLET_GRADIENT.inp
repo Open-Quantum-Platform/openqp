@@ -1,0 +1,38 @@
+# Closed-shell triplet TDDFT (RPA, B3LYP5) gradient of the lowest triplet of HBr with the
+# LANL2DZ effective core potential on Br (spherical): [scf] type=rhf, multiplicity=1 and
+# [tdhf] multiplicity=3. The analytic gradient agrees with central finite differences of the
+# triplet energy (tests/test_tddft_triplet_gradient.py); before triplet gradients existed the
+# input checker rejected this input.
+[input]
+system=
+ Br   0.000000000   0.000000000   0.000000000
+ H    0.000000000   0.000000000   1.407611000
+charge=0
+runtype=grad
+method=tdhf
+functional=b3lyp5
+basis=lanl2dz
+ispher=true
+
+[guess]
+type=huckel
+
+[scf]
+type=rhf
+multiplicity=1
+conv=1e-10
+
+[dftgrid]
+rad_npts=96
+ang_npts=302
+pruned=
+
+[tdhf]
+type=rpa
+nstate=3
+multiplicity=3
+conv=1e-9
+zvconv=1e-9
+
+[properties]
+grad=1
