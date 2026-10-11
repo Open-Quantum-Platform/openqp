@@ -104,6 +104,7 @@ contains
     integer :: ierr
     real(kind=dp) :: mxerr, cnvtol, scale_exch, norm
     integer :: maxvec, nstates
+    character(len=256) :: msg
 
     type(int2_compute_t) :: int2_driver
     type(int2_td_data_t), target :: int2_data
@@ -157,6 +158,16 @@ contains
     nocc = infos%mol_prop%nocc
     nvir = nbf-nocc
     lexc = nocc*nvir
+
+  ! The response space holds lexc = nocc*nvir roots. Asking for more would
+  ! size the subspace below nstates and every state-indexed array (eex, vro,
+  ! vlo, dip, td_energies) would be read past the Ritz roots that exist.
+    if (nstates > lexc) then
+      write(msg, '(A,I0,A,I0,A,I0,A,I0,A)') &
+        'TDHF: nstate = ', nstates, ' exceeds the response-space dimension nocc*nvir = ', &
+        nocc, '*', nvir, ' = ', lexc, '. Reduce [tdhf] nstate or enlarge the basis.'
+      call show_message(trim(msg), with_abort)
+    end if
 
     mxvec = min(maxvec*nstates,lexc)
     nvec = min(nstates,mxvec)
