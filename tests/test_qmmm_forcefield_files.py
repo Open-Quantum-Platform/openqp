@@ -50,7 +50,6 @@ class TestResolveForceFieldFiles(unittest.TestCase):
 
 def _runtime():
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
         import oqp  # noqa: F401
         from oqp.molecule import Molecule  # noqa: F401
         import openmm  # noqa: F401

@@ -17,6 +17,8 @@ from pathlib import Path
 
 import numpy as np
 
+from oqp_module_isolation import isolate_modules
+
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNFUNC = ROOT / "pyoqp" / "oqp" / "library" / "runfunc.py"
@@ -114,21 +116,21 @@ def load_runfunc_with_namd_stubs():
         for name in names:
             setattr(modules[module_name], name, noop)
 
-    saved = {name: sys.modules.get(name) for name in modules}
+    cleanup = isolate_modules()
     sys.modules.update(modules)
-
-    def cleanup():
-        for name, value in saved.items():
-            if value is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = value
 
     spec = importlib.util.spec_from_file_location("runfunc_soc_namd_under_test", RUNFUNC)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module, calls, cleanup
+
+
+def _source_copy(name, relative_path):
+    spec = importlib.util.spec_from_file_location(name, ROOT / "pyoqp" / "oqp" / relative_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def load_namd_with_stubs():
@@ -166,10 +168,26 @@ def load_namd_with_stubs():
     setattr(tb_backends, "tb_section_name", lambda *_args, **_kwargs: "dftb")
     odp = types.ModuleType("oqp.library.odp")
     setattr(odp, "odp_from_config", lambda *_args, **_kwargs: None)
+    ints_1e = types.ModuleType("oqp.library.ints_1e")
+    setattr(ints_1e, "ints_1e", lambda *_args, **_kwargs: None)
+    setattr(oqp, "lib", types.SimpleNamespace())
+    molecule = types.ModuleType("oqp.molecule")
+    molecule.__path__ = []
 
     modules = {
         "oqp": oqp,
         "oqp.library": library,
+        "oqp.library.ints_1e": ints_1e,
+        # namd.py uses these pure-Python modules (active-atom selection since
+        # #404, the [md] schema defaults since b27cbe438); private copies of the
+        # real code, not stubs of it.
+        "oqp.library.qmmm_active": _source_copy("oqp.library.qmmm_active",
+                                                "library/qmmm_active.py"),
+        "oqp.periodic_table": _source_copy("oqp.periodic_table",
+                                           "periodic_table/__init__.py"),
+        "oqp.utils.constants": _source_copy("oqp.utils.constants", "utils/constants.py"),
+        "oqp.utils.qmmm": _source_copy("oqp.utils.qmmm", "utils/qmmm.py"),
+        "oqp.molecule": molecule,
         "oqp.library.nac_utils": nac_utils,
         "oqp.library.odp": odp,
         "oqp.library.single_point": single_point,
@@ -177,15 +195,10 @@ def load_namd_with_stubs():
         "oqp.utils.file_utils": file_utils,
         "oqp.utils.tb_backends": tb_backends,
     }
-    saved = {name: sys.modules.get(name) for name in modules}
+    cleanup = isolate_modules()
     sys.modules.update(modules)
-
-    def cleanup():
-        for name, value in saved.items():
-            if value is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = value
+    sys.modules["oqp.molecule.oqpdata"] = _source_copy("oqp.molecule.oqpdata",
+                                                       "molecule/oqpdata.py")
 
     spec = importlib.util.spec_from_file_location("namd_state_map_under_test", NAMD)
     assert spec is not None and spec.loader is not None
@@ -229,15 +242,8 @@ def load_pyoqp_with_stubs():
         "oqp.utils.mpi_utils": mpi_utils,
         "oqp.molecule": molecule,
     }
-    saved = {name: sys.modules.get(name) for name in modules}
+    cleanup = isolate_modules()
     sys.modules.update(modules)
-
-    def cleanup():
-        for name, value in saved.items():
-            if value is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = value
 
     spec = importlib.util.spec_from_file_location("pyoqp_runner_under_test", PYOQP)
     assert spec is not None and spec.loader is not None
@@ -255,6 +261,9 @@ class DummyMol:
 
 
 class SOCNAMDQMMMProductionTests(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(isolate_modules())
+
     def test_rank_zero_io_failure_is_broadcast_to_every_mpi_rank(self):
         namd, _logs, cleanup = load_namd_with_stubs()
         try:

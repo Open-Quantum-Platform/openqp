@@ -2174,6 +2174,25 @@ def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
             action="Choose one of the implemented DIIS types.",
         )
 
+    # TRAH minimises over orbital rotations without re-diagonalising, so it
+    # cannot keep the non-aufbau occupation MOM or rstctmo selects; from such
+    # a stationary point it descends to a lower state.  scf_driver refuses it.
+    occupation_rule = [key for key in ("mom", "rstctmo")
+                       if _is_true(_get(config, "scf", key, False))]
+    if occupation_rule:
+        for option, value in (("converger_type", converger),
+                              ("init_converger", init_converger)):
+            if value == "trah":
+                report.add(
+                    "ERROR",
+                    f"scf.{option}",
+                    "TRAH cannot keep the orbital occupation selected by "
+                    f"scf.{occupation_rule[0]}.",
+                    value=value,
+                    expected="diis or soscf",
+                    action=f"Use {option}=diis or soscf with scf.{occupation_rule[0]}.",
+                )
+
     # Match init_scf_converger() in source/scf.F90.  A nonzero vshift selects
     # the C-DIIS/E-DIIS/C-DIIS cascade for every DIIS subtype, while SOSCF and
     # TRAH never construct the simplex solver.  An explicitly configured
