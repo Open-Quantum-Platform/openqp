@@ -48,9 +48,8 @@ def main():
         output = run.stdout + run.stderr
         print(output, end="", flush=True)
         expected = f"MP2 gradient density {site} allocation failed"
-        assert run.returncode != 0, (site, run.returncode, output)
-        assert expected in output, (site, run.returncode, output)
-        assert "UNEXPECTED_NATIVE_SUCCESS" not in output, (site, output)
+        if run.returncode == 0 or expected not in output or "UNEXPECTED_NATIVE_SUCCESS" in output:
+            raise AssertionError((site, run.returncode, output))
         print(f"ALLOCATION_FAILURE_PASS {site} exit={run.returncode}", flush=True)
 
 
