@@ -7,6 +7,7 @@
 #include <stdatomic.h>
 #include <errno.h>
 #include <string.h>
+#include <unistd.h>
 static _Atomic size_t target_bytes;
 static _Atomic int countdown;
 static _Atomic size_t start_bytes;
@@ -61,6 +62,9 @@ void *malloc(size_t bytes)
     if (atomic_load(&start_bytes) == 0 && bytes == atomic_load(&target_bytes) && atomic_load(&countdown) > 0) {
         if (atomic_fetch_sub(&countdown, 1) == 1) {
             atomic_fetch_add(&failures, 1);
+            /* No allocator is used to retain evidence when Fortran aborts. */
+            static const char marker[] = "MP2_TEST_REAL_MALLOC_FAILURE\n";
+            (void)write(STDERR_FILENO, marker, sizeof(marker)-1);
             errno = ENOMEM;
             return NULL;
         }

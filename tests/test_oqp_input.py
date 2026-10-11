@@ -441,6 +441,18 @@ def test_mp2_reference_is_route_owned_and_lowers_to_scf_type():
         )
 
 
+@pytest.mark.parametrize("transform", ["auto", "direct", "n5"])
+def test_mp2_transform_exact_and_inline_lowering(transform):
+    suffix = ' geom="h2o.xyz" energy'
+    _, inline = _parse(f'mp2(transform={transform})/6-31g' + suffix)
+    _, exact = _parse(f'mp2/6-31g mp2(transform={transform})' + suffix)
+    assert inline == exact
+    assert inline["mp2"]["transform"] == transform
+    assert "transform" not in inline.get("scf", {})
+    with pytest.raises(OQPInputError, match="route-owned"):
+        _parse(f'mp2(transform={transform})/6-31g mp2(transform=auto)' + suffix)
+
+
 def test_umrsf_uses_triplet_uhf_reference():
     spec, legacy = _parse(
         'umrsf(nstate=3)/bhhlyp/6-31g* geom="radical.xyz" energy()'

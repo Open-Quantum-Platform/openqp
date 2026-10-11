@@ -95,7 +95,17 @@ contains
     vira = nbf - nocca
     virb = nbf - noccb
 
-    try_n5 = .not. mp2_build_is_affordable(nbf, nocca, noccb) .or. nbf > 120
+    select case (infos%control%mp2_transform)
+    case (0)
+      try_n5 = .not. mp2_build_is_affordable(nbf, nocca, noccb) .or. nbf > 120
+    case (1)
+      try_n5 = .false.
+    case (2)
+      try_n5 = .true.
+    case default
+      call show_message('mp2: invalid transform selector', with_abort)
+      return
+    end select
 
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
     call tagarray_get_data(infos%dat, OQP_FOCK_A, fock_a)
@@ -159,6 +169,14 @@ contains
     end if
 
     if (.not. computed) then
+      if (infos%control%mp2_transform == 2) then
+        ! An explicit packed transformation must not silently run direct-J.
+        e_aa = 0.0_dp; e_bb = 0.0_dp; e_ab = 0.0_dp; e_s = 0.0_dp
+        deallocate(mo_a_sc, mo_b_sc, e_a_sc, e_b_sc)
+        call int2_driver%clean()
+        call show_message('mp2: requested n5 transform could not fit or allocate', with_abort)
+        return
+      end if
       if (try_n5) write(iw,'(2X,A)') 'MP2 n5 failed: discard spin trials before direct-J fallback'
       write(iw,'(2X,A)') 'MP2 path: direct-J'
       ! A failed beta trial invalidates the successful alpha trial as well.

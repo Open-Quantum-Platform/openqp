@@ -235,8 +235,10 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
     # [qmmm] active_atoms, frozen_atoms, active_radius and active_from_pdb;
     # 368 with the ACID cube grid controls [properties] acid_spacing and
     # acid_padding.
-    # 369 with the DKH decoupling-basis control [scf] scal_rel_decontract.
-    assert len(checked) == 369
+    # 369 with the DKH decoupling-basis control [scf] scal_rel_decontract;
+    # 370 with the MP2 energy transformation selector [mp2] transform.
+    assert ("mp2", "transform") in checked
+    assert len(checked) == 370
 
 
 def test_concise_geometry_drivers_reject_legacy_backend_selectors():

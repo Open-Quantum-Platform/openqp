@@ -236,6 +236,7 @@ WIKI_HELP = {
     "input.runtype": "Use energy, ekt, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, irc, neb, md, namd, soc, prop, or data. md runs ground-state Born-Oppenheimer molecular dynamics; namd runs excited-state nonadiabatic dynamics.",
     "input.method": "Use method=hf for HF/DFT, method=tdhf for TDHF/TDDFT/SF/MRSF, method=mp2 for ground-state MP2, method=ccsd or ccsd(t) for closed-shell coupled cluster, method=dftb for the optional OpenQP-DFTB backend, method=xtb for the optional OpenQP-xTB (LC-GFN1-xTB) backend, method=fci for legacy FCI-style CI, method=casci for fixed-orbital active-space CI, method=casscf for native CASSCF macroiterations, method=sa-casscf with [state_average] enabled=true for native SA-CASSCF, method=caspt2 for native determinant-space state-specific PT2, method=ms-caspt2 for native determinant-space multistate PT2, method=xms-caspt2 for native determinant-space extended multistate PT2, or the GAMESS-convention QDPT family: method=mrmp2 (single-state), method=mcqdpt2 (multistate, single-set), method=xmcqdpt2 (Granovsky extended H0).",
     "mp2.variant": "Use mp2, scs-mp2, sos-mp2, os-mp2, ss-mp2, scs-mi-mp2, or custom with explicit OS/SS scales.",
+    "mp2.transform": "Use auto for the normal size/work guard, direct for guarded direct-J, or n5 for a required packed energy transform. n5 can use occupied-virtual storage but stops if neither packed route succeeds.",
     "input.system": "Set system to an XYZ file path or inline coordinates with one atom per indented line.",
     "input.basis": "Set basis to a basis name, a comma-separated per-atom list, or library with tagged atoms and [input] library mappings.",
     "scf.type": "RHF is for multiplicity 1 closed-shell references. SF/MRSF needs an open-shell reference, usually ROHF.",
@@ -2513,11 +2514,20 @@ def _check_mp2(config: dict[str, Any], report: CheckReport) -> None:
 
     functional = _get(config, "input", "functional", "")
     variant = _as_lower(_get(config, "mp2", "variant", "mp2"))
+    transform = str(_get(config, "mp2", "transform", "auto")).strip().lower()
     ss_scale = _get(config, "mp2", "same_spin_scale", 1.0)
     os_scale = _get(config, "mp2", "opposite_spin_scale", 1.0)
     runtype = _as_lower(_get(config, "input", "runtype", "energy"))
     reference = _as_lower(_get(config, "scf", "type", "rhf"))
     derivative_runtypes = {"grad", "optimize", "ts", "mep", "irc"}
+
+    if transform not in {"auto", "direct", "n5"}:
+        report.add(
+            "ERROR", "mp2.transform", "Unknown MP2 transformation selector.",
+            value=transform, expected="auto, direct, or n5",
+            action="Set [mp2] transform=auto, direct, or n5.",
+            wiki=WIKI_HELP["mp2.transform"],
+        )
 
     if functional:
         report.add(

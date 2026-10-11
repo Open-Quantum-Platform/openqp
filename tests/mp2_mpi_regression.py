@@ -34,7 +34,7 @@ def memory_worker(directory, case):
     comm = MPI.COMM_WORLD
     # Shared-memory splits can return singleton groups on one physical node.
     # Establish this fixture's co-location independently; production budgets
-    # use the conservative world count rather than trusting that split.
+    # count matching processor identities rather than trusting that split.
     processors = comm.allgather(MPI.Get_processor_name())
     assert len(set(processors)) == 1, 'test requires one processor identity'
     tests = runpy.run_path(str(ROOT / 'test_mp2_dispatch.py'))

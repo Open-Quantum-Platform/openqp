@@ -4,6 +4,7 @@ Run this file in separate processes with OMP_NUM_THREADS=1 and 4. No backend
 skip is allowed: a missing MP2 engine is a failed test, not coverage.
 """
 import os
+import json
 import re
 import subprocess
 import sys
@@ -40,7 +41,7 @@ COMPONENTS = r'E\(MP2, (?:same-spin aa|same-spin bb|opp-spin  ab|correlation|tot
 
 
 def _run(tmp_path, name, scf='rhf', mult=1, atoms=WATER, variant='mp2',
-         basis='cc-pvdz', method='mp2', usempi=False):
+         basis='cc-pvdz', method='mp2', usempi=False, transform='auto'):
     assert oqp.BACKEND_AVAILABLE and hasattr(oqp, 'mp2_energy')
     log = tmp_path / (name + '.log')
     config = {
@@ -49,7 +50,7 @@ def _run(tmp_path, name, scf='rhf', mult=1, atoms=WATER, variant='mp2',
         'guess': {'type': 'hcore', 'save_mol': 'False'},
         'scf': {'type': scf, 'multiplicity': str(mult), 'conv': '1.0e-11',
                 'maxit': '200', 'save_molden': 'False'},
-        'mp2': {'variant': variant},
+        'mp2': {'variant': variant, 'transform': transform},
         'tests': {'exception': 'True'},
     }
     runner = Runner(project=name, input_file=None, log=str(log),
@@ -64,6 +65,90 @@ def _components(log):
     assert len(values) == 5, text
     assert np.all(np.isfinite(values))
     return values
+
+
+def _run_fixture(tmp_path, source):
+    """Run an input copy; never write calculation files into the fixture tree."""
+    inp = tmp_path / source.name
+    inp.write_text(source.read_text())
+    log = inp.with_suffix('.log')
+    runner = Runner(project=source.stem, input_file=str(inp), log=str(log), silent=1, usempi=False)
+    runner.run()
+    return runner, log
+
+
+@pytest.mark.parametrize('scf,mult,atoms', [
+    ('rhf', 1, WATER), ('uhf', 2, OH), ('rohf', 2, OH),
+])
+def test_input_transform_selector_matches_direct(tmp_path, monkeypatch, scf, mult, atoms):
+    monkeypatch.delenv('OQP_MP2_MAX_JBUILDS', raising=False)
+    monkeypatch.delenv('OQP_MEMORY_LIMIT_GB', raising=False)
+    results = []
+    for transform in ('auto', 'direct', 'n5'):
+        runner, log = _run(tmp_path, 'selected_' + transform, scf, mult, atoms,
+                           transform=transform)
+        assert runner.mol.data._data.control.mp2_transform == {
+            'auto': 0, 'direct': 1, 'n5': 2,
+        }[transform]
+        with pytest.raises(ValueError, match='mp2.transform'):
+            runner.mol.data.set_mp2_transform('unknown')
+        assert runner.mol.data._data.control.mp2_transform == {
+            'auto': 0, 'direct': 1, 'n5': 2,
+        }[transform]
+        text = log.read_text()
+        if transform == 'n5':
+            assert 'MP2 path: n5 ' in text
+            assert 'MP2 path: direct-J' not in text
+        else:
+            assert 'MP2 path: direct-J' in text
+            assert 'MP2 path: n5 ' not in text
+        results.append(_components(log))
+    np.testing.assert_allclose(results[0], results[1], rtol=0, atol=1e-9)
+    np.testing.assert_allclose(results[1], results[2], rtol=0, atol=1e-9)
+
+
+def test_small_n5_example_executes_packed_transform(tmp_path, monkeypatch):
+    monkeypatch.delenv('OQP_MP2_MAX_JBUILDS', raising=False)
+    monkeypatch.delenv('OQP_MEMORY_LIMIT_GB', raising=False)
+    source = Path(__file__).resolve().parents[1] / 'examples/MP2/h2o_ump2_n5_6-31g.inp'
+    runner, log = _run_fixture(tmp_path, source)
+    assert int(runner.mol.data.get_basis()['nbf']) < 120
+    assert 'MP2 path: n5 occupied-virtual' in log.read_text()
+    assert 'MP2 path: direct-J' not in log.read_text()
+    reference = json.loads(source.with_suffix('.json').read_text())
+    np.testing.assert_allclose(_components(log)[-1], reference['energy'], rtol=0, atol=1e-9)
+
+
+@pytest.mark.parametrize('mode,message', [
+    ('direct_guard', 'OQP_MP2_MAX_JBUILDS guard was exceeded'),
+    ('n5_memory', 'requested n5 transform could not fit or allocate'),
+    ('invalid_native', 'invalid transform selector'),
+])
+def test_explicit_transform_failure_is_not_success(tmp_path, mode, message):
+    child = subprocess.run([sys.executable, str(Path(__file__).resolve()),
+                            str(tmp_path), 'selector_failure', mode],
+                           text=True, capture_output=True, timeout=300)
+    assert child.returncode != 0, child.stdout + child.stderr
+    log = tmp_path / ('selector_failure_' + mode + '.log')
+    text = child.stdout + child.stderr + (log.read_text() if log.exists() else '')
+    assert message in text, text
+    assert 'E(MP2, total)' not in text
+    if mode == 'n5_memory':
+        assert 'MP2 path: direct-J' not in text
+
+
+def _selector_failure_child(tmp_path, mode):
+    # Arm only after HF so the MP2 guard, rather than an SCF limit, fails.
+    runner, _ = _run(tmp_path, 'selector_failure_' + mode, method='hf')
+    if mode == 'direct_guard':
+        runner.mol.data.set_mp2_transform('direct')
+        os.environ['OQP_MP2_MAX_JBUILDS'] = '0'
+    elif mode == 'n5_memory':
+        runner.mol.data.set_mp2_transform('n5')
+        os.environ['OQP_MEMORY_LIMIT_GB'] = '0.000000001'
+    else:
+        runner.mol.data._data.control.mp2_transform = 99
+    oqp.mp2_energy(runner.mol)
 
 
 @pytest.mark.parametrize('scf,mult,atoms', [
@@ -105,8 +190,9 @@ def test_input_dispatch_and_default_crossover(tmp_path, monkeypatch):
     monkeypatch.delenv('OQP_MEMORY_LIMIT_GB', raising=False)
     _, small_log = _run(tmp_path, 'small_input')
     assert 'MP2 path: direct-J' in small_log.read_text()
-    runner, log = _run(tmp_path, 'large_input', scf='uhf', mult=2,
-                       atoms='Li 0 0 0', basis='aug-cc-pv5z')
+    source = Path(__file__).with_name('data') / 'mp2/li_n5_default.inp'
+    fixture = json.loads(source.with_suffix('.json').read_text())
+    runner, log = _run_fixture(tmp_path, source)
     assert int(runner.mol.data.get_basis()['nbf']) == 127
     assert 'MP2 path: n5 occupied-virtual' in log.read_text()
     assert 'MP2 path: direct-J' not in log.read_text()
@@ -119,6 +205,7 @@ def test_input_dispatch_and_default_crossover(tmp_path, monkeypatch):
                                           -0.02003057826966677,
                                           -0.02058497814507541,
                                           -7.385666870933013], rtol=0, atol=1e-9)
+    np.testing.assert_allclose(reference[-1], fixture['energy'], rtol=0, atol=1e-9)
     # Restore the SCF energy before evaluating MP2 on the same native handle.
     scf_energy = float(re.findall(r'E\(reference, SCF\)\s*=\s*([-+0-9.eE]+)', log.read_text())[-1])
     runner.mol.data._data.mol_energy.energy = scf_energy
@@ -169,9 +256,10 @@ def test_empty_beta_space_and_dimension_reuse(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize('stage', ['full_scratch', 'alpha_batched_scratch',
-                                   'after_alpha_same_spin', 'beta_store', 'beta_scratch'])
+                                   'after_alpha_same_spin', 'beta_store', 'beta_scratch',
+                                   'required_n5_beta_store'])
 def test_allocator_failure_runs_real_fallback(tmp_path, stage):
-    """Fail malloc inside a native ALLOCATE, then execute the real fallback.
+    """Fail a real ALLOCATE; auto falls back and required n5 aborts.
 
     The interposer is armed only after SCF. It returns NULL once, rather than
     mocking a Fortran result or asserting source text. The child must report
@@ -190,6 +278,14 @@ def test_allocator_failure_runs_real_fallback(tmp_path, stage):
     child = subprocess.run([sys.executable, str(Path(__file__).resolve()),
                             str(tmp_path), stage, str(library)], env=env,
                            text=True, capture_output=True, timeout=900)
+    if stage == 'required_n5_beta_store':
+        assert child.returncode != 0, child.stdout + child.stderr
+        text = child.stdout + child.stderr + (tmp_path / 'alloc_beta_store.log').read_text()
+        assert text.count('MP2_TEST_REAL_MALLOC_FAILURE') == 1
+        assert 'requested n5 transform could not fit or allocate' in text
+        assert 'MP2 path: direct-J' not in text
+        assert 'E(MP2, total)' not in text
+        return
     assert child.returncode == 0, child.stdout + child.stderr
     assert 'REAL_ALLOCATE_FAILURE_AND_FALLBACK_PASS' in child.stdout
 
@@ -248,6 +344,9 @@ def _allocation_child(tmp_path, stage, library, comm=None, fault_rank=1):
     interposer.mp2_test_failures.restype = ctypes.c_int
     interposer.mp2_test_select_n5.argtypes = []
     interposer.mp2_test_selector_calls.restype = ctypes.c_int
+    required_n5 = stage == 'required_n5_beta_store'
+    if required_n5:
+        stage = 'beta_store'
     rank = 0 if comm is None else comm.Get_rank()
     native = _native_thread_controls()
     def components():
@@ -261,13 +360,15 @@ def _allocation_child(tmp_path, stage, library, comm=None, fault_rank=1):
     runner.mol.data.set_mp2_opposite_spin_scale(1)
     oqp.mp2_energy(runner.mol)
     reference = components()
+    if required_n5:
+        runner.mol.data.set_mp2_transform('n5')
     nbf = int(runner.mol.data.get_basis()['nbf'])
     npair = nbf * (nbf + 1) // 2
     nocca, noccb = 2, 1
     nt = int(os.environ.get('OMP_NUM_THREADS', '1'))
     # Keep the actual default >120-AO crossover in its separate test. Here
-    # the existing cap selects n5 on the small production input, then permits
-    # direct-J only after a real failure. The interposer controls configuration
+    # the existing cap selects n5, then permits direct-J after a real failure.
+    # Explicit n5 instead aborts after failure. The interposer controls configuration
     # queries, never a numerical result or a Fortran allocation status.
     if stage != 'full_scratch':
         assert nbf < 120
@@ -312,7 +413,7 @@ def _allocation_child(tmp_path, stage, library, comm=None, fault_rank=1):
     native.oqp_blas_thread_set(2)
     native.oqp_omp_set_num_threads(nt)
     before = _counts(native)
-    if stage != 'full_scratch':
+    if stage != 'full_scratch' and not required_n5:
         # Every rank makes both cap queries, including the rank whose malloc
         # succeeds: it must follow the collective failure into direct-J too.
         interposer.mp2_test_select_n5()
@@ -402,7 +503,9 @@ def test_n5_pin_on_production_integrals(tmp_path, monkeypatch, scf, mult, atoms)
 
 if __name__ == '__main__':
     _assert_bounds_runtime()
-    if sys.argv[2] == 'threads':
+    if sys.argv[2] == 'selector_failure':
+        _selector_failure_child(Path(sys.argv[1]), sys.argv[3])
+    elif sys.argv[2] == 'threads':
         _thread_child(Path(sys.argv[1]), int(sys.argv[3]))
     else:
         _allocation_child(Path(sys.argv[1]), sys.argv[2], sys.argv[3])
