@@ -65,7 +65,7 @@ program check_trah_ah_newton
  type(quad) :: m
  type(trah_params_t) :: par
  type(trah_result_t) :: res
- real(dp) :: q(nm,nm), w1(nm), w2(nm), lam(nm), g(nm), t
+ real(dp) :: q(nm,nm), w1(nm), w2(nm), lam(nm), g(nm), t, gconv
  integer :: i, j
  ! Q = (I - 2 w1 w1^T)(I - 2 w2 w2^T): a deterministic orthogonal matrix that
  ! mixes every coordinate.
@@ -102,8 +102,42 @@ program check_trah_ah_newton
  if (sqrt(dot_product(g, g)/nm) >= par%conv_tol) error stop 'AH TRAH gradient above tolerance'
  ! Quadratic: a few Newton steps, not a long diagonal-preconditioned descent.
  if (m%steps > 6) error stop 'AH TRAH took too many steps (not Newton)'
+ gconv = sqrt(dot_product(g, g)/nm)
+ ! The |g|-relative stop must never be looser than the old absolute 1e-6.
+ ! With conv_tol = 1e-5 the 0.1*conv_tol*sqrt(n) floor is 4.9e-6; at
+ ! |g| ~ 1e-3 the old solver stopped at 1e-6, so the step must too.  For the
+ ! normalised Ritz vector [1; p]/|[1; p]| the residual is
+ ! (g.p - theta, g + (H - theta) p)/|[1; p]| with theta = g.p.
+ block
+  type(trah_params_t) :: loose
+  real(dp) :: p(nm), hp(nm), hd(nm), theta, res, pred
+  integer :: used, ierr, k, ntrial
+  loose = par
+  loose%conv_tol = 1.0e-5_dp
+  ntrial = 0
+  do k = 1, 6
+   do j = 1, nm
+    m%x(j) = sin(0.37_dp*j*k) + 0.5_dp*cos(1.9_dp*j + k)
+   end do
+   g = matmul(m%h, m%x)
+   g = g*(1.0e-3_dp/norm2(g))
+   do i = 1, nm
+    hd(i) = m%h(i,i)
+   end do
+   call trah_micro_step(m, loose, g, hd, 10.0_dp, nm, p, pred, used, ierr)
+   if (ierr /= 0) error stop 'loose-tolerance micro-step failed'
+   hp = matmul(m%h, p)
+   theta = dot_product(g, p)
+   res = sqrt(dot_product(g + hp - theta*p, g + hp - theta*p))/sqrt(1.0_dp + dot_product(p, p))
+   if (res > 1.0e-6_dp*(1.0_dp + 1.0e-6_dp)) then
+    print '(a,i0,a,es10.3,a,i0)', 'trial ', k, ': residual ', res, ' after products ', used
+    error stop 'Davidson stopped above the old 1e-6 residual'
+   end if
+   ntrial = ntrial + 1
+  end do
+ end block
  print '(a,i0,a,es10.3)', 'PASS: augmented-Hessian Newton steps=', m%steps, &
-       ' |g|rms=', sqrt(dot_product(g, g)/nm)
+       ' |g|rms=', gconv
 contains
  function reflector(w) result(r)
   real(dp), intent(in) :: w(:)
