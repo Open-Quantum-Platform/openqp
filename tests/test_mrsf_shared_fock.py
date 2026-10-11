@@ -56,7 +56,7 @@ class SharedMRSFFockTests(unittest.TestCase):
             self.assertIn("call " + private + "(", routine)
 
     def test_compact_api_and_installed_control_select_storage(self):
-        from oqp import OpenQP
+        from oqp.openqp import OpenQP
         from oqp.molecule.oqpdata import OQP_CONFIG_SCHEMA, OQPData
 
         self.assertEqual(OQP_CONFIG_SCHEMA["tdhf"]["shared_f3"]["default"], "False")
