@@ -96,7 +96,26 @@ def test_production_tddft_gradient_differentiates_the_finite_quadrature():
     call = "".join(body.split("call tddft_xc_gradient(", 1)[1].split(
         "call dftclean", 1)[0].split())
     assert "include_weight_derivative=.true." in call
-    assert "include_ground_state" not in body
+    # Every restricted call keeps the ground-state XC term in its own consumer.
+    def _statement(rest):
+        # the call's continuation lines (each ends with '&') plus the last one
+        lines = []
+        for line in rest.splitlines():
+            lines.append(line)
+            if not line.rstrip().endswith("&"):
+                break
+        return "".join("".join(lines).split())
+
+    restricted_calls = [_statement(c) for c in body.split("call tddft_xc_gradient(")[1:]]
+    assert restricted_calls
+    assert all("include_weight_derivative=.true." in c for c in restricted_calls)
+    assert not any("include_ground_state" in c for c in restricted_calls)
+    # The closed-shell triplet adds only its spin-resolved f_xc term (with its
+    # moving-grid response) on top of the restricted call; the ground state
+    # must not be counted a second time there.
+    triplet = _statement(body.split("call utddft_xc_gradient(", 1)[1])
+    assert "include_ground_state=.false." in triplet
+    assert "include_weight_derivative=.true." in triplet
     assert "call derexc_blk" not in body
     assert "threshold=1.0d-14" in body
     assert "dedft = dedft + sum(dat%nucgrad(:,1:infos%mol_prop%natom,:,1), dim=3)" in TDXC_GRAD
