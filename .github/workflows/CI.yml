@@ -1,12 +1,16 @@
 name: CI
 on:
    pull_request:
+   push:
+      branches: [main]
    workflow_dispatch:
 
-# Pull requests are the only automatic trigger. Protected main receives changes
-# through reviewed PRs, so also running the same matrix for every feature-branch
-# push and again after merge only duplicates the exact validation. A manual run
-# remains available for diagnostics.
+# Pull requests run the full build/example matrix but only the pytest files the
+# change can affect (.github/scripts/select_pr_tests.py) plus a smoke set; the
+# complete pytest suite runs once after every merge to main (push trigger).
+# Feature-branch pushes are not a trigger.  cancel-in-progress keeps only the
+# newest run per PR and per branch, so a burst of merges to main validates the
+# last state once.  A manual run (workflow_dispatch) always runs the full suite.
 concurrency:
    group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
    cancel-in-progress: true
@@ -20,9 +24,23 @@ jobs:
             os: [ubuntu-24.04, ubuntu-24.04-arm]
             version: [14]
             MPI: [ON, OFF]
+            role: [build]
+            # The pytest suite runs in its own job, in parallel with the
+            # example suite of the ubuntu-24.04 MPI=OFF leg (it used to run
+            # after it in the same job: 2.8 min build + 16 min examples +
+            # 21 min pytest).  The extra build costs ~3 min with the externals
+            # cache.
+            include:
+               - os: ubuntu-24.04
+                 version: 14
+                 MPI: 'OFF'
+                 role: pytest
       steps:
          - name: Checkout code
            uses: actions/checkout@v4
+           with:
+            # The pytest job diffs the PR against its base to select tests.
+            fetch-depth: ${{ matrix.role == 'pytest' && 0 || 1 }}
          - name: Setup Python
            uses: actions/setup-python@v5
            with:
@@ -160,7 +178,7 @@ jobs:
            # `import oqp` (hence every `openqp` invocation) fails with
            # "libddx.so: cannot open shared object file". Put its directory on
            # LD_LIBRARY_PATH so the validate + test steps below can load liboqp.
-           if: ${{ matrix.MPI == 'OFF' }}
+           if: ${{ matrix.MPI == 'OFF' && matrix.role != 'pytest' }}
            run: |
             lib="$(find "$HOME"/.cache/openqp -name 'libddx.so*' -print -quit 2>/dev/null)"
             if [ -n "$lib" ]; then
@@ -177,7 +195,7 @@ jobs:
            # oqp/utils/regression.py). Fails loudly if a new example or a newly
            # registered value lands without its reference value. Exits non-zero
            # (unlike the piped run_tests below), so it actually blocks CI.
-           if: ${{ matrix.MPI == 'OFF' }}
+           if: ${{ matrix.MPI == 'OFF' && matrix.role != 'pytest' }}
            run: openqp --validate_examples
 
          - name: Check feature coverage
@@ -185,11 +203,11 @@ jobs:
            # exercised by at least one example, so a new capability cannot ship
            # without a test (see EXEMPT_FLAGS / KNOWN_UNCOVERED in
            # oqp/utils/regression.py). Existing gaps are grandfathered notes.
-           if: ${{ matrix.MPI == 'OFF' }}
+           if: ${{ matrix.MPI == 'OFF' && matrix.role != 'pytest' }}
            run: openqp --check_feature_coverage
 
          - name: Run example test suite
-           if: ${{ matrix.MPI == 'OFF' }}
+           if: ${{ matrix.MPI == 'OFF' && matrix.role != 'pytest' }}
            env:
             # One OMP thread per test so all runner cores run tests concurrently
             # (max_workers = cpus // omp_threads); the examples are tiny.
@@ -213,7 +231,7 @@ jobs:
             fi
 
          - name: Check linked TagArray allocation and cleanup
-           if: ${{ matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
+           if: ${{ matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' && matrix.role != 'pytest' }}
            env:
             CC: gcc-${{ matrix.version }}
            run: |
@@ -221,7 +239,7 @@ jobs:
             sudo apt-get install -y valgrind
             python tests/native/run_tagarray_memcheck.py
          - name: Preserve TagArray memory diagnostics
-           if: ${{ always() && matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
+           if: ${{ always() && matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' && matrix.role != 'pytest' }}
            uses: actions/upload-artifact@v4
            with:
             name: tagarray-memory-${{ github.run_id }}-${{ github.run_attempt }}
@@ -234,8 +252,11 @@ jobs:
          # silently. Run it on one leg: it is Python-only, so a second OS or the
          # MPI leg would re-run identical assertions against the same code.
          - name: Run Python test suite
-           if: ${{ matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
+           if: ${{ matrix.role == 'pytest' }}
            env:
+            # Pull requests: the files select_pr_tests.py chooses (or ALL).
+            # Pushes to main and manual runs: always the full suite.
+            BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
             # This is a post-build job.  Native EDIIS/A-DIIS tests must fail,
             # rather than skip, if the extension or its C ABI symbols are absent.
             OQP_REQUIRE_NATIVE_TESTS: "1"
@@ -272,7 +293,15 @@ jobs:
             # `pyoqp.oqp.periodic_table` through the source tree rather than the
             # installed `oqp` package. Bare pytest only adds tests/ and the
             # module fails to import.
-            python -m pytest tests -q -n auto --forked --tb=short -rf
+            selection="$(python .github/scripts/select_pr_tests.py)"
+            if [ "$selection" = "ALL" ]; then
+              echo "Running the full pytest suite"
+              python -m pytest tests -q -n auto --forked --tb=short -rf
+            else
+              echo "Running $(echo "$selection" | wc -l) selected test files (full suite runs after merge to main):"
+              echo "$selection"
+              python -m pytest $selection -q -n auto --forked --tb=short -rf
+            fi
 
    # Intel oneAPI leg: ifx + icx/icpx + MKL ILP64 on Linux x86_64. This is the
    # LINALG_LIB=auto source-build mandate for Linux x86_64 (Intel MKL ILP64),
