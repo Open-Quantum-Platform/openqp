@@ -5406,7 +5406,7 @@ def _check_pt2(config: dict[str, Any], report: CheckReport) -> None:
             value=target_roots,
             action="Remove duplicate PT2 root slots.",
         )
-    if normalized_variant == "caspt2" and len(parsed_target_roots) > 1:
+    if normalized_variant in PT2_SINGLE_STATE_METHODS and len(parsed_target_roots) > 1:
         report.add(
             "ERROR",
             "pt2.target_roots",

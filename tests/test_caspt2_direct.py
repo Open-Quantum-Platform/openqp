@@ -82,6 +82,64 @@ def test_single_state_target_count_matches_runtime(engine, targets):
         assert _reference_roots(options) == [int(targets or "0")]
 
 
+@pytest.mark.parametrize("method,variant,h0,contraction", [
+    ("mrmp2", "auto", "fock", "none"),
+    ("mrmp2", "mrmp2", "fock", "none"),
+    ("nevpt2", "auto", "dyall", "none"),
+    ("sc-nevpt2", "auto", "dyall", "strong"),
+    ("scnevpt2", "auto", "dyall", "strong"),
+])
+@pytest.mark.parametrize("targets", ["", "0", "1", "0,1"])
+def test_other_single_state_pt2_targets_match_runtime(method, variant, h0,
+                                                     contraction, targets):
+    from oqp.library.caspt2_dyall import _caspt2_options, _reference_roots
+    from oqp.utils.input_checker import CheckReport, _check_pt2
+
+    config = {"input": {"method": method, "runtype": "energy"},
+              "ci": {"nroot": 2},
+              "pt2": {"engine": "auto", "reference": "casci", "variant": variant,
+                      "h0": h0, "contraction": contraction,
+                      "target_roots": targets}}
+    options = _caspt2_options(config)
+    assert options.variant == "caspt2", "these methods share the single-state runtime"
+    report = CheckReport()
+    _check_pt2(config, report)
+    errors = [item for item in report.diagnostics if item.severity == "ERROR"]
+    if targets == "0,1":
+        assert any(item.path == "pt2.target_roots" for item in errors)
+        with pytest.raises(ValueError, match="single-state"):
+            _reference_roots(options)
+    else:
+        assert not errors
+        assert _reference_roots(options) == [int(targets or "0")]
+
+
+@pytest.mark.parametrize("method", ["casci", "casscf"])
+@pytest.mark.parametrize("variant", ["caspt2", "mrmp2"])
+@pytest.mark.parametrize("targets", ["1", "0,1"])
+def test_single_state_reference_report_targets_match_runtime(method, variant, targets):
+    from oqp.library.caspt2_dyall import _caspt2_options, _reference_roots
+    from oqp.utils.input_checker import CheckReport, _check_pt2
+
+    # The diagnostic caller selects its PT2 method through variant, rather
+    # than input.method. It must obey the same single-state contract.
+    config = {"input": {"method": method, "runtype": "energy"},
+              "ci": {"nroot": 2},
+              "pt2": {"reference_report": True, "variant": variant,
+                      "target_roots": targets}}
+    options = _caspt2_options(config)
+    report = CheckReport()
+    _check_pt2(config, report)
+    errors = [item for item in report.diagnostics if item.severity == "ERROR"]
+    if targets == "0,1":
+        assert any(item.path == "pt2.target_roots" for item in errors)
+        with pytest.raises(ValueError, match="single-state"):
+            _reference_roots(options)
+    else:
+        assert not errors
+        assert _reference_roots(options) == [1]
+
+
 @pytest.mark.parametrize("changes", [
     {"pt2": {"h0": "dyall"}},
     {"pt2": {"contraction": "strong"}},
