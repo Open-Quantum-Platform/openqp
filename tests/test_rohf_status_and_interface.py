@@ -16,7 +16,7 @@ import types
 import unittest
 from pathlib import Path
 
-from oqp_module_isolation import stub_module
+from oqp_module_isolation import child_env, stub_module
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNFUNC = ROOT / "pyoqp" / "oqp" / "library" / "runfunc.py"
@@ -358,15 +358,8 @@ class ROHFStatusAndInterfaceTests(unittest.TestCase):
             inp.write_text(ROHF_NMR_INPUT)
             env = dict(os.environ)
             env["OPENQP_ROOT"] = str(runtime_root)
-            # Use this checkout's Python wrapper while allowing it to load the
-            # selected compiled OpenQP runtime from OPENQP_ROOT.  This keeps the
-            # ROHF/NMR guard test from accidentally exercising an older
-            # pip-installed wrapper that may not know properties.nmr_gauge.
-            root_parent = str(Path(runtime_root).parent)
-            source_parent = str(ROOT / "pyoqp")
-            env["PYTHONPATH"] = os.pathsep.join(
-                item for item in (source_parent, root_parent, env.get("PYTHONPATH", "")) if item
-            )
+            # The child imports the same oqp package as this test session.
+            env = child_env(env)
             proc = subprocess.run(
                 [sys.executable, "-m", "oqp.pyoqp", str(inp)],
                 cwd=workdir,

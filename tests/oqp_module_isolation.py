@@ -13,8 +13,28 @@ imports the loaded module makes lazily at call time -- and are gone after it::
         self.addCleanup(isolate_modules())
         sys.modules["oqp.utils.mpi_utils"] = mpi_utils_stub
 """
+import importlib.machinery
+import os
 import sys
 import types
+
+
+def child_env(env=None):
+    """Environment for a child interpreter that imports the same ``oqp`` as this one.
+
+    Prepending ``ROOT/pyoqp`` to the child's ``PYTHONPATH`` made it import the
+    unbuilt source tree (no liboqp) instead of the installed package; CI hid
+    that only because it exported ``OPENQP_ROOT``.  This puts the directory
+    holding the session's ``oqp`` first, so the child gets the installed
+    package, or the source tree only where conftest fell back to it.
+    """
+    env = dict(os.environ if env is None else env)
+    spec = importlib.machinery.PathFinder.find_spec("oqp", sys.path)
+    if spec is not None and spec.submodule_search_locations:
+        location = os.path.dirname(list(spec.submodule_search_locations)[0])
+        env["PYTHONPATH"] = os.pathsep.join(
+            p for p in (location, env.get("PYTHONPATH", "")) if p)
+    return env
 
 
 def stub_module(name):

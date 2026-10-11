@@ -10,6 +10,7 @@ import sys
 import numpy as np
 import pytest
 
+from oqp_module_isolation import child_env
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -242,11 +243,7 @@ print("ODP=" + json.dumps({
     "singular_angle": singular_angle,
 }))
 '''
-    env = os.environ.copy()
-    pythonpath = str(ROOT / "pyoqp")
-    if env.get("PYTHONPATH"):
-        pythonpath += os.pathsep + env["PYTHONPATH"]
-    env["PYTHONPATH"] = pythonpath
+    env = child_env()
     result = subprocess.run(
         [sys.executable, "-c", script], cwd=ROOT, env=env,
         capture_output=True, text=True, check=False,
@@ -391,11 +388,7 @@ payload = {
 del records
 print("ODP_IO=" + json.dumps(payload))
 '''
-    env = os.environ.copy()
-    pythonpath = str(ROOT / "pyoqp")
-    if env.get("PYTHONPATH"):
-        pythonpath += os.pathsep + env["PYTHONPATH"]
-    env["PYTHONPATH"] = pythonpath
+    env = child_env()
     env["OQP_ODP_TEST_ROOT"] = str(tmp_path)
     result = subprocess.run(
         [sys.executable, "-c", script], cwd=ROOT, env=env,
@@ -746,11 +739,7 @@ print("ODP_WHAM=" + json.dumps({
     "overlapping_segments_rejected": overlapping_segments_rejected,
 }))
 '''
-    env = os.environ.copy()
-    pythonpath = str(ROOT / "pyoqp")
-    if env.get("PYTHONPATH"):
-        pythonpath += os.pathsep + env["PYTHONPATH"]
-    env["PYTHONPATH"] = pythonpath
+    env = child_env()
     env["OQP_ODP_WHAM_ROOT"] = str(tmp_path)
     result = subprocess.run(
         [sys.executable, "-c", script], cwd=ROOT, env=env,
@@ -818,11 +807,7 @@ print("ODP_WHAM=" + json.dumps({
 
 
 def test_odp_restart_example_runs_generated_manifest(tmp_path):
-    env = os.environ.copy()
-    pythonpath = str(ROOT / "pyoqp")
-    if env.get("PYTHONPATH"):
-        pythonpath += os.pathsep + env["PYTHONPATH"]
-    env["PYTHONPATH"] = pythonpath
+    env = child_env()
     result = subprocess.run(
         [
             sys.executable,

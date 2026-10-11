@@ -1,6 +1,8 @@
 """isolate_modules() and stub_module() must leave real packages as they found them."""
+import re
 import sys
 import types
+from pathlib import Path
 
 from oqp_module_isolation import isolate_modules, stub_module
 
@@ -40,3 +42,41 @@ def test_stub_module_never_returns_a_real_module(monkeypatch):
     assert stub is not real
     assert sys.modules["zz_real"] is stub
     assert stub_module("zz_real") is stub
+
+
+# A child interpreter must import the oqp this session uses (child_env), never
+# the unbuilt source tree, and a test must not point the session itself at it.
+_SOURCE_TREE_PATTERNS = tuple(re.compile(p, re.IGNORECASE) for p in (
+    r"""PYTHONPATH.*ROOT\s*/\s*['"]pyoqp['"]""",
+    r"""pythonpath\s*=\s*str\(\s*ROOT\s*/\s*['"]pyoqp['"]\s*\)""",
+    # The bare source package directory as a string has no use but a search path.
+    r"""str\(\s*ROOT\s*/\s*['"]pyoqp['"]\s*\)""",
+    r"""sys\.path\.(insert|append)\(.*pyoqp""",
+    r"""environ\.setdefault\(\s*['"]OPENQP_ROOT""",
+))
+
+_SOURCE_TREE_EXCLUDED = {
+    # Holds the patterns themselves.
+    "test_oqp_module_isolation.py",
+    # Deliberately starts a child with the source tree on sys.path to trip the conftest guard.
+    "test_import_state_guard.py",
+}
+
+
+def source_tree_path_offences(text):
+    """Return (line number, line) for every line that puts the source oqp on a search path."""
+    return [(number, line.strip())
+            for number, line in enumerate(text.splitlines(), 1)
+            if any(pattern.search(line) for pattern in _SOURCE_TREE_PATTERNS)]
+
+
+def test_no_test_puts_the_source_tree_on_a_search_path():
+    offences = []
+    for path in sorted(Path(__file__).resolve().parent.glob("test_*.py")):
+        if path.name in _SOURCE_TREE_EXCLUDED:
+            continue
+        for number, line in source_tree_path_offences(path.read_text(encoding="utf-8")):
+            offences.append(f"{path.name}:{number}: {line}")
+    assert not offences, (
+        "use oqp_module_isolation.child_env() for a child's environment instead of "
+        "the source pyoqp directory:\n" + "\n".join(offences))
