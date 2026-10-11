@@ -2548,14 +2548,18 @@ class Hessian(Calculator):
         grads = [[] for _ in range(ndim)]
         flags = []
         n = 0
-        for val in pool.imap_unordered(grad_wrapper, variables_wrapper):
-            if self.mpi_manager.rank == 0:
-                n += 1
-                idx, grad, flag, timing = val
-                grads[idx] = grad
-                flags.append(flag)
-                dump_log(self.mol, title=None, section='hess_worker', info=[n, idx, flag, timing])
-                dump_data(self.mol, (n, idx, np.sum(grad ** 2) ** 2, timing), title='NUM_HESS', fpath=self.mol.log_path)
+        try:
+            for val in pool.imap_unordered(grad_wrapper, variables_wrapper):
+                if self.mpi_manager.rank == 0:
+                    n += 1
+                    idx, grad, flag, timing = val
+                    grads[idx] = grad
+                    flags.append(flag)
+                    dump_log(self.mol, title=None, section='hess_worker', info=[n, idx, flag, timing])
+                    dump_data(self.mol, (n, idx, np.sum(grad ** 2) ** 2, timing), title='NUM_HESS', fpath=self.mol.log_path)
+        except BaseException:
+            pool.terminate()
+            raise
 
         pool.close()
 
@@ -2619,10 +2623,11 @@ def _displacement_pool(mpi_manager, ntask, nproc):
     electronic structure runs in that subprocess -- so the workers are threads
     of this process, not ``multiprocessing.Pool`` processes.
 
-    A process pool made every worker a fresh interpreter under the spawn start
-    method (the macOS default, and Linux's from Python 3.14): it re-imported
-    ``oqp`` -- liboqp, MPI_Init -- just to unpickle ``grad_wrapper`` with
-    whatever ``sys.path`` the parent held.  When that import failed (pytest had
+    A process pool under the spawn start method (the macOS default) or
+    forkserver (Linux's default from Python 3.14) unpickles each task in a
+    process that has not imported ``oqp``, so every worker re-imported ``oqp``
+    -- liboqp, MPI_Init -- just to resolve ``grad_wrapper``, with whatever
+    ``sys.path`` the parent held.  When that import failed (pytest had
     put the unbuilt source tree ``pyoqp/`` first on ``sys.path``, so the child
     found an ``oqp`` with no liboqp), the worker died inside the pool's task
     ``get()``.  ``multiprocessing.Pool`` replaces a dead worker but never
@@ -2631,6 +2636,9 @@ def _displacement_pool(mpi_manager, ntask, nproc):
     with the last replacement idle at 0% CPU.  Threads share the parent's
     already-imported modules, need no pickling, and an exception in a worker
     reaches the caller instead of being swallowed.
+
+    Callers must ``terminate()`` the pool when that exception propagates, so
+    queued displacements are not started after the driver has failed.
     """
     if mpi_manager.use_mpi:
         ncpu = int(min(ntask, mpi_manager.comm.size))
@@ -3611,14 +3619,18 @@ class NAC(Calculator):
         dcm = [[] for _ in range(ndim)]
         flags = []
         n = 0
-        for val in pool.imap_unordered(nacme_wrapper, variables_wrapper):
-            if self.mpi_manager.rank == 0:
-                n += 1
-                idx, dcme, flag, timing = val
-                dcm[idx] = dcme.reshape(-1)  # 1D nstate x nstate
-                flags.append(flag)
-                dump_log(self.mol, title=None, section='nacv_worker', info=[n, idx, flag, timing])
-                dump_data(self.mol, (n, idx, np.sum(dcme ** 2) ** 2, timing), title='NUM_NACV', fpath=self.mol.log_path)
+        try:
+            for val in pool.imap_unordered(nacme_wrapper, variables_wrapper):
+                if self.mpi_manager.rank == 0:
+                    n += 1
+                    idx, dcme, flag, timing = val
+                    dcm[idx] = dcme.reshape(-1)  # 1D nstate x nstate
+                    flags.append(flag)
+                    dump_log(self.mol, title=None, section='nacv_worker', info=[n, idx, flag, timing])
+                    dump_data(self.mol, (n, idx, np.sum(dcme ** 2) ** 2, timing), title='NUM_NACV', fpath=self.mol.log_path)
+        except BaseException:
+            pool.terminate()
+            raise
 
         pool.close()
 

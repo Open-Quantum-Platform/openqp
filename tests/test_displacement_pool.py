@@ -4,29 +4,32 @@ The numerical Hessian and numerical NAC drivers fan their displaced-geometry
 jobs out over a pool.  Without MPI each job is an external ``python -m
 oqp.pyoqp`` subprocess, so the pool workers only write an input file and wait.
 They used to be ``multiprocessing.Pool`` processes.  Under the spawn start
-method (macOS default; Linux from Python 3.14) every worker is a fresh
-interpreter that re-imports ``oqp`` with the parent's ``sys.path`` just to
-unpickle ``grad_wrapper``.  When that import failed the worker died inside the
-pool's task ``get()``, the pool replaced it without resubmitting the task, and
-``imap_unordered`` waited forever.  Observed 2026-10-11 on macOS: the full
-pytest suite hung in ``test_cam_hessian`` because earlier-collected test
-modules had put the unbuilt source tree ``pyoqp/`` first on ``sys.path``.
+method (macOS default) or forkserver (Linux default from Python 3.14) every
+worker unpickles its task in a process that has not imported ``oqp``, so it
+re-imports ``oqp`` with the parent's ``sys.path``.  When that import failed the
+worker died inside the pool's task ``get()``, the pool replaced it without
+resubmitting the task, and ``imap_unordered`` waited forever.  Observed
+2026-10-11 on macOS: the full pytest suite hung in ``test_cam_hessian`` because
+earlier-collected test modules had put the unbuilt source tree ``pyoqp/`` first
+on ``sys.path``.
 
-The end-to-end test below recreates that condition deliberately -- spawn start
-method, and an ``oqp`` package that raises on import placed first on
-``sys.path`` after the real one is loaded -- so it fails (times out) on any
-platform if the workers ever again depend on re-importing ``oqp``.
+Every check runs in a fresh interpreter, so it sees the installed package and
+is independent of what this pytest process has done to ``sys.path`` or
+``sys.modules``.  The end-to-end checks recreate the failure condition
+deliberately -- spawn start method, and an ``oqp`` package that raises on
+import placed first on ``sys.path`` after the real one is loaded -- so they
+fail (time out) on any platform if either driver's workers ever again depend
+on re-importing ``oqp``.
 """
 import os
 import subprocess
 import sys
+import tempfile
 import textwrap
 import unittest
 
 
 def _runtime_available():
-    # Probe in a clean interpreter: this process's sys.path may already carry
-    # the source tree ahead of the installed package.
     try:
         probe = subprocess.run([sys.executable, "-c", "import oqp.pyoqp"],
                                capture_output=True, timeout=120)
@@ -37,7 +40,7 @@ def _runtime_available():
 
 RUNTIME = _runtime_available()
 
-DRIVER = textwrap.dedent('''
+POISON = textwrap.dedent('''
     import multiprocessing
     import pathlib
     import sys
@@ -53,7 +56,9 @@ DRIVER = textwrap.dedent('''
     (poison / "__init__.py").write_text(
         "raise ImportError('a displacement worker re-imported oqp')\\n")
     sys.path.insert(0, str(poison.parent))
+''')
 
+HESSIAN_DRIVER = POISON + textwrap.dedent('''
     inp = work / "h2.inp"
     inp.write_text("""[input]
     system=
@@ -83,69 +88,177 @@ DRIVER = textwrap.dedent('''
     print("DISPLACEMENT_POOL_OK")
 ''')
 
+NAC_DRIVER = POISON + textwrap.dedent('''
+    from oqp.library.single_point import NAC
+
+    inp = work / "h2o_nac.inp"
+    inp.write_text("""[input]
+    system=
+       8   0.000000000   0.000000000  -0.041061554
+       1  -0.533194329   0.533194329  -0.614469223
+       1   0.533194329  -0.533194329  -0.614469223
+    charge=0
+    runtype=energy
+    basis=6-31g*
+    functional=bhhlyp
+    method=tdhf
+    [guess]
+    type=huckel
+    [scf]
+    multiplicity=3
+    type=rohf
+    [tdhf]
+    type=mrsf
+    nstate=3
+    [nac]
+    type=numerical
+    states=1 2
+    dx=0.001
+    nproc=2
+    """)
+    runner = Runner(input_file=str(inp), log=str(work / "h2o_nac.log"))
+    runner.run()
+    nacv, dcv, flags = NAC(runner.mol).numerical_nac()
+    assert set(flags) == {"computed"}, flags
+    assert np.all(np.isfinite(dcv))
+    print("DISPLACEMENT_POOL_OK")
+''')
+
+UNIT_DRIVER = textwrap.dedent('''
+    from oqp.library.single_point import _displacement_pool
+    from oqp.utils.mpi_utils import MPIPool
+
+    class Serial:
+        use_mpi = 0
+
+    pool, ncpu = _displacement_pool(Serial(), 12, 4)
+    assert ncpu == 4, ncpu
+    offset = 7  # a closure: cannot be pickled to a process worker
+    try:
+        got = sorted(pool.imap_unordered(lambda x: x + offset, range(12)))
+        assert got == [x + offset for x in range(12)], got
+
+        def boom(x):
+            if x == 5:
+                raise RuntimeError("worker failure")
+            return x
+
+        try:
+            list(pool.imap_unordered(boom, range(12)))
+        except RuntimeError as exc:
+            assert "worker failure" in str(exc)
+        else:
+            raise AssertionError("worker exception did not reach the caller")
+    finally:
+        pool.close()
+        pool.join()
+
+    pool, ncpu = _displacement_pool(Serial(), 3, 8)
+    pool.close()
+    pool.join()
+    assert ncpu == 3, ncpu
+
+    class Comm:
+        size = 4
+
+    class Parallel:
+        use_mpi = 1
+        comm = Comm()
+
+    pool, ncpu = _displacement_pool(Parallel(), 12, 1)
+    assert isinstance(pool, MPIPool), type(pool)
+    assert ncpu == 4, ncpu
+    print("DISPLACEMENT_POOL_OK")
+''')
+
+
+TERMINATE_DRIVER = textwrap.dedent('''
+    import pathlib
+    import sys
+    import threading
+    import time
+
+    from oqp.pyoqp import Runner
+    from oqp.library import single_point
+
+    work = pathlib.Path(sys.argv[1])
+    inp = work / "h2.inp"
+    inp.write_text("""[input]
+    system=
+       1   0.000000000   0.000000000   0.000000000
+       1   0.000000000   0.000000000   0.740000000
+    charge=0
+    runtype=energy
+    basis=sto-3g
+    method=hf
+    [guess]
+    type=huckel
+    [scf]
+    multiplicity=1
+    type=rhf
+    [hess]
+    type=numerical
+    nproc=1
+    """)
+    runner = Runner(project="h2", input_file=str(inp), log=str(work / "h2.log"))
+    runner.run()
+
+    started = []
+    lock = threading.Lock()
+
+    def failing_worker(task):
+        with lock:
+            started.append(task["idx"])
+        if task["idx"] == 0:
+            raise RuntimeError("displacement worker failure")
+        time.sleep(0.3)
+        return task["idx"], None, "computed", None
+
+    single_point.grad_wrapper = failing_worker
+    try:
+        single_point.Hessian(runner.mol).numerical_hess()
+    except RuntimeError as exc:
+        assert "displacement worker failure" in str(exc)
+    else:
+        raise AssertionError("worker exception did not reach numerical_hess")
+    # 12 queued displacements x 0.3 s: an abandoned pool would have started
+    # all of them within this wait; a terminated one starts at most the one
+    # the worker thread had already taken.
+    time.sleep(4.0)
+    assert len(started) <= 2, started
+    print("DISPLACEMENT_POOL_OK")
+''')
+
 
 @unittest.skipUnless(RUNTIME, "compiled OpenQP runtime not available")
 class DisplacementPoolTests(unittest.TestCase):
-    def test_numerical_hessian_completes_when_workers_cannot_import_oqp(self):
-        import tempfile
+    def _run(self, driver, timeout):
         with tempfile.TemporaryDirectory(prefix="oqp_disp_pool_") as work:
             env = dict(os.environ)
             env.pop("OPENQP_ROOT", None)
             env.setdefault("OMP_NUM_THREADS", "1")
             try:
                 proc = subprocess.run(
-                    [sys.executable, "-c", DRIVER, work], cwd=work, env=env,
-                    capture_output=True, text=True, timeout=600)
+                    [sys.executable, "-c", driver, work], cwd=work, env=env,
+                    capture_output=True, text=True, timeout=timeout)
             except subprocess.TimeoutExpired as exc:
-                self.fail("numerical Hessian hung: its displacement workers "
+                self.fail(f"hung for {timeout} s: the displacement workers "
                           "depend on re-importing oqp in a fresh interpreter\n"
-                          f"{(exc.stderr or b'')[-4000:]!r}")
+                          f"{(exc.stderr or '')[-4000:]!r}")
         self.assertEqual(proc.returncode, 0, proc.stderr[-4000:])
         self.assertIn("DISPLACEMENT_POOL_OK", proc.stdout)
 
+    def test_numerical_hessian_completes_when_workers_cannot_import_oqp(self):
+        self._run(HESSIAN_DRIVER, timeout=180)
+
+    def test_numerical_nac_completes_when_workers_cannot_import_oqp(self):
+        self._run(NAC_DRIVER, timeout=300)
+
     def test_pool_runs_unpicklable_work_and_reports_worker_errors(self):
-        from oqp.library.single_point import _displacement_pool
+        self._run(UNIT_DRIVER, timeout=120)
 
-        class Serial:
-            use_mpi = 0
-
-        pool, ncpu = _displacement_pool(Serial(), 12, 4)
-        self.assertEqual(ncpu, 4)
-        offset = 7  # a closure: cannot be pickled to a process worker
-        try:
-            self.assertEqual(sorted(pool.imap_unordered(lambda x: x + offset, range(12))),
-                             [x + offset for x in range(12)])
-
-            def boom(x):
-                if x == 5:
-                    raise RuntimeError("worker failure")
-                return x
-
-            with self.assertRaisesRegex(RuntimeError, "worker failure"):
-                list(pool.imap_unordered(boom, range(12)))
-        finally:
-            pool.close()
-            pool.join()
-
-        pool, ncpu = _displacement_pool(Serial(), 3, 8)
-        pool.close()
-        pool.join()
-        self.assertEqual(ncpu, 3)
-
-    def test_mpi_ranks_remain_the_workers(self):
-        from oqp.library.single_point import _displacement_pool
-        from oqp.utils.mpi_utils import MPIPool
-
-        class Comm:
-            size = 4
-
-        class Parallel:
-            use_mpi = 1
-            comm = Comm()
-
-        pool, ncpu = _displacement_pool(Parallel(), 12, 1)
-        self.assertIsInstance(pool, MPIPool)
-        self.assertEqual(ncpu, 4)
+    def test_failed_worker_stops_queued_displacements(self):
+        self._run(TERMINATE_DRIVER, timeout=120)
 
 
 if __name__ == "__main__":

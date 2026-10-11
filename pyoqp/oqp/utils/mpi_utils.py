@@ -307,6 +307,11 @@ class MPIPool:
     def close(self):
         pass
 
+    def terminate(self):
+        # Ranks are the workers and run every task they own in-line; there is
+        # no queue of not-yet-started work to drop.
+        pass
+
 class MPIMap(Iterator):
 
     def __init__(self, func, var, processes):
