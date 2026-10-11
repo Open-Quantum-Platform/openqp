@@ -331,14 +331,23 @@ contains
     nblas_save = blas_thread_count()
     if (nblas_save > 0) call blas_thread_set(1_c_int64_t)
     status = 1
-    if (norb <= 0 .or. ndet <= 0_i8) return
+    if (norb <= 0 .or. ndet <= 0_i8) then
+      if (nblas_save > 0) call blas_thread_set(nblas_save)
+      return
+    end if
     na = popcnt(iand(dets(1), shiftl(1_i8, norb) - 1_i8))
     nb = popcnt(shiftr(dets(1), norb))
 
     nastr = binom(norb, na)
     nbstr = binom(norb, nb)
-    if (nastr <= 0_i8 .or. nbstr <= 0_i8) return
-    if (nastr * nbstr /= ndet) return
+    if (nastr <= 0_i8 .or. nbstr <= 0_i8) then
+      if (nblas_save > 0) call blas_thread_set(nblas_save)
+      return
+    end if
+    if (nastr * nbstr /= ndet) then
+      if (nblas_save > 0) call blas_thread_set(nblas_save)
+      return
+    end if
 
     nkl = norb * norb
 

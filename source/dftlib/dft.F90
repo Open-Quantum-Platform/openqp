@@ -23,6 +23,11 @@ module mod_dft
   !> dft_set_options skips the destroy/re-init cycle when the same
   !> functional is requested again.
   character(len=512), save :: lxc_last_functional = ""
+  real(dp), save :: lxc_last_cam_alpha = -1.0_dp
+  real(dp), save :: lxc_last_cam_beta  = -1.0_dp
+  real(dp), save :: lxc_last_cam_mu    = -1.0_dp
+  real(dp), save :: lxc_last_hfscale   = -1.0_dp
+  logical,  save :: lxc_last_cam_flag  = .false.
 
   private
   public dft_initialize
@@ -397,6 +402,11 @@ contains
   subroutine dft_forget_setups()
     if (allocated(described_setups)) deallocate(described_setups)
     lxc_last_functional = ""
+    lxc_last_cam_alpha = -1.0_dp
+    lxc_last_cam_beta  = -1.0_dp
+    lxc_last_cam_mu    = -1.0_dp
+    lxc_last_hfscale   = -1.0_dp
+    lxc_last_cam_flag  = .false.
   end subroutine dft_forget_setups
 
 
@@ -775,6 +785,11 @@ contains
     type(information), intent(inout) :: infos
     call libxc_destroy(infos%functional)
     lxc_last_functional = ""
+    lxc_last_cam_alpha = -1.0_dp
+    lxc_last_cam_beta  = -1.0_dp
+    lxc_last_cam_mu    = -1.0_dp
+    lxc_last_hfscale   = -1.0_dp
+    lxc_last_cam_flag  = .false.
   end subroutine
 
   subroutine dft_set_options(infos, pruned, need_functional, internal)
@@ -1077,7 +1092,12 @@ contains
       ! Guard: skip LibXC re-init when the same functional was already set up
       if (infos%functional%can_calculate() .and. &
           lxc_last_functional /= "" .and. &
-          lxc_last_functional == trim(xc_func_name)) then
+          lxc_last_functional == trim(xc_func_name) .and. &
+          lxc_last_cam_flag .eqv. infos%dft%cam_flag .and. &
+          abs(lxc_last_cam_alpha - infos%dft%cam_alpha) < 1.0e-12_dp .and. &
+          abs(lxc_last_cam_beta  - infos%dft%cam_beta ) < 1.0e-12_dp .and. &
+          abs(lxc_last_cam_mu    - infos%dft%cam_mu   ) < 1.0e-12_dp .and. &
+          abs(lxc_last_hfscale   - infos%dft%hfscale  ) < 1.0e-12_dp) then
         ! Same functional; LibXC objects are ready, skip destroy/re-init
       else
         if (infos%functional%can_calculate()) then
@@ -1090,6 +1110,11 @@ contains
                          functional=infos%functional, &
                          announce=announce)
         lxc_last_functional = trim(xc_func_name)
+        lxc_last_cam_alpha  = infos%dft%cam_alpha
+        lxc_last_cam_beta   = infos%dft%cam_beta
+        lxc_last_cam_mu     = infos%dft%cam_mu
+        lxc_last_hfscale    = infos%dft%hfscale
+        lxc_last_cam_flag   = infos%dft%cam_flag
       end if
 
       ! update HFscale, or cam_alpha,beta,mu from input
