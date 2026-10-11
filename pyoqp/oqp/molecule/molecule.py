@@ -2350,8 +2350,12 @@ class Molecule:
         # payloads byte-identical.
         _energies = getattr(self, 'energies', None)
         _multi = [] if _energies is None else list(_energies)
+        # RPA roots with omega^2 < 0 (1-based state numbers): not converged and
+        # without an energy, so they are published as null with their status.
+        _imaginary = sorted(getattr(self, 'td_imaginary_states', ()) or ())
         if len(_multi) > 1:
-            data['energies'] = [float(e) for e in _multi]
+            data['energies'] = [None if n in _imaginary else float(e)
+                                for n, e in enumerate(_multi)]
 
         # save td energies if available
         try:
@@ -2359,6 +2363,14 @@ class Molecule:
                                            ).tolist()
         except AttributeError:
             data['td_energies'] = np.array([0]).tolist()
+        if _imaginary:
+            data['td_energies'] = [None if n + 1 in _imaginary else e
+                                   for n, e in enumerate(data['td_energies'])]
+            data['td_imaginary'] = list(_imaginary)
+        # A conventional TD solve that raised or broke down leaves the tag of
+        # an earlier run in place; SinglePoint.excitation marks that state.
+        if getattr(self, 'td_output_valid', True) is False:
+            data['td_energies'] = None
 
         # Surface the spin-resolved excitation ladders as public regression
         # keys when present (a SOC run computes both). The public td_energies
