@@ -1642,7 +1642,7 @@ contains
       use types,               only: information
       use mathlib,             only: unpack_matrix, pack_matrix,symmetrize_matrix
       use mod_dft_molgrid,     only: dft_grid_t
-      use mod_dft_gridint_fxc, only: tddft_fxc, utddft_fxc
+      use mod_dft_gridint_fxc, only: tddft_fxc, utddft_fxc, xc_consumer_tde_t
       use mod_dft_gridint_response_cache, only: response_cache_t
       implicit none
 
@@ -1668,6 +1668,7 @@ contains
       real(kind=dp), allocatable :: dxa(:,:,:), dxb(:,:,:)
       real(kind=dp), allocatable :: fxa(:,:,:), fxb(:,:,:)
       real(dp) :: scalefactor
+      type(xc_consumer_tde_t), target :: xc_consumer
 
       nbf   = basis%nbf
       nbf2  = nbf*(nbf+1)/2
@@ -1707,11 +1708,19 @@ contains
           call unpack_matrix(dm1_tri(:,2), dxb(:,:,1))
           fxa = 0
           fxb = 0
+          ! utddft_fxc leaves the consumer's parallel environment to the
+          ! caller. Every rank runs this response (TRAH/SOSCF Hessian-vector
+          ! products), so split the grid over the world communicator; left at
+          ! the serial default, each rank integrated the whole grid alone and
+          ! the unreduced responses differed in the last bits, which split
+          ! ROKS TRAH under MPI.
+          call xc_consumer%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
           call utddft_fxc(basis=basis, molGrid=molGrid, isVecs=.true., &
                      wfa=mo_a, wfb=mo_b, &
                      fxa=fxa, fxb=fxb, &
                      dxa=dxa, dxb=dxb, &
-                     nMtx=1, threshold=0.0_dp, infos=infos, cache=cache)
+                     nMtx=1, threshold=0.0_dp, infos=infos, cache=cache, &
+                     consumer=xc_consumer)
           fx_full = fxa(:,:,1)
           fx_pack = 0.0_dp
           call pack_matrix(fx_full, fx_pack)

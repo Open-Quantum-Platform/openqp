@@ -228,14 +228,28 @@ contains
 
   !> hv = H.v via the converger's Fock-like contraction (calc_h_op returns half
   !> the true Hessian, hence the 2).
+  !>
+  !> calc_h_op builds the response Fock of the trial density through the
+  !> density-screened two-electron driver, whose cutoff is absolute
+  !> (Schwarz bound x max|D| < int2e_cutoff).  The Davidson start vector and the
+  !> Newton steps near convergence have norms down to |g|/diag(H) ~ 1e-10, so
+  !> an unnormalised product loses most of its response part and H.v stops
+  !> being linear in v.  H is linear, so the product is formed for v/|v| (the
+  !> density scale the screening is set for) and scaled back.
   subroutine scf_hess_vec(this, v, hv, ierr)
     class(scf_trah_provider_t), intent(inout) :: this
     real(dp), intent(in)  :: v(:)
     real(dp), intent(out) :: hv(:)
     integer,  intent(out) :: ierr
+    real(dp) :: vnorm
     ierr = 0
-    call this%conv%calc_h_op(this%infos, v, hv)
-    hv = 2.0_dp * hv
+    vnorm = norm2(v)
+    if (vnorm == 0.0_dp) then
+      hv = 0.0_dp
+      return
+    end if
+    call this%conv%calc_h_op(this%infos, v/vnorm, hv)
+    hv = (2.0_dp*vnorm) * hv
   end subroutine scf_hess_vec
 
   !> Energy at a trial step p, evaluated on copies of the orbitals.
