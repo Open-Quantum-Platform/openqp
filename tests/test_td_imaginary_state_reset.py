@@ -1,0 +1,87 @@
+"""SinglePoint.excitation must drop the previous run's imaginary-root status
+before the TD solve.
+
+A reused Molecule keeps ``td_imaginary_states`` from an earlier mixed-root RPA
+run.  If the next TD solve raises or ends in a Davidson breakdown, the stale
+status would make ``Molecule.get_results()`` hide energies and publish
+``td_imaginary`` for a run that has none.
+"""
+import types
+import unittest
+
+
+def _single_point_module():
+    try:
+        from oqp.library import single_point
+        return single_point
+    except (ImportError, OSError, RuntimeError):
+        # not installed, or a native/MPI library cannot be loaded
+        return None
+
+
+SP = _single_point_module()
+
+
+@unittest.skipUnless(SP is not None, "oqp.library.single_point not importable")
+class TestImaginaryStatusReset(unittest.TestCase):
+    def _excitation_with(self, tddft):
+        mol = types.SimpleNamespace(
+            td_imaginary_states=(1,),             # left over from a previous run
+            energies=[-78.0, -77.8, -77.7],       # previous run's state energies
+            td_output_valid=True,
+            symmetry_metadata=None,
+            config={'tdhf': {'type': 'rpa'}, 'input': {}},
+            mol_energy=types.SimpleNamespace(Davidson_converged=False),
+        )
+        sp = SP.SinglePoint.__new__(SP.SinglePoint)
+        sp.method = 'tdhf'
+        sp.exception = True
+        sp.mol = mol
+        sp.tddft = tddft
+        return sp, mol
+
+    def test_breakdown_clears_previous_imaginary_states(self):
+        sp, mol = self._excitation_with(lambda: None)
+        original = SP.dump_log
+        SP.dump_log = lambda *a, **k: None
+        try:
+            with self.assertRaises(SP.TDnotConverged):
+                sp.excitation([-78.0])
+        finally:
+            SP.dump_log = original
+        self.assertEqual(mol.td_imaginary_states, ())
+        # the previous run's excited-state energies are invalidated too
+        self.assertEqual(mol.energies, [-78.0])
+        self.assertIs(mol.td_output_valid, False)
+
+    def test_exception_in_solver_clears_previous_imaginary_states(self):
+        def boom():
+            raise RuntimeError("solver failed")
+        sp, mol = self._excitation_with(boom)
+        with self.assertRaises(RuntimeError):
+            sp.excitation([-78.0])
+        self.assertEqual(mol.td_imaginary_states, ())
+
+
+@unittest.skipUnless(SP is not None, "oqp.library.single_point not importable")
+class TestStaleTdOutputNotPublished(unittest.TestCase):
+    def test_get_results_drops_td_energies_after_failed_solve(self):
+        from unittest import mock
+        from oqp.molecule import Molecule
+        mol = mock.MagicMock(spec=Molecule)
+        mol.config = {'input': {}}
+        mol.mol_energy = types.SimpleNamespace(energy=-78.0)
+        mol.energies = [-78.0]
+        mol.td_imaginary_states = ()
+        mol.td_output_valid = False
+        mol.data = {'OQP::td_energies': [0.2, 0.3]}   # tag of an earlier run
+        mol.get_atoms.return_value = SP.np.zeros(1)
+        mol.get_system.return_value = SP.np.zeros(3)
+        mol.symmetry_metadata = None
+        mol.qmmm_optimization = None
+        data = Molecule.get_results(mol)
+        self.assertIsNone(data['td_energies'])
+
+
+if __name__ == "__main__":
+    unittest.main()

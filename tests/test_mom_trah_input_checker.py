@@ -12,13 +12,16 @@ import types
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import isolate_modules, stub_module
+
 
 ROOT = Path(__file__).resolve().parents[1]
+CHECKER_MODULE = "input_checker_mom_trah_under_test"
 
 
 def load_input_checker():
-    sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-    sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+    stub_module("oqp")
+    stub_module("oqp.utils")
     mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
 
     class MPIManager:
@@ -27,7 +30,7 @@ def load_input_checker():
 
     mpi_utils.MPIManager = MPIManager
     sys.modules["oqp.utils.mpi_utils"] = mpi_utils
-    name = "input_checker_mom_trah_under_test"
+    name = CHECKER_MODULE
     spec = importlib.util.spec_from_file_location(
         name, ROOT / "pyoqp/oqp/utils/input_checker.py"
     )
@@ -38,9 +41,11 @@ def load_input_checker():
 
 
 class MomTrahInputCheckerTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.checker = load_input_checker()
+    def setUp(self):
+        # The stubs live only for this test; the conftest guard fails any
+        # test that leaves them in sys.modules for the next one.
+        self.addCleanup(isolate_modules(CHECKER_MODULE))
+        self.checker = load_input_checker()
 
     def check(self, **scf):
         report = self.checker.CheckReport()
