@@ -328,6 +328,16 @@ jobs:
               python -m pytest $selection -q -n auto --forked --tb=short -rf
             fi
 
+         - name: Check real RDM compiler allocation failures (GNU/glibc)
+           if: ${{ matrix.role == 'pytest' }}
+           env:
+            OMP_NUM_THREADS: 4
+           run: |
+            # The portable suite uses synthetic allocation-site failures on
+            # all platforms. This explicit supported-platform lane also makes
+            # the compiler allocator itself fail, with same-process recovery.
+            python -m pytest -q -p no:cacheprovider tests/rdm_posix_allocator.py
+
    # Intel oneAPI leg: ifx + icx/icpx + MKL ILP64 on Linux x86_64. This is the
    # LINALG_LIB=auto source-build mandate for Linux x86_64 (Intel MKL ILP64),
    # which the gcc legs above cannot exercise. The compilers and MKL come from
