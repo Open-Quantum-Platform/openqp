@@ -234,6 +234,7 @@ jobs:
          # silently. Run it on one leg: it is Python-only, so a second OS or the
          # MPI leg would re-run identical assertions against the same code.
          - name: Pin CASPT2 direct engines on two MPI ranks
+           timeout-minutes: 5
            if: ${{ matrix.MPI == 'ON' && matrix.os == 'ubuntu-24.04' }}
            env:
             OMP_NUM_THREADS: "1"
@@ -244,7 +245,7 @@ jobs:
             ddx_lib="$(find "$HOME"/.cache/openqp -name 'libddx.so*' -print -quit 2>/dev/null)"
             test -n "$ddx_lib"
             export LD_LIBRARY_PATH="$(dirname "$ddx_lib"):${LD_LIBRARY_PATH:-}"
-            mpiexec --oversubscribe -n 2 python tests/caspt2_direct_mpi.py "$(mktemp -d)"
+            mpiexec --oversubscribe -n 2 python -m mpi4py tests/caspt2_direct_mpi.py "$(mktemp -d)"
          - name: Run Python test suite
            if: ${{ matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
            env:
