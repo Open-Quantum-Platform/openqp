@@ -36,7 +36,7 @@ subroutine functional_owner_cache_compare(a, b, error, failed) bind(C)
   saved_ta=ia%tddft; saved_tb=ib%tddft
   error=0; failed=0
   call dftclean(ia); call dftclean(ib)
-  do step=1,22
+  do step=1,26
     infos=>ia
     if (step==2.or.step==12) infos=>ib
     name='BHHLYP'
@@ -90,6 +90,10 @@ subroutine functional_owner_cache_compare(a, b, error, failed) bind(C)
     if (step==20) infos%tddft%cam_alpha=0.31_dp
     if (step==21) infos%tddft%cam_beta=0.32_dp
     if (step==22) infos%tddft%cam_mu=infos%tddft%cam_mu+0.01_dp
+    if (step==23) infos%dft%MP2SS_Scale=0.29_dp
+    if (step==24) infos%tddft%spc_coco=0.21_dp
+    if (step==25) infos%tddft%spc_coov=0.23_dp
+    if (step==26) infos%tddft%spc_ovov=0.27_dp
     basis=infos%basis; basis%atoms=>infos%atoms
     previous_revision=infos%functional%cache_revision
     call dft_initialize(infos,basis,grid,verbose=.false.)
