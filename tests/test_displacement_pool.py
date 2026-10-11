@@ -369,6 +369,77 @@ CTRL_C_DRIVER = textwrap.dedent('''
 ''')
 
 
+STOP_ORDER_DRIVER = textwrap.dedent('''
+    import os
+    import pathlib
+    import subprocess
+    import sys
+    import threading
+    import time
+
+    from oqp.library import single_point
+
+    work = pathlib.Path(sys.argv[1])
+    # The child ignores SIGTERM, so stop() must wait out the grace period and
+    # fall back to SIGKILL; it also has a grandchild.
+    child = ("import os, pathlib, signal, subprocess, sys, time; "
+             "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+             "g = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)']); "
+             "pathlib.Path(sys.argv[2]).write_text(str(g.pid)); "
+             "pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(120)")
+
+    events = []
+    real_signal_pids = single_point._signal_pids
+    real_wait = subprocess.Popen.wait
+
+    def recording_signal_pids(pids, sig):
+        events.append(("raw-signal", sig))
+        return real_signal_pids(pids, sig)
+
+    def recording_wait(self, timeout=None):
+        if timeout is not None:
+            events.append(("grace-wait", None))
+        return real_wait(self, timeout=timeout)
+
+    single_point._signal_pids = recording_signal_pids
+    subprocess.Popen.wait = recording_wait
+
+    jobs = single_point._ExternalJobs()
+    worker = threading.Thread(target=jobs.run, args=(
+        [sys.executable, "-c", child, str(work / "child.pid"), str(work / "grandchild.pid")],
+        dict(os.environ)))
+    worker.start()
+    deadline = time.time() + 60
+    while not (work / "child.pid").exists() and time.time() < deadline:
+        time.sleep(0.05)
+    jobs.stop(grace=1.0)
+    worker.join(30)
+
+    kinds = [kind for kind, _ in events]
+    assert "grace-wait" in kinds, events
+    first_wait = kinds.index("grace-wait")
+    # A raw PID signalled after a wait could belong to a reaped and recycled
+    # process; every raw signal must precede the first wait.
+    assert "raw-signal" not in kinds[first_wait:], events
+
+    def alive(pid):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        return True
+
+    pid = int((work / "child.pid").read_text())
+    grandchild = int((work / "grandchild.pid").read_text())
+    deadline = time.time() + 10
+    while (alive(pid) or alive(grandchild)) and time.time() < deadline:
+        time.sleep(0.1)
+    assert not worker.is_alive()
+    assert not alive(pid) and not alive(grandchild), (pid, grandchild)
+    print("DISPLACEMENT_POOL_OK")
+''')
+
+
 @unittest.skipUnless(RUNTIME, "compiled OpenQP runtime not available")
 class DisplacementPoolTests(unittest.TestCase):
     def _run(self, driver, timeout):
@@ -401,6 +472,10 @@ class DisplacementPoolTests(unittest.TestCase):
 
     def test_failed_worker_stops_running_displacement_jobs(self):
         self._run(STOP_RUNNING_DRIVER, timeout=180)
+
+    @unittest.skipUnless(os.name == "posix", "process-tree stop is POSIX here")
+    def test_stop_signals_no_raw_pid_after_waiting(self):
+        self._run(STOP_ORDER_DRIVER, timeout=120)
 
     @unittest.skipUnless(os.name == "posix", "terminal process groups are POSIX")
     def test_ctrl_c_reaches_running_displacement_jobs(self):

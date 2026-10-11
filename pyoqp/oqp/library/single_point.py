@@ -2712,6 +2712,27 @@ class _ExternalJobs:
             with self._lock:
                 self._procs.discard(proc)
 
+    @staticmethod
+    def _freeze_tree(proc):
+        """SIGSTOP ``proc`` and all its descendants, top-down; return the
+        descendants, or None when ``proc`` has already been reaped.
+
+        Every PID returned is pinned: a stopped process cannot reap its
+        children, so a descendant that exits stays a zombie and its PID cannot
+        be recycled while its parent is frozen.  Signalling the returned PIDs
+        before anything is resumed therefore cannot reach an unrelated process.
+        """
+        proc.send_signal(signal.SIGSTOP)  # a no-op once proc is reaped
+        if proc.poll() is not None:
+            return None
+        frozen = {proc.pid}
+        while True:
+            new = [pid for pid in _process_tree(proc.pid) if pid not in frozen]
+            if not new:
+                return sorted(frozen - {proc.pid})
+            _signal_pids(new, signal.SIGSTOP)
+            frozen.update(new)
+
     def stop(self, grace=10.0):
         with self._lock:
             self._stopped = True
@@ -2722,25 +2743,24 @@ class _ExternalJobs:
                                capture_output=True)
                 proc.wait()
             return
-        trees = []
+        # Descendants (e.g. a [dftb] backend=probe executable) are killed while
+        # the tree is frozen, so no raw PID is ever signalled after it could
+        # have been reaped and reused.  Only the direct child gets SIGTERM and
+        # a grace period, and it is signalled through its Popen handle, which
+        # never signals a process it has already reaped.
         for proc in procs:
-            # Freeze the tree first so no member can start another process
-            # between the snapshot and the signal, then take the snapshot.
-            _signal_pids(_process_tree(proc.pid), signal.SIGSTOP)
-            tree = _process_tree(proc.pid)
-            _signal_pids(tree, signal.SIGSTOP)
-            trees.append(tree)
-        for tree in trees:
-            _signal_pids(tree, signal.SIGTERM)
-            _signal_pids(tree, signal.SIGCONT)
-        for proc, tree in zip(procs, trees):
+            descendants = self._freeze_tree(proc)
+            if descendants is None:
+                continue
+            _signal_pids(descendants, signal.SIGKILL)
+            proc.send_signal(signal.SIGTERM)
+            proc.send_signal(signal.SIGCONT)
+        for proc in procs:
             try:
                 proc.wait(timeout=grace)
             except subprocess.TimeoutExpired:
-                pass
-            # Descendants that outlived the child, or ignored SIGTERM.
-            _signal_pids(tree, signal.SIGKILL)
-            proc.wait()
+                proc.kill()
+                proc.wait()
 
 
 def _abort_displacements(pool, jobs):
