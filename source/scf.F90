@@ -1083,6 +1083,27 @@ contains
           end if
         else
           if (vshift_last_iter) vshift = 0.0_dp
+          ! The DIIS loop diagonalises a Fock only after this convergence test,
+          ! so on a first-iteration exit no SCF Fock has been diagonalised and
+          ! mo_a/mo_energy_a still belong to the guess Hamiltonian (Huckel,
+          ! Hcore, ...). That happens whenever the guess density is already
+          ! exact, e.g. by symmetry in H2/STO-3G, and every consumer of the
+          ! orbital energies (TDHF A-matrix diagonal, MP2, Koopmans) then used
+          ! guess eigenvalues. Supplied orbitals keep their coefficients,
+          ! occupations and phases; only their energies are refreshed. UHF is
+          ! rediagonalised after the loop.
+          if (iter == 1 .and. .not. (use_soscf .or. use_trah) .and. &
+              scf_type /= scf_uhf .and. int2_driver%pe%rank == 0) then
+            if (infos%control%guess == GUESS_SUPPLIED) then
+              call fock_diagonal_energies(pfock(:,1), mo_a, mo_energy_a, nbf)
+            else
+              call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
+            end if
+            if (scf_type == scf_rohf) then
+              mo_b = mo_a
+              mo_energy_b = mo_energy_a
+            end if
+          end if
           call handle_soscf_trah_rohf(use_soscf, use_trah, scf_type, pfock, rohf_bak, &
                                       mo_a, mo_b, mo_energy_a, mo_energy_b, &
                                       qmat, smat_full, nelec_a, nelec_b, nbf, nbf_tri, vshift, &
