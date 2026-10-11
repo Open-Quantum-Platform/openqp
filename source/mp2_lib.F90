@@ -217,10 +217,14 @@ contains
     real(dp), allocatable, target :: g(:)
     real(dp) :: ss, os, full_gb, avail_gb, packed_bytes, half_bytes, first_bytes, second_bytes, batch_gb
     integer(c_int64_t) :: nblas_save
-    integer :: ok, nt
+    integer :: ok, nt, local_ranks
     logical :: do_full
 
     success = .false.
+    ! The memory probe and explicit budget apply to a node. Each rank owns
+    ! its transformation arrays; count only ranks sharing this node. This
+    ! communicator operation must precede every rank-dependent early return.
+    local_ranks = driver%pe%local_size()
     if (nocc_l <= 0 .or. nvir_l <= 0 .or. (.not. same_spin .and. .not. do_opposite)) then
       success = .true.
       return
@@ -235,7 +239,7 @@ contains
                    real(nbf,dp)*max(nocc_l,nocc_o) + &
                    real(max(nocc_l,nocc_o),dp)*max(nvir_l,nvir_o))
     if (same_spin) second_bytes = second_bytes + 8.0_dp*(real(nocc_l,dp)*nvir_l)**2
-    batch_gb = (packed_bytes + half_bytes + max(first_bytes,second_bytes) + &
+    batch_gb = real(local_ranks,dp)*(packed_bytes + half_bytes + max(first_bytes,second_bytes) + &
                 16.0_dp*npair) / 1.073741824e9_dp
     avail_gb = oqp_available_memory_gb()
     ok = 0
@@ -259,6 +263,9 @@ contains
               16.0_dp*npair) / 1.073741824e9_dp
     avail_gb = oqp_available_memory_gb()
     if (oqp_budget_includes_resident()) full_gb = full_gb + packed_bytes/1.073741824e9_dp
+    ! For a live probe the packed stores on all local ranks are already
+    ! resident and subtracted. A flat budget must include them once per rank.
+    full_gb = real(local_ranks,dp)*full_gb
     do_full = avail_gb > 0.0_dp .and. full_gb < 0.25_dp*OQP_MEMORY_SAFETY_FRACTION*avail_gb
     ! A one-spin full tensor cannot represent distinct alpha/beta orbitals.
     do_full = do_full .and. (restricted_ref .or. .not. do_opposite)
