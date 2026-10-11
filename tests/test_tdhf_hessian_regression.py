@@ -40,6 +40,9 @@ class Case:
     # H2 and HeH+ in STO-3G have one occupied and one virtual orbital, so the
     # response space holds exactly one root; TDHF refuses nstate > nocc*nvir.
     nstate: int = 2
+    # cc-pVDZ/cc-pVTZ carry spherical d (and f) shells, so nbf differs from
+    # the Cartesian extent and an AO-indexing slip in the response arrays shows.
+    basis: str = "sto-3g"
 
 
 CASES = {
@@ -76,6 +79,27 @@ CASES = {
         charge=1,
         validated_max_abs=1.4069516913323143e-6,
         validated_rms=2.149666497298211e-7,
+    ),
+    # Spherical bases: 5d/7f against 6d/10f Cartesian extents.
+    "h2o_ccpvdz": Case(
+        system="""\
+  O  0.0000000000  0.0000000000  0.0000000000
+  H  0.0000000000  0.0000000000  0.9000000000
+  H  0.0000000000  0.7000000000 -0.3000000000""",
+        charge=0,
+        validated_max_abs=1.0294054729798052e-5,
+        validated_rms=2.4847766312638596e-6,
+        basis="cc-pvdz",
+    ),
+    "h2o_ccpvtz": Case(
+        system="""\
+  O  0.0000000000  0.0000000000  0.0000000000
+  H  0.0000000000  0.0000000000  0.9000000000
+  H  0.0000000000  0.7000000000 -0.3000000000""",
+        charge=0,
+        validated_max_abs=4.798990391685631e-6,
+        validated_rms=1.7211117762219943e-6,
+        basis="cc-pvtz",
     ),
     "h2o": Case(
         system="""\
@@ -114,7 +138,7 @@ system=
 {system}
 charge={charge}
 method=tdhf
-basis=sto-3g
+basis={basis}
 runtype=hess
 functional=
 
@@ -154,6 +178,7 @@ def _run_hessian(case: Case, hess_type: str, workdir: Path) -> np.ndarray:
     inp = workdir / f"{hess_type}.inp"
     inp.write_text(
         INPUT.format(
+            basis=case.basis,
             system=case.system,
             charge=case.charge,
             nstate=case.nstate,
@@ -195,7 +220,7 @@ def test_live_dft_hessian_consumers_stay_inside_their_probed_blocks(tmp_path, mo
     workdir.mkdir()
     inp = workdir / "svwn.inp"
     inp.write_text(
-        INPUT.format(system=CASES["h2o"].system, charge=0, nstate=CASES["h2o"].nstate,
+        INPUT.format(system=CASES["h2o"].system, charge=0, nstate=CASES["h2o"].nstate, basis="sto-3g",
                      hess_type="analytical")
         .replace("functional=\n", "functional=svwn\n")
     )
@@ -255,7 +280,7 @@ def test_live_analytic_hessian_refuses_one_root_of_a_larger_space(tmp_path):
     (tdhf_hessian_lowest_root_is_isolated is the runtime guard behind it).
     """
     inp = tmp_path / "h2o.inp"
-    inp.write_text(INPUT.format(system=CASES["h2o"].system, charge=0, nstate=1,
+    inp.write_text(INPUT.format(system=CASES["h2o"].system, charge=0, nstate=1, basis="sto-3g",
                                 hess_type="analytical"))
     env = dict(os.environ, OMP_NUM_THREADS="1")
     env.setdefault("OPENQP_ROOT", str(ROOT))
@@ -286,7 +311,7 @@ def test_runtime_isolation_guard_message_reaches_stderr(tmp_path):
     fort.6 file in the working directory, now it goes to stderr.
     """
     inp = tmp_path / "h2o.inp"
-    inp.write_text(INPUT.format(system=CASES["h2o"].system, charge=0, nstate=1,
+    inp.write_text(INPUT.format(system=CASES["h2o"].system, charge=0, nstate=1, basis="sto-3g",
                                 hess_type="analytical"))
     script = (
         "import sys, oqp.pyoqp as P\n"
@@ -307,7 +332,7 @@ system=
 {system}
 charge={charge}
 method=tdhf
-basis=sto-3g
+basis={basis}
 runtype=energy
 functional=
 
@@ -332,7 +357,8 @@ STATE1 = re.compile(r"PyOQP state 1\s+(-?\d+\.\d+)")
 def _state1_energy(case, system, workdir):
     workdir.mkdir(parents=True)
     inp = workdir / "e.inp"
-    inp.write_text(ENERGY_INPUT.format(system=system, charge=case.charge, nstate=case.nstate))
+    inp.write_text(ENERGY_INPUT.format(system=system, charge=case.charge, nstate=case.nstate,
+                                         basis=case.basis))
     env = dict(os.environ, OMP_NUM_THREADS="1")
     proc = subprocess.run([sys.executable, "-m", "oqp.pyoqp", str(inp)], cwd=workdir,
                           env=env, capture_output=True, text=True, timeout=600)
