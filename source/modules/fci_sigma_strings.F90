@@ -321,6 +321,7 @@ contains
     integer(i8) :: nastr, nbstr, ia, ib, k, base, srow, drow
     integer(i8) :: e, m
     integer(i8) :: nblk, blk_start, blk_len, nrow, nrow_max, cbase
+    integer(i8) :: row_bytes, gram_bytes, partial_bytes, available_bytes
     integer(i8) :: grow0, growlen
     integer :: gi
     real(dp), allocatable :: gloc(:, :, :), dloc(:, :)
@@ -399,7 +400,8 @@ contains
       return
     end if
 
-    nthr = max(1, nthreads)
+    nthr = 1
+!$  nthr = max(1, nthreads)
 
     ! T is (ndet, nact^2) and reaches tens of gigabytes on a wide active space.
     ! It used to be built whole, and the routine simply DECLINED above 2 GiB --
@@ -407,14 +409,29 @@ contains
     ! i.e. the cases that need the fast path most.  Both consumers of T reduce
     ! over its rows (d1 = T^T c, gram = T^T T), so the row range can be blocked
     ! over alpha strings exactly as the sigma blocks it, and the two BLAS calls
-    ! accumulate across blocks.  Nothing declines any more, and peak scratch is
-    ! bounded by the working-set ceiling instead of by ndet.
-    nblk = max(1_i8, work_bytes_cap / max(nbstr * int(nkl, i8) * 8_i8, 1_i8))
+    ! accumulate across blocks. The contraction buffers fit the working-set
+    ! ceiling; an insufficient ceiling is a resource failure, not a fallback.
+    row_bytes = nbstr * int(nkl, i8) * 8_i8
+    gram_bytes = int(nkl, i8)**2 * 8_i8
+    partial_bytes = (int(nkl, i8)**2 + int(nkl, i8)) * 8_i8
+    ! Reserve the Gram and partial contractions before sizing the T block.
+    ! At least one alpha-string interval and one partial must fit the ceiling.
+    available_bytes = work_bytes_cap - gram_bytes - row_bytes
+    if (available_bytes < partial_bytes) then
+      status = -1
+      return
+    end if
+    npartials = int(min(int(nthr, i8), available_bytes / partial_bytes, ndet))
+    nblk = (work_bytes_cap - gram_bytes - int(npartials, i8) * partial_bytes) / row_bytes
     nblk = min(nblk, nastr)
     nrow_max = nblk * nbstr
     nthr = int(min(int(nthr, i8), nrow_max))
-    npartials = nthr
-    if (nrow_max * int(nkl, i8) < par_min_elems) npartials = 1
+    npartials = min(npartials, nthr)
+    if (nrow_max * int(nkl, i8) < par_min_elems) then
+      npartials = 1
+      nblk = min(nastr, (work_bytes_cap - gram_bytes - partial_bytes) / row_bytes)
+      nrow_max = nblk * nbstr
+    end if
     ! Allocate every owned buffer before changing the caller's BLAS setting.
     ! On failure local allocatables are released on return, including any
     ! objects allocated before a later object in the same ALLOCATE failed.
@@ -428,9 +445,11 @@ contains
     ! Each OpenMP worker contracts its own row interval.  A threaded BLAS
     ! pool inside those workers would oversubscribe the caller's CPU budget.
     ! All declining returns precede this change of the caller's setting.
-    ! Serialize overlapping RDM calls while they own the process-wide setting.
+    ! Serialize overlapping OpenMP calls while they own the process-wide setting.
+    ! A serial build keeps the caller's BLAS pool and never changes global state.
     !$omp critical(rdm_blas_thread_guard)
-    nblas_save = blas_thread_count()
+    nblas_save = -1_i8
+!$  nblas_save = blas_thread_count()
     if (nblas_save > 0_i8) call blas_thread_set(1_i8)
 
     ! The leading dimension stays nrow_max for every block; a short final block
@@ -493,8 +512,8 @@ contains
       ! blocks BY US -- the linked BLAS is a serial build, so these ran on one
       ! core.  Both contract OVER rows, so unlike the sigma's product each
       ! thread needs private partials that are summed at the end.  The partials
-      ! are only nact^2 (plus nact^4 for the Gram), which is negligible beside
-      ! T itself.
+      ! occupy nact^2 + nact^4 doubles each and are included in the blocked
+      ! scratch ceiling above.
       gloc = 0.0_dp
       dloc = 0.0_dp
       !$omp parallel do num_threads(nthr) default(shared) &

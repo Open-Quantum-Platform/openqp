@@ -992,10 +992,14 @@ contains
       end do
       off1 = int(k, i8) * int(na, i8)**2
       off2 = int(k, i8) * int(na, i8)**4
-      ! string-factorized RDMs (one DGEMM); the walking kernels remain the
+      ! String-factorized RDMs (DGEMV and DSYRK); the walking kernels remain the
       ! numerical pin and the fallback for non-product determinant lists
-      if (rdm12_strings(na, ctx%ndet, ctx%dets, ctx%cvec, ctx%g1(off1), &
-                        ctx%g2(off2), ctx%nthreads) /= 0) then
+      rc = int(rdm12_strings(na, ctx%ndet, ctx%dets, ctx%cvec, ctx%g1(off1), &
+                            ctx%g2(off2), ctx%nthreads), i8)
+      if (rc < 0_i8) then
+        ierr = CAS_ERR_ALLOC
+        return
+      else if (rc > 0_i8) then
         call rdm1_spatial(int(na, c_int32_t), ctx%ndet, ctx%dets, ctx%cvec, &
                           ctx%g1(off1))
         rc = rdm2_spatial(int(na, c_int32_t), ctx%ndet, ctx%dets, ctx%cvec, &

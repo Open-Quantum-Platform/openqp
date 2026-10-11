@@ -171,8 +171,8 @@ def test_repeated_dimensions_and_short_final_block(native):
             with _caller_blas(native):
                 info, ref1, ref2 = _strings(native, norb, dets, c, 1)
             assert info == 0
-            # At CAS(10,10), 252 alpha strings are blocked in groups of 83,
-            # leaving a short final group of 3. Smaller cases remain one block.
+            # The capped CAS(10,10) call traverses several alpha-string
+            # blocks, including a short final block; smaller cases fit whole.
             lib.fci_set_work_bytes_cap(16*1024**2)
             with _caller_blas(native):
                 info, d1, d2 = _strings(native, norb, dets, c, 4)
@@ -184,7 +184,8 @@ def test_repeated_dimensions_and_short_final_block(native):
     assert lib.fci_get_work_bytes_cap() == saved
 
 
-def test_each_native_allocation_failure_restores_caller(native, tmp_path):
+@pytest.fixture
+def allocation_interposer(native, tmp_path):
     """Fail each of the 18 owned allocations, including both link helpers.
 
     The interposer is confined to a child and fails malloc calls originating
@@ -199,20 +200,26 @@ def test_each_native_allocation_failure_restores_caller(native, tmp_path):
 #include <string.h>
 #include <dlfcn.h>
 #include <errno.h>
-static int selected, count, active;
-void rdm_fail_allocation(int n) { selected=n; count=0; active=1; }
+static int selected, count, active, strings_only;
+static size_t total_bytes, largest_bytes;
+void rdm_fail_allocation(int n) { selected=n; count=0; active=1; strings_only=0; total_bytes=largest_bytes=0; }
+void rdm_fail_strings_allocation(int n) { rdm_fail_allocation(n); strings_only=1; }
+size_t rdm_total_bytes(void) { return total_bytes; }
+size_t rdm_largest_bytes(void) { return largest_bytes; }
 int rdm_allocation_count(void) { active=0; return count; }
-static int fail(void *caller) {
+static int fail(void *caller, size_t n) {
     Dl_info info;
     if (active && dladdr(caller, &info) && info.dli_fname &&
-        strstr(info.dli_fname, "liboqp")) {
+        strstr(info.dli_fname, "liboqp") && (!strings_only ||
+        (info.dli_sname && strstr(info.dli_sname, "_MOD_rdm12_strings")))) {
+        total_bytes += n; if (n > largest_bytes) largest_bytes=n;
         if (++count == selected) { active=0; errno=ENOMEM; return 1; }
     }
     return 0;
 }
 #ifdef __APPLE__
 static void *replacement_malloc(size_t n) {
-    if (fail(__builtin_return_address(0))) return NULL;
+    if (fail(__builtin_return_address(0), n)) return NULL;
     return malloc(n);
 }
 __attribute__((used)) static struct { const void *replacement, *original; }
@@ -222,7 +229,7 @@ interpose __attribute__((section("__DATA,__interpose"))) = {
 #else
 extern void *__libc_malloc(size_t);
 void *malloc(size_t n) {
-    if (fail(__builtin_return_address(0))) return NULL;
+    if (fail(__builtin_return_address(0), n)) return NULL;
     return __libc_malloc(n);
 }
 #endif
@@ -235,6 +242,13 @@ void *malloc(size_t n) {
         command = ["cc", "-shared", "-fPIC", "-O0", str(source), "-ldl", "-o", str(library)]
         preload_key = "LD_PRELOAD"
     subprocess.run(command, check=True, capture_output=True, text=True)
+    env = os.environ.copy()
+    env[preload_key] = str(library)
+    return library, env
+
+
+def test_each_native_allocation_failure_restores_caller(native, allocation_interposer):
+    library, env = allocation_interposer
     child = r'''
 import ctypes, sys
 import numpy as np
@@ -272,9 +286,125 @@ try:
 finally:
     ctl.oqp_blas_thread_set(saved)
 '''
-    env = os.environ.copy()
-    env[preload_key] = str(library)
     result = subprocess.run([sys.executable, "-c", child, str(library)], env=env,
                             capture_output=True, text=True, timeout=60)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "18 recoveries passed" in result.stdout
+
+
+def test_requested_width_respects_scratch_budget(native, allocation_interposer):
+    """Observe actual native allocation sizes, including a serial width of 64."""
+    library, env = allocation_interposer
+    child = r'''
+import ctypes, os, sys
+import numpy as np
+from oqp.library import rdm
+lib, ffi = rdm._rdm_backend()
+shim = ctypes.CDLL(sys.argv[1])
+shim.rdm_total_bytes.restype = ctypes.c_size_t
+shim.rdm_largest_bytes.restype = ctypes.c_size_t
+dets = np.array(rdm.determinant_basis(31, (1, 1)), dtype=np.int64)
+c = np.ones(len(dets))/np.sqrt(len(dets))
+d1 = np.empty((31,31)); d2 = np.empty((31,)*4)
+args = (31, len(dets), ffi.cast("int64_t *", dets.ctypes.data),
+        ffi.cast("double *", c.ctypes.data), ffi.cast("double *", d1.ctypes.data),
+        ffi.cast("double *", d2.ctypes.data))
+serial = os.environ.get("OQP_RDM_SERIAL_BUILD") == "1"
+cap = 512*1024**2 if serial else 16*1024**2
+lib.fci_set_work_bytes_cap(cap)
+observed = []
+for width in (1,64):
+    shim.rdm_fail_allocation(0)
+    assert lib.rdm12_strings_c(*args, width) == 0
+    shim.rdm_allocation_count()
+    observed.append((shim.rdm_total_bytes(), shim.rdm_largest_bytes()))
+    assert observed[-1][1] <= 31**4*8, observed
+    if width == 1:
+        ref1, ref2 = d1.copy(), d2.copy()
+    else:
+        np.testing.assert_allclose(d1, ref1, rtol=0, atol=2e-12)
+        np.testing.assert_allclose(d2, ref2, rtol=0, atol=2e-12)
+if serial:
+    assert observed[0] == observed[1], observed
+print("native allocation sizes", observed, "serial", serial)
+'''
+    result = subprocess.run([sys.executable, "-c", child, str(library)], env=env,
+                            capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_minimum_block_budget_failure_preserves_caller(native):
+    lib = native[0]
+    saved = lib.fci_get_work_bytes_cap()
+    try:
+        # One beta interval, Gram, and one partial exceed 16 MiB here.
+        dets, c = _ci(31, (1, 2))
+        lib.fci_set_work_bytes_cap(16*1024**2)
+        with _caller_blas(native):
+            info, d1, d2 = _strings(native, 31, dets, c, 4)
+        assert info == -1
+        assert np.all(d1 == 23) and np.all(d2 == 29)
+        dets, c = _ci(4, (2, 1))
+        assert _strings(native, 4, dets, c, 4)[0] == 0
+    finally:
+        lib.fci_set_work_bytes_cap(saved)
+
+
+def test_native_casscf_propagates_rdm_allocation_failure(native, allocation_interposer, tmp_path):
+    """Fail at the actual string RDM allocation inside the native optimizer."""
+    library, env = allocation_interposer
+    child = r'''
+import ctypes, pathlib, sys
+import numpy as np
+from oqp.library import casscf as cs
+from oqp.pyoqp import Runner
+shim = ctypes.CDLL(sys.argv[1])
+shim.rdm_fail_strings_allocation.argtypes = [ctypes.c_int]
+real_backend = cs._casscf_energy_backend
+lib, ffi = real_backend()
+assert hasattr(lib, "casscf_energy"), "Missing native CASSCF entry point"
+seen = []
+class FailRDM:
+    def casscf_energy(self, *args):
+        shim.rdm_fail_strings_allocation(1)
+        status = int(lib.casscf_energy(*args))
+        count = shim.rdm_allocation_count()
+        assert count == 1, (status, count)
+        assert status == -2, (status, count)
+        seen.append(status)
+        return status
+config = {
+    "input": {"system": "\nLi 0 0 0\nH 0 0 1.6", "basis": "sto-3g",
+              "method": "casscf", "runtype": "energy"},
+    "guess": {"type": "hcore"},
+    "scf": {"type": "rhf", "multiplicity": "1", "save_molden": "False"},
+    "cas": {"active_electrons": "2", "active_orbitals": "2", "frozen_core": "1"},
+    "ci": {"nroot": "1", "solver": "dense", "target_spin": "any",
+           "integral_backend": "native", "root_tracking": "energy"},
+    "casscf": {"max_macro_iterations": "50", "canonicalize": "true"},
+    "tests": {"exception": "True"},
+}
+def run(name):
+    runner = Runner(project=name, input_file=None, silent=1, usempi=False,
+                    input_dict=config, log=str(pathlib.Path(sys.argv[2])/f"{name}.log"))
+    runner.run(test_mod=True)
+    return float(runner.mol.energies[0])
+reference = run("reference")
+for attempt in range(2):
+    cs._casscf_energy_backend = lambda: (FailRDM(), ffi)
+    try:
+        run(f"failed-{attempt}")
+    except MemoryError as exc:
+        assert "Native CASSCF scratch" in str(exc)
+    else:
+        raise AssertionError("Native allocation failure was swallowed")
+    finally:
+        cs._casscf_energy_backend = real_backend
+    assert run(f"recovered-{attempt}") == reference
+assert seen == [-2, -2], seen
+print("native CASSCF allocation status -2 propagated; two exact recoveries")
+'''
+    result = subprocess.run([sys.executable, "-c", child, str(library), str(tmp_path)],
+                            env=env, capture_output=True, text=True, timeout=90)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "two exact recoveries" in result.stdout
