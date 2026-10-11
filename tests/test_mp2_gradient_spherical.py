@@ -53,7 +53,8 @@ def test_spherical_and_ecp_gradient_matches_central_difference(tmp_path, case):
     np.testing.assert_allclose(grad.reshape(-1, 3).sum(axis=0), 0, atol=1e-10)
     if case.startswith("ECP/"):
         # Br/LANL2DZ removes 28 core electrons: HBr has eight valence electrons.
-        assert runner.mol.mol_prop.nocc == 4
+        assert int(runner.mol.data["nelec"]) == 8
+        assert int(runner.mol.data["nocc"]) == 4
 
 
 def test_gradient_repeated_calls_with_increasing_and_decreasing_basis(tmp_path):
