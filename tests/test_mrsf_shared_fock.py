@@ -1,6 +1,6 @@
 """Exercise the actual Fock kernels and reduction, with an independent signed oracle.
 
-Run with the clean installed package's Python, at OMP_NUM_THREADS=1 and 4.
+Run with the clean installed package's Python, at OMP_NUM_THREADS=1, 2 and 4.
 For a compiled MPI package also run with mpiexec -n 2 and
 OQP_SHARED_REQUIRE_MPI=1; a serial library fails that mode, rather than skipping.
 """
@@ -83,7 +83,7 @@ class SharedMRSFFockTests(unittest.TestCase):
             comm, ranks = MPI.COMM_WORLD.py2f(), MPI.COMM_WORLD.size
             self.assertGreaterEqual(ranks, 2, "multirank gate needs at least two ranks")
         threads = int(os.environ["OMP_NUM_THREADS"])
-        self.assertIn(threads, (1, 4))
+        self.assertGreater(threads, 0, "native oracle requires a positive worker count")
         for _ in range(2):
             error = oqp.ffi.new("double *")
             checks, failures = oqp.ffi.new("int *"), oqp.ffi.new("int *")
