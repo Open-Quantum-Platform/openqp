@@ -77,3 +77,4 @@ tools/nac_validation/data_snapshots/*.molden
 # Audit and worktree artifacts
 audits/
 worktrees/
+lib/
