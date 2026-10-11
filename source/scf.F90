@@ -102,6 +102,7 @@ contains
     real(kind=dp) :: scalefactor        ! Scaling factor for HF exchange
     logical :: do_check = .false.
     logical :: keep_supplied            ! retain supplied orbitals on iteration one
+    logical :: supplied_valid           ! supplied orbitals are orthonormal in this geometry's metric
 
     !==============================================================================
     ! Electron Counting Parameters
@@ -184,7 +185,6 @@ contains
     real(kind=dp) :: vshift        ! Virtual orbital energy shift
     real(kind=dp) :: H_U_gap       ! HOMO-LUMO gap
     logical :: vshift_last_iter    ! Flag for last iteration with vshift
-    logical :: fock_shifted        ! A level shift entered some Fock of this SCF
     logical :: probe_failed        ! The zero-VSHIFT build missed conv; DIIS restarts next build
     logical :: aufbau_lost         ! The zero-VSHIFT build converged on a non-aufbau occupation
     logical :: pfon_hot            ! pFON is still annealing (pfon%temp above ~1 K)
@@ -472,7 +472,6 @@ contains
     !==============================================================================
     vshift = infos%control%vshift
     vshift_last_iter = .false.
-    fock_shifted = .false.
     probe_failed = .false.
     aufbau_lost = .false.
     release_occ = .false.
@@ -707,6 +706,22 @@ contains
     call flush(IW)
 
     !==============================================================================
+    ! A supplied guess counts as a solution of this geometry only when its
+    ! orbitals are orthonormal in the current overlap metric. Orbitals carried
+    ! over from another geometry (numerical Hessian/gradient displacements,
+    ! MD/NAMD steps) are not, and their density is not an SCF density here. For
+    ! H2 in a minimal basis every matrix of the gerade/ungerade form commutes,
+    ! so FDS - SDF vanished on the first build anyway and the carried-over
+    ! density was accepted: the displaced TDHF gradients and the numerical
+    ! Hessian built from them were wrong (H2/STO-3G zz 0.339 instead of 1.159
+    ! Eh/bohr^2 from the energies). Such a guess is treated like a cold one.
+    !==============================================================================
+    supplied_valid = infos%control%guess == GUESS_SUPPLIED
+    if (supplied_valid) supplied_valid = orthonormal_orbitals(mo_a, smat_full, nbf)
+    if (supplied_valid .and. scf_type == scf_uhf .and. nelec_b /= 0) &
+      supplied_valid = orthonormal_orbitals(mo_b, smat_full, nbf)
+
+    !==============================================================================
     ! Begin Main SCF Iteration Loop
     !==============================================================================
     do iter = 1, maxit
@@ -835,7 +850,6 @@ contains
         call form_rohf_fock(pfock(:,1),pfock(:,2), mo_a, smat_full, &
                                 nelec_a, nelec_b, nbf, vshift, work1, work2)
         shift_applied = (vshift /= 0.0_dp)
-        if (shift_applied) fock_shifted = .true.
         ! Unshifted effective Fock of the first build (see cold_first_iter).
         if (iter == 1 .and. shift_applied) then
           fock_noshift = rohf_bak
@@ -853,7 +867,6 @@ contains
         ! Turn off level shifting for the final iteration if requested
         if (vshift_last_iter) vshift = 0.0_dp
         shift_applied = (vshift > 0.0_dp)
-        if (shift_applied) fock_shifted = .true.
         ! Keep the unshifted first build (see cold_first_iter).
         if (iter == 1 .and. shift_applied) fock_noshift = pfock
 
@@ -1108,8 +1121,7 @@ contains
       !----------------------------------------------------------------------------
       ! SOSCF and TRAH are held as DIIS is: their first conv%run returns the
       ! SD result, so the iteration-1 test only rates the model guess.
-      cold_first_iter = (iter == 1) &
-          .and. (infos%control%guess /= GUESS_SUPPLIED)
+      cold_first_iter = (iter == 1) .and. (.not. supplied_valid)
       cold_held = cold_first_iter .and. (abs(diis_error) < infos%control%conv) &
           .and. (vshift == 0.0_dp) .and. (.not. ps_force_iter) .and. (.not. xc_reuse_now)
 
@@ -1209,7 +1221,7 @@ contains
           ! tracking rely on that -- and only their energies, which may be
           ! stale or from another geometry, are refreshed against this Fock.
           ! UHF is rediagonalised after the loop.
-          if (iter == 1 .and. infos%control%guess == GUESS_SUPPLIED .and. &
+          if (iter == 1 .and. supplied_valid .and. &
               .not. (use_soscf .or. use_trah) .and. &
               scf_type /= scf_uhf .and. int2_driver%pe%rank == 0) then
             call fock_diagonal_energies(pfock(:,1), mo_a, mo_energy_a, nbf)
@@ -1219,15 +1231,21 @@ contains
             end if
           end if
           ! The loop leaves before it diagonalises the Fock it has just tested,
-          ! so the orbitals in hand diagonalise the previous DIIS Fock. After a
-          ! level shift (the build before "a last SCF with zero VSHIFT", or
-          ! shifted Focks still in the V-DIIS subspace) that Fock carried the
-          ! shift, and every virtual energy kept +vshift (ROHF: open shells
-          ! +vshift/2). The orbitals built the converged density and energy,
-          ! so they are kept; only their energies are taken from this
-          ! unshifted Fock (ROHF: the effective Fock formed with vshift = 0).
+          ! so the orbitals in hand diagonalise the previous DIIS Fock, and
+          ! their eigenvalues belong to that Fock. After a level shift (the
+          ! build before "a last SCF with zero VSHIFT", or shifted Focks still
+          ! in the V-DIIS subspace) it carried the shift, and every virtual
+          ! energy kept +vshift (ROHF: open shells +vshift/2). It can also come
+          ! from a density that was not an SCF density at all: orbitals carried
+          ! over from another geometry (numerical Hessian displacements) built
+          ! F(1), and for H2 in a minimal basis FDS - SDF of F(2) vanishes by
+          ! symmetry, so the run left at iteration 2 with the eigenvalues of
+          ! F(1) -- the TDHF excitation 2.7 meV off and the numerical Hessian
+          ! wrong. The orbitals built the converged density and energy, so
+          ! they are kept; their energies are always taken from the Fock just
+          ! tested (ROHF: the effective Fock of this build, vshift = 0).
           ! UHF is rediagonalised after the loop.
-          if (fock_shifted .and. iter > 1 .and. .not. (use_soscf .or. use_trah) .and. &
+          if (iter > 1 .and. .not. (use_soscf .or. use_trah) .and. &
               scf_type /= scf_uhf .and. int2_driver%pe%rank == 0) then
             call fock_diagonal_energies(pfock(:,1), mo_a, mo_energy_a, nbf)
             if (scf_type == scf_rohf) then

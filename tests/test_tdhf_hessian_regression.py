@@ -15,6 +15,7 @@ does not depend on the machine on which pytest happens to run.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -47,8 +48,11 @@ CASES = {
   H  0.0000000000  0.0000000000 -0.3700000000
   H  0.0000000000  0.0000000000  0.3700000000""",
         charge=0,
-        validated_max_abs=5.667895902894404e-7,
-        validated_rms=1.9155628621431792e-7,
+        # Re-validated after the minimal-basis shortcuts were removed: the old
+        # values compared two wrong Hessians (zz 0.2016 against 1.159 from
+        # the state-1 energies).  chc r630, GCC 12.3 + MKL ILP64.
+        validated_max_abs=8.281666865617154e-7,
+        validated_rms=3.361459712471747e-7,
         nstate=1,
     ),
     "hehplus": Case(
@@ -244,5 +248,81 @@ def test_live_analytic_hessian_refuses_one_root_of_a_larger_space(tmp_path):
     proc = subprocess.run([sys.executable, "-m", "oqp.pyoqp", str(inp)], cwd=tmp_path,
                           env=env, capture_output=True, text=True, timeout=600)
     log = (tmp_path / "h2o.log").read_text() if (tmp_path / "h2o.log").exists() else ""
-    assert proc.returncode != 0, log[-2000:]
-    assert "requires an isolated lowest root" in log + proc.stdout + proc.stderr
+    text = log + proc.stdout + proc.stderr
+    assert proc.returncode != 0, text[-2000:]
+    # The message must reach the user, not a stray fort.6 file.
+    assert "requires an isolated lowest root" in text, text[-2000:]
+    assert not (tmp_path / "fort.6").exists()
+
+
+ENERGY_INPUT = """[input]
+system=
+{system}
+charge={charge}
+method=tdhf
+basis=sto-3g
+runtype=energy
+functional=
+
+[guess]
+type=huckel
+
+[scf]
+type=rhf
+multiplicity=1
+conv=1.0e-11
+
+[tdhf]
+type=rpa
+multiplicity=1
+nstate={nstate}
+conv=1.0e-11
+"""
+
+STATE1 = re.compile(r"PyOQP state 1\s+(-?\d+\.\d+)")
+
+
+def _state1_energy(case, system, workdir):
+    workdir.mkdir(parents=True)
+    inp = workdir / "e.inp"
+    inp.write_text(ENERGY_INPUT.format(system=system, charge=case.charge, nstate=case.nstate))
+    env = dict(os.environ, OMP_NUM_THREADS="1")
+    proc = subprocess.run([sys.executable, "-m", "oqp.pyoqp", str(inp)], cwd=workdir,
+                          env=env, capture_output=True, text=True, timeout=600)
+    log = (workdir / "e.log").read_text() if (workdir / "e.log").exists() else ""
+    assert proc.returncode == 0, log[-2000:] + proc.stderr[-2000:]
+    return float(STATE1.findall(log)[0])
+
+
+@pytest.mark.skipif(
+    not RUNTIME_AVAILABLE,
+    reason=(
+        "set OPENQP_RUN_TDHF_HESSIAN_REGRESSION=1 and use a built OpenQP "
+        "runtime to run TDHF Hessians"
+    ),
+)
+@pytest.mark.parametrize("name", CASES)
+def test_live_analytic_hessian_matches_state_energy_curvature(name, tmp_path, monkeypatch):
+    """Pin one diagonal element against independent state-1 energies.
+
+    The analytic and numerical Hessians share the SCF/TD machinery, so they
+    can agree on a wrong answer: for H2 both read stale data (0.20 Eh/bohr^2
+    analytic, 0.34 numerical) while the state-1 energies, each from a fresh
+    Huckel start, curve with 1.159 Eh/bohr^2 along the bond.  Displace the
+    last atom along z by +-h and compare the second difference of the
+    state-1 total energy with the analytic zz element of that atom.
+    """
+    monkeypatch.setenv("OPENQP_ROOT", os.environ.get("OPENQP_ROOT", str(ROOT)))
+    monkeypatch.setenv("OMP_NUM_THREADS", "1")
+    case = CASES[name]
+    analytic = _run_hessian(case, "analytical", tmp_path / "analytic")
+    lines = case.system.splitlines()
+    sym, x, y, z = lines[-1].split()
+    h_ang = 0.003
+    energies = []
+    for k, dz in enumerate((-h_ang, 0.0, h_ang)):
+        moved = lines[:-1] + [f"  {sym}  {float(x):.10f}  {float(y):.10f}  {float(z) + dz:.10f}"]
+        energies.append(_state1_energy(case, "\n".join(moved), tmp_path / f"e{k}"))
+    h_bohr = h_ang / 0.529177210903
+    curvature = (energies[0] - 2.0 * energies[1] + energies[2]) / h_bohr**2
+    assert analytic[-1, -1] == pytest.approx(curvature, abs=2.0e-4)

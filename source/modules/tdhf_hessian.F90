@@ -57,7 +57,6 @@ contains
     real(dp),allocatable::hfixed(:,:),hground_fixed(:,:),hxc(:,:)
     real(dp),allocatable::rows(:,:),rowsxc(:,:),rows_one(:,:),rows_two(:,:),htotal(:,:)
     real(dp)::amp_res,z_res,asym,omega,projection_mean
-    logical::zero_orbital_connection
     logical::verified_functional
     character(len=size(infos%dft%xc_functional_name))::functional_name
     integer::nbf,nocc,nvir,nexc,ncart,natom,target,status,cart,atom,i
@@ -130,22 +129,15 @@ contains
     call hess_tick('TD Z response solve', infos%log_filename)
     allocate(dprel(nbf,nbf,ncart),dw(nbf,nbf,ncart),dua(nbf,nbf,ncart),dva(nbf,nbf,ncart))
     allocate(umat_ao(nbf,nbf,ncart),deps_ao(nbf,ncart)); umat_ao=umat; deps_ao=deps
-    ! This historical minimal-basis shortcut is not valid for KS response:
-    ! GAMESS propagates U, orbital-energy, and dD terms through every DFT row.
-    zero_orbital_connection=infos%control%hamilton<20
-    do status=1,ncart
-      if(maxval(abs(umat(:,:,status)-transpose(umat(:,:,status))))>1.0e-10_dp) &
-        zero_orbital_connection=.false.
-    end do
-    if(zero_orbital_connection) then
-      ! In the minimal symmetric limit the displaced canonical orbitals and
-      ! their eigenvalues are constant in the AO representation.  Suppress
-      ! the spurious canonical metric response in every AO density derivative;
-      ! the complete native RHF Hessian already supplies the ground response.
-      umat_ao=0.0_dp
-      deps_ao=0.0_dp
-      dground=0.0_dp
-    end if
+    ! No minimal-basis shortcut: a former branch zeroed the orbital
+    ! response, the orbital-energy derivatives and dground whenever every
+    ! U matrix was symmetric under HF, on the claim that the displaced
+    ! orbitals and eigenvalues are constant in the AO representation.  They
+    ! are not (H2/STO-3G: the coefficients follow S(R), the eigenvalues
+    ! follow R), and the branch also kept the fixed-density ground term in
+    ! place of the complete RHF Hessian.  It selected exactly H2, where the
+    ! analytic zz element came out 0.2008 instead of 1.159 Eh/bohr^2 from
+    ! the state energies.
     call build_tdhf_relaxed_density_derivatives(infos,umat_ao,deps_ao,omega,domega,v0,u0,dv,du,z0,dz,dprel,dw,dua,dva)
     call hess_tick('TD relaxed density derivatives', infos%log_filename)
     allocate(hfixed(ncart,ncart),hground_fixed(ncart,ncart),hxc(ncart,ncart), &
@@ -192,7 +184,7 @@ contains
     end block
     call hess_tick('TD ground-state hf_hessian', infos%log_filename)
     call tagarray_get_data(infos%dat,OQP_hf_hessian,hground)
-    if (.not.zero_orbital_connection) hfixed=hfixed-hground_fixed+hground
+    hfixed=hfixed-hground_fixed+hground
     call assemble_tdhf_cartesian_hessian(hfixed,hxc,rows,htotal,asym,status)
     if(status/=0) call show_message('TDHF Hessian assembly failed.',WITH_ABORT)
     ! Apply the translational projector on both Cartesian indices.  The exact
