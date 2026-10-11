@@ -248,7 +248,9 @@ contains
     real(kind=fp), intent(out), pointer :: da(:,:,:)
     real(kind=fp), intent(out), pointer :: db(:,:,:)
     ! CONTIGUOUS: mo and moG1 always point at contiguous scratch (tmpMO_,
-    ! self%mo thread slices, moG1_).  Without the attribute gfortran packs
+    ! self%mo thread slices, moG1_): last-dimension slices of allocatable
+    ! arrays, or rank remappings of their leading section, both contiguous
+    ! by construction.  Without the attribute gfortran packs
     ! them into temporaries on every call to the contiguous compRRho,
     ! compRDRho and compRTau dummies, once per grid slice.
     real(kind=fp), intent(out), pointer, contiguous :: mo(:,:,:,:)

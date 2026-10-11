@@ -213,6 +213,8 @@ contains
   ! path so the identity can be tested.  For the triplet the beta half is the
   ! exact negative of the alpha half and is not computed (spin_antisymmetric);
   ! OQP_TDDFT_TRIPLET_FULL_UXC=1 computes both halves so this can be tested.
+  ! Both variables are internal test hooks (tests/test_tddft_closed_shell_triplet.py),
+  ! not user options; unset, the production paths above are used.
     triplet = infos%tddft%mult == 3
     xc_beta_sign = merge(-1.0_dp, 1.0_dp, triplet)
     call get_environment_variable('OQP_TDDFT_XC_UNRESTRICTED', envval, length=envlen, status=envstat)

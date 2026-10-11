@@ -122,6 +122,21 @@ class TestClosedShellTripletDFT(unittest.TestCase):
                 for a, b in zip(e0, e1):
                     self.assertAlmostEqual(a, b, delta=1e-6)
 
+    def test_unrestricted_xc_path_in_spherical_basis(self):
+        # The triplet uses the unrestricted XC contraction; in a spherical
+        # cc-pVDZ basis it must reproduce the restricted singlet as well.
+        for td in ("tda", "rpa"):
+            with self.subTest(td=td):
+                text = _spherical(deck(H2O_C1, "cc-pvdz", "b3lypv5", td, 1, 4))
+                rc0, e0, d0 = run(text)
+                rc1, e1, d1 = run(text, {"OQP_TDDFT_XC_UNRESTRICTED": "1"})
+                self.assertEqual(rc0, 0, d0)
+                self.assertEqual(rc1, 0, d1)
+                self.assertEqual(len(e0), 4, d0)
+                self.assertEqual(len(e1), 4, d1)
+                for a, b in zip(e0, e1):
+                    self.assertAlmostEqual(a, b, delta=1e-6)
+
     def test_triplets_lie_below_singlets(self):
         for td in ("tda", "rpa"):
             with self.subTest(td=td):
@@ -251,6 +266,10 @@ class TestImaginaryRpaRoots(unittest.TestCase):
                 self.assertNotIn("imaginary", log)
 
 
+def _spherical(text):
+    return text.replace("method=tdhf\n", "method=tdhf\nispher=true\n")
+
+
 H2O_STRETCHED = ("   O 0.000000 0.000000 0.230000\n   H 0.000000 1.550000 -0.920000\n"
                  "   H 0.000000 -1.550000 -0.920000\n")
 
@@ -269,8 +288,9 @@ class TestNegativeTdaTripletRoot(unittest.TestCase):
     def test_negative_triplet_tda_root_equals_spin_flip_tda(self):
         for nstate in (1, 3):
             with self.subTest(nstate=nstate):
-                rct, et, dt = run(deck(H2O_STRETCHED, "cc-pvdz", None, "tda", 3, nstate))
-                sf = deck(H2O_STRETCHED, "cc-pvdz", None, "sf", 3, nstate).replace("type=rhf", "type=rohf")
+                # spherical cc-pVDZ (ispher=true)
+                rct, et, dt = run(_spherical(deck(H2O_STRETCHED, "cc-pvdz", None, "tda", 3, nstate)))
+                sf = _spherical(deck(H2O_STRETCHED, "cc-pvdz", None, "sf", 3, nstate)).replace("type=rhf", "type=rohf")
                 with tempfile.TemporaryDirectory() as tmp:
                     (Path(tmp) / "job.inp").write_text(sf)
                     env = dict(os.environ, OMP_NUM_THREADS="2")
