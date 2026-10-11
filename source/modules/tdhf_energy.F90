@@ -273,6 +273,11 @@ contains
           dxa = bvec(:,:,:iv)
           dxb = xc_beta_sign*bvec(:,:,:iv)
           fxb = 0.0_dp
+          ! utddft_fxc leaves the consumer's parallel environment to the
+          ! caller (some callers run it on a rank subset). This driver runs on
+          ! the world communicator, like tddft_fxc, so distribute the grid
+          ! slices over all ranks; parallel_stop reduces the Fock matrices.
+          call xc_consumer%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
           call utddft_fxc(basis=basis, molGrid=molGrid, isVecs=.true., &
                  wfa=mo_a, wfb=mo_a, fxa=ab1(:,:,:iv), fxb=fxb, &
                  dxa=dxa, dxb=dxb, nMtx=iv, threshold=0.0d0, infos=infos, &
