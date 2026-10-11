@@ -1715,6 +1715,7 @@ contains
     integer(i8), intent(inout) :: status
 
     integer :: npar, i, j
+    integer(c_int32_t) :: fault
     integer(i8) :: rc
     real(dp) :: tmp
 
@@ -1731,7 +1732,8 @@ contains
     if (status < 0_i8) return
     ! Test-only zero CI enters the real builder's zero-norm INPUT producer.
     ! The controller is inert unless explicitly armed by its pytest caller.
-    if (oqp_casscf_test_fault_request(1_c_int32_t) /= 0_c_int32_t) ctx%civ_ref = 0.0_dp
+    fault = oqp_casscf_test_fault_request(1_c_int32_t)
+    if (fault /= 0_c_int32_t) ctx%civ_ref = 0.0_dp
     rc = cas_anhess_build(ctx%ah, ctx%pairs, ctx%weights, ctx%roots, ctx%nroot, &
                           ctx%dets, ctx%h1e_h, ctx%eri_h, ctx%civ_ref, hess)
     if (rc < 0_i8) then

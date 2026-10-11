@@ -256,6 +256,7 @@ contains
     integer(i8) :: status
 
     integer :: n, nc, na, npar, nstate, k, r, i, j, p, q, ierr
+    integer(c_int32_t) :: fault
     integer(i8) :: nd, cap, rc, idx, na2, na4, n2
     real(dp) :: w, val, s1, s2, nrm, e_i
 
@@ -368,7 +369,8 @@ contains
     do idx = 0_i8, nd - 1_i8
       ctx%vecs(0:nd-1, idx) = ctx%hact(idx*nd : idx*nd + nd - 1_i8)
     end do
-    if (oqp_casscf_test_fault_request(2_c_int32_t) /= 0_c_int32_t) then
+    fault = oqp_casscf_test_fault_request(2_c_int32_t)
+    if (fault /= 0_c_int32_t) then
       ! Test-only solver error info enters the real EIGEN producer below.
       ! This is deterministic fault injection, not LAPACK nonconvergence.
       ierr = 1
