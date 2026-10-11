@@ -1066,7 +1066,7 @@ def _multistate_multiset(mol, hcore_ao, eri_ao, coeff_ref, settings, ncore, nact
     _ndet_un = comb(nbf, full_nelec_un[0]) * comb(nbf, full_nelec_un[1])
     # max_det bounds the determinant COUNT; these dense operators are what the
     # count costs.  Each ndet x ndet matrix is 8*ndet^2 bytes, and the branch
-    # holds several at once -- Hf_full per root, H0_f, and the transient of
+    # holds several at once -- Hf_full, H0_f, and the transient of
     # `Hf_f + enucf * np.eye(...)`, which materializes the identity and the
     # result while the original is still live.  A 4-electron/12-orbital case
     # with CAS(2,2) is 4356 determinants: inside the default max_det=5000, and
@@ -1080,9 +1080,10 @@ def _multistate_multiset(mol, hcore_ao, eri_ao, coeff_ref, settings, ncore, nact
     _live_ms = _one_mat * (len(roots) + 8)
     if _live_ms > max(1, int(_mem_ms)) * 1024 ** 2:
         raise ValueError(
-            "multi-set CASPT2 dense operators need ~%.2f GiB (%d x %d matrices, "
-            "%d live at once: one per root, plus Hf_f/H0_f/denom/Uq, the "
-            "eigensolver copies and the shift transient), "
+            "multi-set CASPT2 conservative dense-operator bound is ~%.2f GiB "
+            "(%d x %d matrices, %d matrix allowances including the legacy "
+            "per-root allowance, Hf_f/H0_f/denom/Uq, eigensolver copies "
+            "and the shift transient), "
             "exceeding the %s max_memory budget of %d MiB.  Reduce the basis or "
             "the root count, raise %s max_memory, or use method=xms-caspt2, "
             "which is single-set."

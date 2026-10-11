@@ -40,10 +40,17 @@ def test_multiset_reaches_action_and_pins_old_cross_terms(tmp_path, monkeypatch,
     original_driver = cp._multistate_multiset
 
     def action(h, bra):
+        # A previous state's dense matrix must already be gone while this
+        # driver's per-state records are still alive, not just after return.
+        assert all(ref() is None for _, _, ref in actions)
         actions.append((h.copy(), bra.copy(), weakref.ref(h)))
         return original_action(h, bra)
 
     def rotate(vec, *args):
+        if len(actions) == 3:
+            # Cross-state rotations start after the last action.  Retaining
+            # even the final local H until driver return must fail this test.
+            assert all(ref() is None for _, _, ref in actions)
         result = original_rotate(vec, *args)
         rotations.append(result.copy())
         return result
