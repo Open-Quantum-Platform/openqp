@@ -30,7 +30,13 @@ end module
 ''')
     consumer = tmp_path / 'consumer.f90'
     source = (ROOT / 'source/modules/casscf_driver.F90').read_text()
-    rotation = re.search(r"      call dgemm\('T', 'N', m, n, m,.*?blk, m\)", source, re.S).group()
+    canonicalize = re.search(r'  subroutine canonicalize\(.*?  end subroutine canonicalize',
+                             source, re.S).group()
+    cbuf_decl = re.search(r'^    real\(dp\).*:: cbuf\(.*$', canonicalize, re.M).group()
+    storage_decl = re.search(r'^    real\(dp\).*:: cstorage\(.*$', canonicalize, re.M).group()
+    remap = re.search(r'^      cstorage\(.*=>.*$', canonicalize, re.M).group()
+    rotation = re.search(r"      call dgemm\('T', 'N', m, n, m,.*?blk, m\)",
+                         canonicalize, re.S).group()
     consumer.write_text('''subroutine consumer(a,b,c)
  use oqp_linalg, only: dgemm
  implicit none
@@ -42,11 +48,9 @@ subroutine rotation(cbuf,sub,blk,n,m,lo,hi)
  use precision, only: dp
  implicit none
  integer :: n,m,lo,hi
- real(dp), contiguous, target :: cbuf(0:,0:)
- real(dp), contiguous, pointer :: cstorage(:)
+''' + cbuf_decl + '\n' + storage_decl + '''
  real(dp) :: sub(m,m),blk(m,n)
- cstorage(1:n*n) => cbuf
-''' + rotation + '''
+''' + remap + '\n' + rotation + '''
 end subroutine
 ''')
     sources = [ROOT / 'source/precision.F90', messages,
