@@ -14,7 +14,7 @@ module mp2_lib
   use oqp_linalg, only: dgemm
   use parallel, only: par_env_t
   use blas_thread, only: blas_thread_count, blas_thread_set
-  use, intrinsic :: iso_c_binding, only: c_int64_t
+  use, intrinsic :: iso_c_binding, only: c_int64_t, c_int
   implicit none
 
   private
@@ -207,7 +207,7 @@ contains
     use io_constants, only: iw
     use int2_compute, only: int2_compute_t
     use cc_ao2mo, only: cc_eri_collect_t, cc_packed_length
-    use memory_info, only: oqp_available_memory_gb, OQP_MEMORY_SAFETY_FRACTION
+    use memory_info, only: oqp_available_memory_gb, OQP_MEMORY_SAFETY_FRACTION, oqp_budget_includes_resident
     type(int2_compute_t), intent(inout) :: driver
     integer, intent(in) :: nbf, npair, nocc_l, nvir_l, nocc_o, nvir_o
     real(dp), intent(in) :: cmo_l(nbf,nbf), e_l(nbf), cmo_o(nbf,nbf), e_o(nbf)
@@ -217,7 +217,7 @@ contains
     real(dp), allocatable, target :: g(:)
     real(dp) :: ss, os, full_gb, avail_gb, packed_bytes, half_bytes, first_bytes, second_bytes, batch_gb
     integer(c_int64_t) :: nblas_save
-    integer :: ok
+    integer :: ok, nt
     logical :: do_full
 
     success = .false.
@@ -258,27 +258,30 @@ contains
               3.0_dp*real(nbf,dp)**2*mp2_thread_count()) + &
               16.0_dp*npair) / 1.073741824e9_dp
     avail_gb = oqp_available_memory_gb()
+    if (oqp_budget_includes_resident()) full_gb = full_gb + packed_bytes/1.073741824e9_dp
     do_full = avail_gb > 0.0_dp .and. full_gb < 0.25_dp*OQP_MEMORY_SAFETY_FRACTION*avail_gb
     ! A one-spin full tensor cannot represent distinct alpha/beta orbitals.
     do_full = do_full .and. (restricted_ref .or. .not. do_opposite)
     ok = 0
     if (.not. do_full) ok = 1
     do_full = mp2_all_ok(driver%pe,ok)
+    nt = mp2_thread_count()
     nblas_save = blas_thread_count()
     if (nblas_save > 0) call blas_thread_set(1_c_int64_t)
     ss = 0.0_dp; os = 0.0_dp
     if (do_full) then
       write(iw,'(2X,A)') 'MP2 path: n5 full'
-      call mp2_corr_n5_full(driver%pe, nbf, npair, g, cmo_l, e_l, nocc_l, nvir_l, &
+      call mp2_corr_n5_full(driver%pe, nt, nbf, npair, g, cmo_l, e_l, nocc_l, nvir_l, &
                             same_spin, do_opposite, ss, os, success)
     end if
     if (.not. success) then
       ss = 0.0_dp; os = 0.0_dp
       write(iw,'(2X,A)') 'MP2 path: n5 occupied-virtual'
-      call mp2_corr_n5_batched(driver%pe, nbf, npair, g, cmo_l, e_l, nocc_l, nvir_l, &
+      call mp2_corr_n5_batched(driver%pe, nt, nbf, npair, g, cmo_l, e_l, nocc_l, nvir_l, &
                              cmo_o, e_o, nocc_o, nvir_o, same_spin, do_opposite, ss, os, success)
     end if
     if (nblas_save > 0) call blas_thread_set(nblas_save)
+    call mp2_restore_threads(nt)
     if (success) then
       e_same = e_same + ss
       e_opp = e_opp + os
@@ -287,28 +290,27 @@ contains
 
   !> Full spatial tensor for one spin. All owned scratch has checked STATUS;
   !> automatic deallocation covers every normal and early return.
-  subroutine mp2_corr_n5_full(pe, nbf, npair, g, cmo, energy, nocc, nvir, &
+  subroutine mp2_corr_n5_full(pe, nt, nbf, npair, g, cmo, energy, nocc, nvir, &
                              same_spin, do_opposite, e_same, e_opp, success)
     type(par_env_t), intent(inout) :: pe
-    integer, intent(in) :: nbf, npair, nocc, nvir
+    integer, intent(in) :: nt, nbf, npair, nocc, nvir
     real(dp), intent(in) :: g(*), cmo(nbf,nbf), energy(nbf)
     logical, intent(in) :: same_spin, do_opposite
     real(dp), intent(out) :: e_same, e_opp
     logical, intent(out) :: success
     real(dp), allocatable :: eri(:,:,:,:), half(:,:), d(:,:,:), scr(:,:,:), m(:,:,:)
     integer, allocatable :: prow(:), pcol(:)
-    integer :: ok, nt, tid, pq, ip, p, q, i, a, j, b
+    integer :: ok, tid, pq, ip, p, q, i, a, j, b
     real(dp) :: denom, num
 
     success = .false.; e_same = 0.0_dp; e_opp = 0.0_dp
-    nt = mp2_thread_count()
     allocate(eri(nbf,nbf,nbf,nbf), stat=ok)
     if (.not. mp2_all_ok(pe,ok)) return
     allocate(half(npair,npair), prow(npair), pcol(npair), &
              d(nbf,nbf,nt), scr(nbf,nbf,nt), m(nbf,nbf,nt), stat=ok)
     if (.not. mp2_all_ok(pe,ok)) return
     call mp2_pair_table(nbf, npair, prow, pcol)
-    !$omp parallel do default(shared) private(pq,ip,p,q,tid) schedule(static)
+    !$omp parallel do num_threads(nt) default(shared) private(pq,ip,p,q,tid) schedule(static)
     do pq = 1, npair
       tid = mp2_thread_id()
       do ip = 1, npair
@@ -325,7 +327,7 @@ contains
       end do
     end do
     !$omp end parallel do
-    !$omp parallel do default(shared) private(pq,ip,p,q,tid) schedule(static)
+    !$omp parallel do num_threads(nt) default(shared) private(pq,ip,p,q,tid) schedule(static)
     do pq = 1, npair
       tid = mp2_thread_id()
       do ip = 1, npair
@@ -342,7 +344,7 @@ contains
       if (p /= q) eri(q,p,:,:) = m(:,:,tid)
     end do
     !$omp end parallel do
-    !$omp parallel do collapse(2) default(shared) private(i,a,j,b,denom,num) &
+    !$omp parallel do num_threads(nt) collapse(2) default(shared) private(i,a,j,b,denom,num) &
     !$omp schedule(static) reduction(+:e_same,e_opp)
     do b = 1, nvir
       do a = 1, nvir
@@ -365,28 +367,27 @@ contains
 
   !> Transform the left occupied-virtual pair once, then contract with the
   !> requested partner spin. No full spatial MO tensor is retained.
-  subroutine mp2_corr_n5_batched(pe, nbf, npair, g, cmo_l, e_l, nocc_l, nvir_l, &
+  subroutine mp2_corr_n5_batched(pe, nt, nbf, npair, g, cmo_l, e_l, nocc_l, nvir_l, &
                                 cmo_o, e_o, nocc_o, nvir_o, same_spin, do_opposite, &
                                 e_same, e_opp, success)
     type(par_env_t), intent(inout) :: pe
-    integer, intent(in) :: nbf, npair, nocc_l, nvir_l, nocc_o, nvir_o
+    integer, intent(in) :: nt, nbf, npair, nocc_l, nvir_l, nocc_o, nvir_o
     real(dp), intent(in) :: g(*), cmo_l(nbf,nbf), e_l(nbf), cmo_o(nbf,nbf), e_o(nbf)
     logical, intent(in) :: same_spin, do_opposite
     real(dp), intent(out) :: e_same, e_opp
     logical, intent(out) :: success
     real(dp), allocatable :: half(:,:), d(:,:,:), scr(:,:,:), m(:,:,:), ovov(:,:,:,:)
     integer, allocatable :: prow(:), pcol(:)
-    integer :: nt, ok, tid, q, ip, mu, nu, a, i, j, b
+    integer :: ok, tid, q, ip, mu, nu, a, i, j, b
     real(dp) :: denom, num
     logical :: transformed
 
     e_same = 0.0_dp; e_opp = 0.0_dp; success = .false.
-    nt = mp2_thread_count()
     allocate(prow(npair), pcol(npair), half(npair,nocc_l*nvir_l), &
              d(nbf,nbf,nt), scr(nbf,nvir_l,nt), m(nocc_l,nvir_l,nt), stat=ok)
     if (.not. mp2_all_ok(pe,ok)) return
     call mp2_pair_table(nbf, npair, prow, pcol)
-    !$omp parallel do default(shared) private(q,ip,mu,nu,a,i,tid) schedule(static)
+    !$omp parallel do num_threads(nt) default(shared) private(q,ip,mu,nu,a,i,tid) schedule(static)
     do q = 1, npair
       tid = mp2_thread_id()
       do ip = 1, npair
@@ -410,7 +411,7 @@ contains
     if (same_spin) then
       allocate(ovov(nocc_l,nvir_l,nocc_l,nvir_l), stat=ok)
       if (.not. mp2_all_ok(pe,ok)) return
-      call mp2_n5_second_half(pe, nbf, npair, nocc_l, nvir_l, nocc_l, nvir_l, &
+      call mp2_n5_second_half(pe, nt, nbf, npair, nocc_l, nvir_l, nocc_l, nvir_l, &
                               e_l, cmo_l, e_l, half, prow, pcol, &
                               e_opp, transformed, ovov)
       if (.not. transformed) return
@@ -429,7 +430,7 @@ contains
       deallocate(ovov)
     end if
     if (do_opposite .and. nocc_o > 0 .and. nvir_o > 0) then
-      call mp2_n5_second_half(pe, nbf, npair, nocc_l, nvir_l, nocc_o, nvir_o, &
+      call mp2_n5_second_half(pe, nt, nbf, npair, nocc_l, nvir_l, nocc_o, nvir_o, &
                               e_l, cmo_o, e_o, half, prow, pcol, e_opp, transformed)
       if (.not. transformed) return
     end if
@@ -437,11 +438,11 @@ contains
   end subroutine mp2_corr_n5_batched
 
   !> Either write same-spin integrals or accumulate opposite-spin energy.
-  subroutine mp2_n5_second_half(pe, nbf, npair, nocc_l, nvir_l, nocc_o, nvir_o, &
+  subroutine mp2_n5_second_half(pe, nt, nbf, npair, nocc_l, nvir_l, nocc_o, nvir_o, &
                                 e_l, cmo_o, e_o, half, prow, pcol, &
                                 e_opp, success, ovov)
     type(par_env_t), intent(inout) :: pe
-    integer, intent(in) :: nbf, npair, nocc_l, nvir_l, nocc_o, nvir_o
+    integer, intent(in) :: nt, nbf, npair, nocc_l, nvir_l, nocc_o, nvir_o
     real(dp), intent(in) :: e_l(nbf), cmo_o(nbf,nbf), e_o(nbf)
     real(dp), intent(in) :: half(npair,nocc_l*nvir_l)
     integer, intent(in) :: prow(npair), pcol(npair)
@@ -449,14 +450,13 @@ contains
     logical, intent(out) :: success
     real(dp), intent(out), optional :: ovov(nocc_l,nvir_l,nocc_o,nvir_o)
     real(dp), allocatable :: mat(:,:,:), scr(:,:,:), vv(:,:,:)
-    integer :: nt, ok, tid, idx, i, a, j, b, q, mu, nu
+    integer :: ok, tid, idx, i, a, j, b, q, mu, nu
     real(dp) :: denom
 
     success = .false.; e_opp = 0.0_dp
-    nt = mp2_thread_count()
     allocate(mat(nbf,nbf,nt), scr(nocc_o,nbf,nt), vv(nocc_o,nvir_o,nt), stat=ok)
     if (.not. mp2_all_ok(pe,ok)) return
-    !$omp parallel do default(shared) private(idx,i,a,j,b,q,mu,nu,tid,denom) &
+    !$omp parallel do num_threads(nt) default(shared) private(idx,i,a,j,b,q,mu,nu,tid,denom) &
     !$omp schedule(static) reduction(+:e_opp)
     do idx = 1, nocc_l*nvir_l
       tid = mp2_thread_id()
@@ -487,6 +487,12 @@ contains
   end subroutine mp2_n5_second_half
 
   !> Agree on recoverable failures before the next integral-driver collective.
+  subroutine mp2_restore_threads(n)
+    !$ use omp_lib, only: omp_set_num_threads
+    integer, intent(in) :: n
+    !$ call omp_set_num_threads(int(n,kind=c_int))
+  end subroutine mp2_restore_threads
+
   integer function mp2_thread_count() result(n)
     !$ use omp_lib, only: omp_get_max_threads
     n = 1

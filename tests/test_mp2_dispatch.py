@@ -88,7 +88,8 @@ def test_input_dispatch_and_default_crossover(tmp_path, monkeypatch):
     assert 'MP2 path: direct-J' in small_log.read_text()
     runner, log = _run(tmp_path, 'large_input', basis='aug-cc-pvqz')
     assert int(runner.mol.data.get_basis()['nbf']) > 120
-    assert 'MP2 path: n5 full' in log.read_text()
+    assert 'MP2 path: n5 ' in log.read_text()
+    assert 'MP2 path: direct-J' not in log.read_text()
     reference = _components(log)
     # Restore the SCF energy before evaluating MP2 on the same native handle.
     scf_energy = float(re.findall(r'E\(reference, SCF\)\s*=\s*([-+0-9.eE]+)', log.read_text())[-1])
