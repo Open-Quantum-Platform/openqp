@@ -217,8 +217,11 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
 
     def test_umrsf_mixed_exchange_channels_use_gamess_compatible_permutation(self):
         source = compact(LIB.read_text())
-        kernel = source.split("subroutineint2_umrsf_data_t_update", 1)[1].split(
+        wrapper = source.split("subroutineint2_umrsf_data_t_update", 1)[1].split(
             "endsubroutineint2_umrsf_data_t_update", 1)[0]
+        self.assertIn("callint2_umrsf_update_worker(this,buf)", wrapper)
+        kernel = source.split("subroutineint2_umrsf_update_worker", 1)[1].split(
+            "endsubroutineint2_umrsf_update_worker", 1)[0]
         mixed = kernel.split("doc=9,10", 1)[1].split("enddo", 2)
         mixed = mixed[0] + "enddo" + mixed[1]
         expected_updates = (
@@ -245,8 +248,11 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
 
     def test_umrsf_coulomb_digestion_folds_symmetric_density(self):
         source = compact(LIB.read_text())
-        kernel = source.split("subroutineint2_umrsf_data_t_update", 1)[1].split(
+        wrapper = source.split("subroutineint2_umrsf_data_t_update", 1)[1].split(
             "endsubroutineint2_umrsf_data_t_update", 1)[0]
+        self.assertIn("callint2_umrsf_update_worker(this,buf)", wrapper)
+        kernel = source.split("subroutineint2_umrsf_update_worker", 1)[1].split(
+            "endsubroutineint2_umrsf_update_worker", 1)[0]
         # One symmetric ds slab per Coulomb target, as in the MRSF kernel; ds must
         # cover all eight alpha/beta Coulomb columns on the UMRSF path.
         self.assertIn("f3(v,c,i,j)=f3(v,c,i,j)+cval*ds(v,c,k,l)", kernel)

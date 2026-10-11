@@ -5,6 +5,9 @@ module tdhf_mrsf_lib
     use basis_tools, only: basis_set
     use oqp_linalg
 
+    private :: int2_mrsf_update_worker, int2_umrsf_update_worker
+    private :: int2_mrsf_shell_worker, int2_umrsf_shell_worker
+
     type, extends(int2_fock_data_t) :: int2_mrsf_data_t
 
       ! Public result is also thread 1's density-dependent accumulator and
@@ -277,7 +280,16 @@ contains
 
 !###############################################################################
 
+  ! Keep the inherited dummy characteristics. TARGET is needed only inside
+  ! the worker; its local pointers never outlive that call.
   subroutine int2_mrsf_data_t_update(this, buf)
+    implicit none
+    class(int2_mrsf_data_t), intent(inout) :: this
+    type(int2_storage_t), intent(inout) :: buf
+    call int2_mrsf_update_worker(this, buf)
+  end subroutine int2_mrsf_data_t_update
+
+  subroutine int2_mrsf_update_worker(this, buf)
 
     implicit none
 
@@ -459,7 +471,16 @@ contains
 
 !###############################################################################
 
+  ! Keep the inherited dummy characteristics. TARGET is needed only inside
+  ! the worker; its local pointers never outlive that call.
   subroutine int2_umrsf_data_t_update(this, buf)
+    implicit none
+    class(int2_umrsf_data_t), intent(inout) :: this
+    type(int2_storage_t), intent(inout) :: buf
+    call int2_umrsf_update_worker(this, buf)
+  end subroutine int2_umrsf_data_t_update
+
+  subroutine int2_umrsf_update_worker(this, buf)
 
     implicit none
 
@@ -595,7 +616,7 @@ contains
 
     buf%ncur = 0
 
-  end subroutine int2_umrsf_data_t_update
+  end subroutine int2_umrsf_update_worker
 
 !###############################################################################
 !###############################################################################
@@ -4123,7 +4144,17 @@ contains
 
   end subroutine umrsfdmat
 
+  ! Keep the inherited dummy characteristics. TARGET is needed only inside
+  ! the worker; its local pointers never outlive that call.
   subroutine int2_mrsf_consume_shell(this, shell_block, thread_id)
+    implicit none
+    class(int2_mrsf_data_t), intent(inout) :: this
+    type(int2_shell_block_t), intent(in) :: shell_block
+    integer, intent(in) :: thread_id
+    call int2_mrsf_shell_worker(this, shell_block, thread_id)
+  end subroutine int2_mrsf_consume_shell
+
+  subroutine int2_mrsf_shell_worker(this, shell_block, thread_id)
 
     implicit none
 
@@ -4414,7 +4445,17 @@ contains
 
   end subroutine
 
+  ! Keep the inherited dummy characteristics. TARGET is needed only inside
+  ! the worker; its local pointers never outlive that call.
   subroutine int2_umrsf_consume_shell(this, shell_block, thread_id)
+    implicit none
+    class(int2_umrsf_data_t), intent(inout) :: this
+    type(int2_shell_block_t), intent(in) :: shell_block
+    integer, intent(in) :: thread_id
+    call int2_umrsf_shell_worker(this, shell_block, thread_id)
+  end subroutine int2_umrsf_consume_shell
+
+  subroutine int2_umrsf_shell_worker(this, shell_block, thread_id)
 
     implicit none
 
@@ -4629,6 +4670,6 @@ contains
 
 
 
-  end subroutine int2_umrsf_consume_shell
+  end subroutine int2_umrsf_shell_worker
 
 end module tdhf_mrsf_lib
