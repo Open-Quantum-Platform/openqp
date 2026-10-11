@@ -129,6 +129,8 @@ def test_input_dispatch_and_default_crossover(tmp_path, monkeypatch):
         assert 'MP2 path: direct-J' not in log.read_text()
         if budget == '2':
             assert 'MP2 path: n5 full' not in log.read_text()
+        else:
+            assert 'MP2 path: n5 occupied-virtual' not in log.read_text()
         np.testing.assert_allclose(same_spin_reference, _components(log), rtol=0, atol=1e-9)
 
 
