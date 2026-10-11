@@ -7323,7 +7323,8 @@ def _check_soc(config: dict[str, Any], report: CheckReport) -> None:
         )
 
 
-def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
+def analytic_hessian_capability(config: dict[str, Any],
+                                input_dir: str | None = None) -> tuple[str, str]:
     """Return analytic-Hessian capability status and a precise reason.
 
     This checker is intentionally conservative: enabling a dispatch scaffold must
@@ -7369,7 +7370,8 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
         if td_type == "sf":
             return "unsupported_tdhf_type", "SF-TDDFT analytic Hessian is not implemented; use type=numerical until the SF gradient/Z-vector finite-difference baseline is validated."
         if (td_type == "rpa" and scf_type == "rhf"
-                and td_multiplicity == 1 and state == 1 and td_nstate >= 2):
+                and td_multiplicity == 1 and state == 1
+                and (td_nstate >= 2 or _is_one_pair_response(config, input_dir))):
             # Keep this list synchronized with
             # tdhf_hessian_functional_is_verified.  Pure TDHF is selected by
             # an empty functional and remains valid.
@@ -7418,12 +7420,14 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
                     "excited root (hess.state=1); higher roots require an "
                     "indefinite-safe projected amplitude-response solver.",
                 )
-            if td_nstate < 2:
+            if td_nstate < 2 and not _is_one_pair_response(config, input_dir):
                 return (
                     "unsupported_feature",
                     "Analytic RPA Hessians require tdhf.nstate>=2 so the "
                     "lowest excited root can be verified as isolated from "
-                    "the next computed root.",
+                    "the next computed root (nstate=1 is enough only when "
+                    "the response space holds a single occupied-virtual "
+                    "pair, e.g. H2 or HeH+ in a minimal basis).",
                 )
             return "unsupported_feature", "The requested RPA Hessian functional is not in the verified analytic set."
         if td_type == "tda":
@@ -7454,7 +7458,7 @@ def resolve_hessian_type(config: dict[str, Any],
     method = _as_lower(_get(config, "input", "method", "hf"))
     if method != "hf":
         return "numerical", f"auto: input.method={method} uses the numerical Hessian."
-    capability, reason = analytic_hessian_capability(config)
+    capability, reason = analytic_hessian_capability(config, input_dir)
     if capability != "supported":
         return "numerical", f"auto: {reason}"
 
@@ -7519,10 +7523,11 @@ def _read_custom_basis(name: str, input_dir: str | None) -> dict | None:
     return data if isinstance(data, dict) and "elements" in data else None
 
 
-def _basis_max_l_detail(config: dict[str, Any],
-                        input_dir: str | None = None) -> tuple[int | None, str | None]:
-    """(max L, None), or (None, why) with why = 'basis' when the basis itself
-    cannot be inspected and 'geometry' when the atoms cannot be listed."""
+def _atom_shells(config: dict[str, Any], input_dir: str | None = None
+                 ) -> tuple[list[tuple[int | None, dict]] | None, str | None]:
+    """([(Z or None, BSE element entry), ...], None) for every atom, or (None, why)
+    with why = 'basis' when the basis cannot be inspected and 'geometry' when
+    the atoms cannot be listed."""
     try:
         import basis_set_exchange as bse
     except ImportError:
@@ -7571,7 +7576,7 @@ def _basis_max_l_detail(config: dict[str, Any],
         return None, "geometry"
 
     custom: dict[str, dict | None] = {}
-    max_l = 0
+    atoms: list[tuple[int, dict]] = []
     for line, basis_name in zip(lines, per_atom_basis):
         parts = line.split()
         if not parts:
@@ -7593,17 +7598,69 @@ def _basis_max_l_detail(config: dict[str, Any],
             entry = data["elements"].get(str(z))
             if entry is None:
                 return None, "basis"
-            shells = entry.get("electron_shells", [])
         else:
             try:
                 data = bse.get_basis(basis_name, elements=[element])
             except KeyError:   # basis or element not in the BSE library
                 return None, "basis"
-            shells = [shell for item in data.get("elements", {}).values()
-                      for shell in item.get("electron_shells", [])]
-        for shell in shells:
+            elements = data.get("elements", {})
+            try:
+                z = int(float(element))
+            except ValueError:
+                try:
+                    z = int(bse.lut.element_Z_from_sym(element))
+                except (AttributeError, KeyError):   # unknown symbol
+                    z = None
+            if z is not None and str(z) in elements:
+                entry = elements[str(z)]
+            else:
+                # One element was requested; keep every shell returned.
+                entry = {"electron_shells": [shell for item in elements.values()
+                                             for shell in item.get("electron_shells", [])]}
+                if len(elements) != 1:
+                    z = None
+        atoms.append((z, entry))
+    return atoms, None
+
+
+def _basis_max_l_detail(config: dict[str, Any],
+                        input_dir: str | None = None) -> tuple[int | None, str | None]:
+    """(max L, None), or (None, why) with why = 'basis' when the basis itself
+    cannot be inspected and 'geometry' when the atoms cannot be listed."""
+    atoms, why = _atom_shells(config, input_dir)
+    if atoms is None:
+        return None, why
+    max_l = 0
+    for _, entry in atoms:
+        for shell in entry.get("electron_shells", []):
             max_l = max(max_l, max(int(l) for l in shell.get("angular_momentum", [0])))
     return max_l, None
+
+
+def _is_one_pair_response(config: dict[str, Any], input_dir: str | None = None) -> bool:
+    """True only when the closed-shell response space is one occupied-virtual
+    pair (nocc = 1 and two basis functions, e.g. H2 or HeH+ in STO-3G).
+
+    Any function beyond s already gives three or more basis functions, so the
+    count does not depend on spherical versus Cartesian functions.  Returns
+    False whenever the basis, the geometry or the electron count cannot be
+    read: the caller then keeps requiring two computed roots.
+    """
+    atoms, _ = _atom_shells(config, input_dir)
+    if not atoms or any(z is None for z, _ in atoms):
+        return False
+    try:
+        charge = int(_get(config, "input", "charge", 0))
+    except (TypeError, ValueError):
+        return False
+    nelec = sum(z - int(entry.get("ecp_electrons", 0) or 0) for z, entry in atoms) - charge
+    nbf = 0
+    for _, entry in atoms:
+        for shell in entry.get("electron_shells", []):
+            am = [int(l) for l in shell.get("angular_momentum", [0])]
+            ncontr = len(shell.get("coefficients", [])) if len(am) == 1 else 1
+            nbf += sum(ncontr * (2 * l + 1) for l in am)
+    return nelec == 2 and nbf == 2
 
 
 def _check_hess(config: dict[str, Any], report: CheckReport,
@@ -7631,7 +7688,7 @@ def _check_hess(config: dict[str, Any], report: CheckReport,
         hess_type, _ = resolve_hessian_type(config, input_dir)
 
     if hess_type == "analytical":
-        capability, reason = analytic_hessian_capability(config)
+        capability, reason = analytic_hessian_capability(config, input_dir)
         if capability != "supported":
             report.add(
                 "ERROR",
