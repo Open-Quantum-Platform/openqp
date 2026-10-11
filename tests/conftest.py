@@ -112,9 +112,6 @@ def _import_state():
     }
 
 
-_BASELINE = _import_state()
-
-
 def _import_state_violations(before):
     after = _import_state()
     problems = []
@@ -182,10 +179,13 @@ def _restore_import_state(state):
 @pytest.hookimpl(hookwrapper=True)
 def pytest_make_collect_report(collector):
     """Fail a test module whose import changed the session's import state."""
+    # Compare with the state just before this module, not with the start of
+    # the session: real oqp modules imported by earlier modules must survive.
+    before = _import_state() if isinstance(collector, pytest.Module) else None
     outcome = yield
-    if not isinstance(collector, pytest.Module):
+    if before is None:
         return
-    problems = _import_state_violations(_BASELINE)
+    problems = _import_state_violations(before)
     if not problems:
         return
     report = outcome.get_result()
@@ -193,7 +193,7 @@ def pytest_make_collect_report(collector):
     report.longrepr = ("importing this module changed process-global import state:\n  "
                        + "\n  ".join(problems))
     # Undo it so the error is attributed here and not to every later module.
-    _restore_import_state(_BASELINE)
+    _restore_import_state(before)
 
 
 @pytest.fixture(autouse=True)

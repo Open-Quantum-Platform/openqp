@@ -50,7 +50,13 @@ def isolate_modules(*extra_prefixes):
     def restore():
         for name in [name for name in sys.modules if _in_namespace(name, prefixes)]:
             if name not in snapshot:
-                del sys.modules[name]
+                module = sys.modules.pop(name)
+                # Importing a submodule also binds it on its parent package.
+                # Leave that binding and the next import creates a second
+                # copy while the parent still hands out this one.
+                parent, _, child = name.rpartition(".")
+                if parent and getattr(sys.modules.get(parent), child, None) is module:
+                    delattr(sys.modules[parent], child)
         sys.modules.update(snapshot)
 
     return restore
