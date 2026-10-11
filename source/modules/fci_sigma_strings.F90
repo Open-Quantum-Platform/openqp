@@ -30,6 +30,7 @@ module fci_sigma_strings_mod
 
   use, intrinsic :: iso_c_binding, only: c_int32_t, c_int64_t, c_double
 !$ use omp_lib
+  use blas_thread, only: blas_thread_count, blas_thread_set
   implicit none
   private
   ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
@@ -91,20 +92,29 @@ contains
   !>
   !> Entries per kl are emitted in ascending target order by construction
   !> (the outer loop below runs over targets in order).
-  subroutine build_link_bykl(norb, nstr, strs, nkl, maxper, cnt, tgt, src, sgn)
+  subroutine build_link_bykl(norb, nstr, strs, nkl, maxper, cnt, tgt, src, sgn, status)
     integer, intent(in) :: norb, nkl, maxper
     integer(i8), intent(in) :: nstr
     integer(i8), intent(in) :: strs(nstr)
     integer, intent(out) :: cnt(nkl)
     integer(i8), intent(out) :: tgt(maxper, nkl), src(maxper, nkl)
     real(dp), intent(out) :: sgn(maxper, nkl)
+    integer, intent(out), optional :: status
 
     integer(i8), allocatable :: skeys(:), sperm(:)
     integer(i8) :: t, det1, src_key, s_idx
-    integer :: a, i, kl, slot
+    integer :: a, i, kl, slot, ierr
     real(dp) :: ph
 
-    allocate(skeys(nstr), sperm(nstr))
+    if (present(status)) status = 0
+    allocate(skeys(nstr), sperm(nstr), stat=ierr)
+    if (ierr /= 0) then
+      if (present(status)) then
+        status = -1
+        return
+      end if
+      error stop 'Cannot allocate FCI string index'
+    end if
     call sorted_index(nstr, strs, skeys, sperm)
 
     cnt = 0
@@ -286,7 +296,7 @@ contains
   !> spatial RDMs are
   !>
   !>     d1[p,q]     = sum_D c_D T[D, pq]                      (one DGEMV)
-  !>     d2[p,q,r,s] = sum_D T[D,pq] T[D,rs] - delta_qr d1[p,s]  (one DGEMM)
+  !>     d2[p,q,r,s] = sum_D T[D,qp] T[D,rs] - delta_qr d1[p,s]  (one DSYRK)
   !>
   !> in the same chemists' convention as `rdm2_spatial` (contracts as
   !> 0.5 sum (pq|rs) d2[p,q,r,s]).  This replaces the per-determinant pair
@@ -294,8 +304,9 @@ contains
   !> which is what the CASSCF gradient loop needs -- the general kernels remain
   !> for spin-filtered determinant lists and stay the numerical pin.
   !>
-  !> Nonzero status = the determinant list is not the canonical CAS product
-  !> (or T would not fit); the caller falls back to the walking kernels.
+  !> Positive status = unsupported size or noncanonical CAS product; the
+  !> caller can fall back to the walking kernels. Negative = allocation
+  !> failure, which must propagate without another scratch allocation.
   function rdm12_strings(norb, ndet, dets, civec, d1, d2, nthreads) &
       result(status)
     integer, intent(in) :: norb, nthreads
@@ -305,14 +316,15 @@ contains
     real(dp), intent(inout) :: d1(*), d2(*)
     integer :: status
 
-    integer :: na, nb, nkl, nlink_a, nthr, maxper_b
+    integer :: na, nb, nkl, nlink_a, nthr, maxper_b, npartials
+    integer(i8) :: nblas_save
     integer(i8) :: nastr, nbstr, ia, ib, k, base, srow, drow
     integer(i8) :: e, m
     integer(i8) :: nblk, blk_start, blk_len, nrow, nrow_max, cbase
     integer(i8) :: grow0, growlen
     integer :: gi
-    real(dp), allocatable :: gloc(:, :), dloc(:)
-    integer :: p, q, r, s, pq, rs, t
+    real(dp), allocatable :: gloc(:, :, :), dloc(:, :)
+    integer :: p, q, r, s, pq, rs, t, ierr
     real(dp) :: sgn
     integer(i8), allocatable :: astr(:), bstr(:)
     integer, allocatable :: ntab_a(:)
@@ -325,7 +337,9 @@ contains
     real(dp), allocatable :: tmat(:, :), gram(:, :)
 
     status = 1
-    if (norb <= 0 .or. ndet <= 0_i8) return
+    ! Two spin strings must fit the supported 62-bit determinant encoding.
+    ! Check before any bit shift or reference to dets(1).
+    if (norb <= 0 .or. norb > 31 .or. ndet <= 0_i8) return
     na = popcnt(iand(dets(1), shiftl(1_i8, norb) - 1_i8))
     nb = popcnt(shiftr(dets(1), norb))
 
@@ -336,7 +350,11 @@ contains
 
     nkl = norb * norb
 
-    allocate(astr(nastr), bstr(nbstr))
+    allocate(astr(nastr), bstr(nbstr), stat=ierr)
+    if (ierr /= 0) then
+      status = -1
+      return
+    end if
     call string_basis(norb, na, nastr, astr)
     call string_basis(norb, nb, nbstr, bstr)
     k = 0_i8
@@ -352,8 +370,16 @@ contains
 
     nlink_a = max(1, na * (norb - na) + na)
     allocate(ntab_a(nastr), kl_a(nlink_a, nastr), src_a(nlink_a, nastr), &
-             sgn_a(nlink_a, nastr))
-    call build_link_table(norb, nastr, astr, nlink_a, ntab_a, kl_a, src_a, sgn_a)
+             sgn_a(nlink_a, nastr), stat=ierr)
+    if (ierr /= 0) then
+      status = -1
+      return
+    end if
+    call build_link_table(norb, nastr, astr, nlink_a, ntab_a, kl_a, src_a, sgn_a, ierr)
+    if (ierr /= 0) then
+      status = -1
+      return
+    end if
     ! Beta uses the kl-major table for the same reason the sigma does: a beta
     ! excitation moves a single row, so a target-indexed walk writes tmat with
     ! stride ndet and read-modify-writes every element.  Grouped by the
@@ -361,9 +387,17 @@ contains
     ! rows, and the civec reads stay inside one alpha block.
     maxper_b = int(min(nbstr, binom(norb - 1, nb - 1) + binom(norb - 2, nb - 1)))
     allocate(cnt_b(nkl), tgt_b(max(maxper_b, 1), nkl), &
-             src_bk(max(maxper_b, 1), nkl), sgn_bk(max(maxper_b, 1), nkl))
+             src_bk(max(maxper_b, 1), nkl), sgn_bk(max(maxper_b, 1), nkl), stat=ierr)
+    if (ierr /= 0) then
+      status = -1
+      return
+    end if
     call build_link_bykl(norb, nbstr, bstr, nkl, max(maxper_b, 1), cnt_b, &
-                         tgt_b, src_bk, sgn_bk)
+                         tgt_b, src_bk, sgn_bk, ierr)
+    if (ierr /= 0) then
+      status = -1
+      return
+    end if
 
     nthr = max(1, nthreads)
 
@@ -378,7 +412,26 @@ contains
     nblk = max(1_i8, work_bytes_cap / max(nbstr * int(nkl, i8) * 8_i8, 1_i8))
     nblk = min(nblk, nastr)
     nrow_max = nblk * nbstr
-    allocate(tmat(nrow_max, nkl), gram(nkl, nkl))
+    nthr = int(min(int(nthr, i8), nrow_max))
+    npartials = nthr
+    if (nrow_max * int(nkl, i8) < par_min_elems) npartials = 1
+    ! Allocate every owned buffer before changing the caller's BLAS setting.
+    ! On failure local allocatables are released on return, including any
+    ! objects allocated before a later object in the same ALLOCATE failed.
+    allocate(tmat(nrow_max, nkl), gram(nkl, nkl), &
+             gloc(nkl, nkl, npartials), dloc(nkl, npartials), stat=ierr)
+    if (ierr /= 0) then
+      status = -1
+      return
+    end if
+
+    ! Each OpenMP worker contracts its own row interval.  A threaded BLAS
+    ! pool inside those workers would oversubscribe the caller's CPU budget.
+    ! All declining returns precede this change of the caller's setting.
+    ! Serialize overlapping RDM calls while they own the process-wide setting.
+    !$omp critical(rdm_blas_thread_guard)
+    nblas_save = blas_thread_count()
+    if (nblas_save > 0_i8) call blas_thread_set(1_i8)
 
     ! The leading dimension stays nrow_max for every block; a short final block
     ! just passes a smaller row count to BLAS, which reads A(1:k, :) with the
@@ -442,33 +495,29 @@ contains
       ! thread needs private partials that are summed at the end.  The partials
       ! are only nact^2 (plus nact^4 for the Gram), which is negligible beside
       ! T itself.
-      !$omp parallel num_threads(nthr) default(shared) &
-      !$omp   private(gi, grow0, growlen, gloc, dloc) &
-      !$omp   if(nrow * int(nkl, i8) >= par_min_elems)
-      allocate(gloc(nkl, nkl), dloc(nkl))
       gloc = 0.0_dp
       dloc = 0.0_dp
-      !$omp do schedule(static)
-      do gi = 0, nthr - 1
-        grow0 = (nrow * int(gi, i8)) / int(nthr, i8)
-        growlen = (nrow * int(gi + 1, i8)) / int(nthr, i8) - grow0
+      !$omp parallel do num_threads(nthr) default(shared) &
+      !$omp   private(gi, grow0, growlen) &
+      !$omp   if(nrow * int(nkl, i8) >= par_min_elems)
+      do gi = 0, npartials - 1
+        grow0 = (nrow * int(gi, i8)) / int(npartials, i8)
+        growlen = (nrow * int(gi + 1, i8)) / int(npartials, i8) - grow0
         if (growlen > 0_i8) then
           call dgemv('T', int(growlen), nkl, 1.0_dp, tmat(grow0 + 1_i8, 1), &
                      int(nrow_max), civec(cbase + grow0 + 1_i8), 1, &
-                     1.0_dp, dloc, 1)
+                     1.0_dp, dloc(1, gi + 1), 1)
           call dsyrk('U', 'T', nkl, int(growlen), 1.0_dp, &
-                     tmat(grow0 + 1_i8, 1), int(nrow_max), 1.0_dp, gloc, nkl)
+                     tmat(grow0 + 1_i8, 1), int(nrow_max), 1.0_dp, gloc(1, 1, gi + 1), nkl)
         end if
       end do
-      !$omp end do
-      !$omp critical(rdm_reduce)
-      do t = 1, nkl
-        d1(int(t, i8)) = d1(int(t, i8)) + dloc(t)
-        gram(1:t, t) = gram(1:t, t) + gloc(1:t, t)
+      !$omp end parallel do
+      do gi = 1, npartials
+        do t = 1, nkl
+          d1(int(t, i8)) = d1(int(t, i8)) + dloc(t, gi)
+          gram(1:t, t) = gram(1:t, t) + gloc(1:t, t, gi)
+        end do
       end do
-      !$omp end critical(rdm_reduce)
-      deallocate(gloc, dloc)
-      !$omp end parallel
 
       blk_start = blk_start + blk_len
     end do
@@ -504,7 +553,9 @@ contains
     end do
 
     deallocate(astr, bstr, ntab_a, kl_a, src_a, sgn_a, &
-               cnt_b, tgt_b, src_bk, sgn_bk, tmat, gram)
+               cnt_b, tgt_b, src_bk, sgn_bk, tmat, gram, gloc, dloc)
+    if (nblas_save > 0_i8) call blas_thread_set(nblas_save)
+    !$omp end critical(rdm_blas_thread_guard)
     status = 0
   end function rdm12_strings
 
@@ -515,7 +566,7 @@ contains
   !> the target is what lets both the gather and the scatter run with disjoint
   !> writes: for a fixed target every write lands in that target's own slice.
   subroutine build_link_table(norb, nstr, strs, maxlink, ntab, &
-                              tab_kl, tab_src, tab_sgn)
+                              tab_kl, tab_src, tab_sgn, status)
     integer, intent(in) :: norb, maxlink
     integer(i8), intent(in) :: nstr
     integer(i8), intent(in) :: strs(nstr)
@@ -523,14 +574,23 @@ contains
     integer, intent(out) :: tab_kl(maxlink, nstr)
     integer(i8), intent(out) :: tab_src(maxlink, nstr)
     real(dp), intent(out) :: tab_sgn(maxlink, nstr)
+    integer, intent(out), optional :: status
 
     integer(i8), allocatable :: skeys(:), sperm(:)
     integer(i8) :: src, tgt_key, det1
-    integer :: a, i, slot
+    integer :: a, i, slot, ierr
     integer(i8) :: tgt
     real(dp) :: sgn
 
-    allocate(skeys(nstr), sperm(nstr))
+    if (present(status)) status = 0
+    allocate(skeys(nstr), sperm(nstr), stat=ierr)
+    if (ierr /= 0) then
+      if (present(status)) then
+        status = -1
+        return
+      end if
+      error stop 'Cannot allocate FCI string index'
+    end if
     call sorted_index(nstr, strs, skeys, sperm)
 
     ntab = 0

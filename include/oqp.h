@@ -425,8 +425,9 @@ void rdm1_spatial(int32_t norb, int64_t ndet, const int64_t *dets,
 int64_t rdm2_spatial(int32_t norb, int64_t ndet, const int64_t *dets,
     const double *civec, int64_t cap, double *d2, int32_t nthreads);
 /* String-factorized spatial d1+d2 of one CI vector on the canonical CAS
- * product determinant list (fci_sigma_strings.F90); nonzero status = the list
- * is not the canonical product, fall back to the walking kernels above. */
+ * product determinant list (fci_sigma_strings.F90). Returns 0 on success,
+ * positive status for an unsupported size/list (walking fallback), and -1
+ * on scratch allocation failure (propagate, do not allocate a fallback). */
 int64_t rdm12_strings_c(int32_t norb, int64_t ndet, const int64_t *dets,
     const double *civec, double *d1, double *d2, int32_t nthreads);
 /* Spin-free dm1..dm4 (PySCF make_dm1234 convention) from the determinant CI

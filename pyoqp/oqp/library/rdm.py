@@ -125,15 +125,12 @@ def _lib_rdm2_spatial(coeff, dets, norb):
 def make_rdm12_spatial_strings(coeff, dets, norb):
     """Spatial (d1, d2) through the string-factorized engine, or ``None``.
 
-    O(ndet nact^2) table work plus one DGEMM against the Gram-matrix walk's
-    O(ndet nelec^2 nact^2) scalar enumeration -- milliseconds against tens of
-    seconds at CAS(12,12).  The result agrees with ``make_rdm1_spatial`` /
-    ``make_rdm2_spatial`` to round-off but NOT bit for bit (the reduction is
-    reassociated), so this is a separate entry point: callers that only need
-    correct RDMs (bulk per-state record storage, optimization loops) opt in,
-    while the bit-pinned seam above stays exactly what it was.  Returns
-    ``None`` for non-product determinant lists or when the engine is absent;
-    callers fall back to the pinned builders.
+    The contraction uses spin-summed single-excitation coefficients. Its
+    summation order differs from the Gram builders, so this explicit entry
+    point agrees to round-off rather than bit for bit. The default builders
+    retain their existing summation order. Returns ``None`` for non-product
+    determinant lists or when the engine is absent. An allocation failure
+    raises ``MemoryError``; it must not trigger a larger fallback allocation.
     """
     backend = _rdm_backend()
     if backend is None or 2 * norb > 62:
@@ -155,6 +152,8 @@ def make_rdm12_spatial_strings(coeff, dets, norb):
         ffi.cast("double *", d1.ctypes.data),
         ffi.cast("double *", d2.ctypes.data),
         _rdm_lib_threads())
+    if int(info) < 0:
+        raise MemoryError("Cannot allocate string-factorized RDM scratch")
     if int(info) != 0:
         return None
     return d1, d2
