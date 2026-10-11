@@ -729,6 +729,54 @@ class SinglePoint(Calculator):
             for i, j in zip(swapmo_array[::2], swapmo_array[1::2]):
                 og_val[[i - 1, j - 1]] = og_val[[j - 1, i - 1]]
                 og_vec[[i - 1, j - 1]] = og_vec[[j - 1, i - 1]]
+            # A supplied guess (JSON, resident orbitals) is a solution in its
+            # own right and may be accepted on the first build, so its density
+            # must belong to the swapped orbitals. A computed guess only starts
+            # the iterations; there the swap names the occupation that
+            # rstctmo/MOM follow from the guess density, which is left as it is
+            # (the delta-CHP core-hole examples converge from that start).
+            from oqp.library.guess import GUESS_SUPPLIED
+            if int(self.mol.data._data.control.guess) == GUESS_SUPPLIED:
+                self._rebuild_guess_density()
+
+    def _rebuild_guess_density(self):
+        """Rebuild the guess densities from the (swapped) supplied orbitals.
+
+        A supplied guess carries its own OQP::DM_A/DM_B, read before swapmo
+        runs, and the SCF may accept orbitals and density together on its
+        first build.  Swapping only the orbital rows left a density of the
+        unswapped occupation next to orbitals of the swapped one: a JSON
+        ground state with swapmo=1,6 converged on the first build at the
+        ground-state energy while publishing core-hole orbitals.  Same occupation
+        convention as get_ab_initio_density (source/guess.F90): RHF DM_A is the
+        doubly occupied total density, ROHF builds both spins from the alpha
+        orbitals, UHF from its own spin orbitals.  swapmo acts on the alpha
+        set, so RHF/ROHF beta orbitals follow it.
+        """
+        data = self.mol.data
+        ctrl = data._data.control
+        prop = data._data.mol_prop
+        scftype = int(ctrl.scftype)
+        na, nb, nocc = int(prop.nelec_A), int(prop.nelec_B), int(prop.nocc)
+        vec_a = data["OQP::VEC_MO_A"]                    # rows are MOs
+        nbf = vec_a.shape[1]
+        tril = np.tril_indices(nbf)
+
+        def packed(vec, nel, occ):
+            occupied = vec[:nel]
+            return (occ * occupied.T @ occupied)[tril]
+
+        if scftype in (1, 3):
+            data["OQP::VEC_MO_B"][:] = vec_a
+            data["OQP::E_MO_B"][:] = data["OQP::E_MO_A"]
+        dm_a = data["OQP::DM_A"]
+        dm_b = data["OQP::DM_B"]
+        if scftype == 1:
+            dm_a[:] = packed(vec_a, nocc, 2.0).reshape(dm_a.shape)
+            return
+        dm_a[:] = packed(vec_a, na, 1.0).reshape(dm_a.shape)
+        vec_b = vec_a if scftype == 3 else data["OQP::VEC_MO_B"]
+        dm_b[:] = packed(vec_b, nb, 1.0).reshape(dm_b.shape)
 
     def reference(self, do_init_scf=True):
         if is_tb_method(self.method):
