@@ -88,10 +88,31 @@ def test_signed_couplings_and_energy_match_dense(tmp_path, monkeypatch, engine, 
             assert stream is not None, "missing native direct contraction"
             a, b, e0, v = stream
             positions = np.array([index[int(x) | (int(y) << norb)] for x, y in zip(a, b)])
+            assert set(positions).issubset(set(external))
+            coupled = set(external[np.abs((hfull @ vec)[external]) > 1e-12])
+            assert coupled.issubset(set(positions))
             dense_v = (hfull @ vec)[positions]
             assert np.any(dense_v < -1e-8) and np.any(dense_v > 1e-8)
             np.testing.assert_allclose(v[0], dense_v, rtol=0, atol=1e-10)
             np.testing.assert_allclose(e0, h0.diagonal[positions], rtol=0, atol=1e-10)
+        # Pin the NumPy enumerator independently, including completeness of
+        # the coupled external space and the sign after reference contraction.
+        a, b, val, e0, src = direct._stream_all(
+            h1e, eri, eps, norb, nc, na, ka, kb, 1)
+        merged = {}
+        for x, y, coupling, energy, source in zip(a, b, val, e0, src):
+            position = index[int(x) | (int(y) << norb)]
+            assert position in external
+            old_v, old_e = merged.get(position, (0.0, energy))
+            assert abs(old_e - energy) < 1e-10
+            merged[position] = (old_v + coupling * c[int(source), 0], energy)
+        coupled = set(external[np.abs((hfull @ vec)[external]) > 1e-12])
+        assert coupled.issubset(merged)
+        positions = np.array(list(merged), dtype=int)
+        np.testing.assert_allclose([merged[i][0] for i in positions],
+                                   (hfull @ vec)[positions], rtol=0, atol=1e-10)
+        np.testing.assert_allclose([merged[i][1] for i in positions],
+                                   h0.diagonal[positions], rtol=0, atol=1e-10)
         np.testing.assert_allclose(result["e2"][0], expected_e2, rtol=0, atol=1e-10)
         assert np.linalg.norm(expected_v) > 1e-6
         captured["e2"] = expected_e2
@@ -142,7 +163,8 @@ def test_repeated_molecules_frozen_core_and_excited_root(tmp_path, engine):
         np.testing.assert_allclose(results[1], results[0], rtol=0, atol=1e-9)
 
 
-def test_direct_guards_are_explicit_errors(tmp_path):
+@pytest.mark.parametrize("engine", ["direct", "fortran"])
+def test_direct_guards_are_explicit_errors(tmp_path, engine):
     from oqp.library.qdpt2_direct import direct_qdpt2
 
     with pytest.raises(ValueError, match="63 orbitals"):
@@ -150,7 +172,7 @@ def test_direct_guards_are_explicit_errors(tmp_path):
                       (0, 0), 64, 0, [0], SimpleNamespace(ipea_shift=0), False)
     with pytest.raises(ValueError, match="max_terms"):
         _run_caspt2(tmp_path, "term_guard", system=_H4, basis="sto-3g",
-                    cas=_CAS, pt2={"reference": "casci", "engine": "direct",
+                    cas=_CAS, pt2={"reference": "casci", "engine": engine,
                                   "max_terms": "1", "nproc": "1"})
 
 
@@ -175,3 +197,27 @@ def test_word_boundary_empty_external_and_memory_budget():
     with pytest.raises(ValueError, match="max_memory"):
         _stream_fortran(h, g, eps, n, 0, 4, word, word,
                          coeffs, 30_000_000, 1, max_memory=1)
+
+
+@pytest.mark.parametrize("engine", ["direct", "fortran"])
+def test_casscf_reference_matches_dense(tmp_path, engine):
+    results = []
+    for route in ("dense", engine):
+        runner = _run_caspt2(tmp_path, "casscf_" + route, system=_H4,
+                             basis="sto-3g", cas=_CAS,
+                             pt2={"reference": "casscf", "engine": route,
+                                  "nproc": "1"})
+        results.append(np.asarray(runner.mol.energies, dtype=float))
+    np.testing.assert_allclose(results[1], results[0], rtol=0, atol=1e-9)
+
+
+def test_explicit_fortran_refuses_missing_kernel(tmp_path, monkeypatch):
+    from oqp.library import qdpt2_direct
+
+    # The bridge returns None when the export is absent; the caller must fail
+    # rather than silently substituting the NumPy engine.
+    monkeypatch.setattr(qdpt2_direct, "_stream_fortran", lambda *a, **k: None)
+    with pytest.raises(RuntimeError, match="lacks qdpt2_stream_kernel"):
+        _run_caspt2(tmp_path, "missing_native", system=_H4, basis="sto-3g",
+                    cas=_CAS, pt2={"reference": "casci", "engine": "fortran",
+                                  "nproc": "1"})
