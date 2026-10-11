@@ -187,6 +187,12 @@ contains
     logical :: vshift_last_iter    ! Flag for last iteration with vshift
     logical :: fock_shifted        ! A level shift entered some Fock of this SCF
     logical :: probe_failed        ! The zero-VSHIFT build missed conv; DIIS restarts next build
+    logical :: aufbau_lost         ! The zero-VSHIFT build converged on a non-aufbau occupation
+    logical :: release_occ         ! Next orbitals: aufbau eigenvectors of fock_release
+    integer :: lost_flag(1)
+    real(kind=dp), allocatable :: fock_release(:,:)
+    logical :: soscf_dummy, trah_dummy
+    real(kind=dp) :: vshift_dummy
 
     !==============================================================================
     ! MOM (Maximum Overlap Method) Parameters
@@ -467,6 +473,8 @@ contains
     vshift_last_iter = .false.
     fock_shifted = .false.
     probe_failed = .false.
+    aufbau_lost = .false.
+    release_occ = .false.
 
     !==============================================================================
     ! Initialize SCF Calculation
@@ -1133,9 +1141,60 @@ contains
       !  - shift_applied after iteration 1: V-DIIS zeroes vshift only after the
       !    build, so this Fock can still carry the shift; only the iteration-1
       !    exit keeps an unshifted copy (fock_noshift). Build once more.
+      !  - aufbau_lost: the level shift raises the virtuals of the orbitals in
+      !    hand, so it holds whatever occupation the guess started from, and
+      !    FDS - SDF is small at any stationary point, aufbau or not. The
+      !    zero-VSHIFT build is accepted only when the occupied space is that
+      !    of its own Fock (UHF triplet H2O/6-31G PBE, vshift 0.3: alpha b2
+      !    held above an empty a1, -75.9351 Eh instead of -76.0144 Eh).
+      !    MOM/rstctmo choose a non-aufbau occupation on purpose and pFON has
+      !    no integer one; TRAH applies no shift.
+      aufbau_lost = .false.
+      if (vshift_last_iter .and. (abs(diis_error) < infos%control%conv) .and. &
+          .not. (do_mom .or. do_rstctmo .or. do_pfon .or. use_trah)) then
+        if (.not. allocated(fock_release)) allocate(fock_release(nbf_tri, nfocks))
+        fock_release = pfock(:,1:nfocks)
+        ! ROHF: only the DIIS path forms the effective Fock on every build.
+        if (scf_type == scf_rohf .and. .not. do_check) &
+          call form_rohf_fock(fock_release(:,1), fock_release(:,2), mo_a, smat_full, &
+                              nelec_a, nelec_b, nbf, 0.0_dp, work1, work2)
+        lost_flag = 0
+        if (int2_driver%pe%rank == 0) then
+          select case (scf_type)
+          case (scf_rhf)
+            aufbau_lost = occupied_space_lost(fock_release(:,1), mo_a, nelec/2, &
+                                              qmat, smat_full, nbf)
+          case (scf_uhf)
+            aufbau_lost = occupied_space_lost(fock_release(:,1), mo_a, nelec_a, &
+                                              qmat, smat_full, nbf) .or. &
+                          occupied_space_lost(fock_release(:,2), mo_b, nelec_b, &
+                                              qmat, smat_full, nbf)
+          case (scf_rohf)
+            ! Not the effective Fock: its ordering of open-shell and virtual
+            ! orbitals depends on the canonicalisation, and a SOMO with an
+            ! empty degenerate partner (NO pi*) would flip at every probe. The
+            ! alpha and beta electrons must fill the lowest orbitals of their
+            ! own spin Fock (rohf_bak holds them on the DIIS path).
+            if (do_check) then
+              aufbau_lost = occupied_space_lost(rohf_bak(:,1), mo_a, nelec_a, &
+                                                qmat, smat_full, nbf) .or. &
+                            occupied_space_lost(rohf_bak(:,2), mo_a, nelec_b, &
+                                                qmat, smat_full, nbf)
+            else
+              aufbau_lost = occupied_space_lost(pfock(:,1), mo_a, nelec_a, &
+                                                qmat, smat_full, nbf) .or. &
+                            occupied_space_lost(pfock(:,2), mo_a, nelec_b, &
+                                                qmat, smat_full, nbf)
+            end if
+          end select
+          if (aufbau_lost) lost_flag = 1
+        end if
+        call int2_driver%pe%bcast(lost_flag, 1)
+        aufbau_lost = lost_flag(1) == 1
+      end if
       if ((abs(diis_error) < infos%control%conv) .and. (vshift == 0.0_dp) &
           .and. (.not. ps_force_iter) .and. (.not. xc_reuse_now) &
-          .and. (.not. cold_first_iter) &
+          .and. (.not. cold_first_iter) .and. (.not. aufbau_lost) &
           .and. .not. (shift_applied .and. iter > 1 .and. .not. (use_soscf .or. use_trah))) then
         ! Fully converged - exit loop (pFON: only once annealed to ~1 K).
         ! The pFON exit goes through the same orbital-energy steps below as
@@ -1200,6 +1259,16 @@ contains
         write(IW,"(3x,64('-')/10x,'Performing a last SCF with zero VSHIFT.')")
         vshift_last_iter = .true.
         vshift = 0.0_dp
+      elseif (vshift_last_iter .and. aufbau_lost) then
+        ! The zero-shift build is stationary, but its occupied orbitals are not
+        ! the lowest of its own Fock: the shift had held the guess occupation.
+        ! Take the next orbitals from this Fock by aufbau and converge again
+        ! with the shift from there (DIIS restarts as below; SOSCF restarts).
+        write(IW,"(3x,64('-')/10x,'Zero-VSHIFT build is not aufbau; occupation released, level shift restored.')")
+        vshift_last_iter = .false.
+        vshift = infos%control%vshift
+        release_occ = .true.
+        if (.not. (use_soscf .or. use_trah)) probe_failed = .true.
       elseif (vshift_last_iter .and. (abs(diis_error) >= infos%control%conv)) then
         ! The zero-shift build missed the tolerance: the shifted run had only
         ! dipped below it. Restore the shift and keep iterating; leaving the
@@ -1248,7 +1317,27 @@ contains
       !----------------------------------------------------------------------------
       ! Update Fock or Orbitals and Eigenvalues Based on Active Converger
       !----------------------------------------------------------------------------
-      if (use_soscf .and. trim(conv_res%active_converger_name) == 'SOSCF') then
+      if (release_occ) then
+        ! Aufbau orbitals of the unshifted zero-VSHIFT build (see aufbau_lost).
+        if (int2_driver%pe%rank == 0) then
+          call get_ab_initio_orbital(fock_release(:,1), mo_a, mo_energy_a, qmat)
+          if (scf_type == scf_uhf .and. nelec_b /= 0) then
+            call get_ab_initio_orbital(fock_release(:,2), mo_b, mo_energy_b, qmat)
+          elseif (scf_type == scf_rohf) then
+            mo_b = mo_a
+            mo_energy_b = mo_energy_a
+          end if
+        end if
+        ! SOSCF holds a quasi-Newton history of the released state; start over.
+        if (use_soscf) then
+          vshift_dummy = vshift
+          call conv%clean()
+          call init_scf_converger(infos, molGrid, conv, nbf, nelec_a, nelec_b, &
+                                  maxdiis, diis_nfocks, soscf_nfocks, &
+                                  smat_full, qmat, vshift_dummy, soscf_dummy, trah_dummy)
+        end if
+        release_occ = .false.
+      else if (use_soscf .and. trim(conv_res%active_converger_name) == 'SOSCF') then
         ! SOSCF: Retrieve updated MOs and energies directly
         ! Note: Fock matrix is fixed in SOSCF;
         !       rebuilt in next iteration,
@@ -2203,6 +2292,33 @@ contains
   end function orthonormal_orbitals
 
   !> Evaluate diag(C^T F C) for supplied orbitals and the current AO Fock.
+  !> @brief True when the aufbau occupied orbitals of a Fock matrix do not
+  !>        span the first nocc orbitals in hand (at least one orbital lost).
+  !> @detail captured = || C_F(:,1:nocc)^T S C(:,1:nocc) ||_F^2 equals nocc for
+  !>         the same occupied space and drops by one per exchanged orbital;
+  !>         half an orbital separates the two.
+  function occupied_space_lost(fock, mo, nocc, qmat, smat_full, nbf) result(lost)
+    use precision, only: dp
+    use guess, only: get_ab_initio_orbital
+    use oqp_linalg
+
+    implicit none
+
+    real(kind=dp), intent(in) :: fock(:), mo(:,:), qmat(:,:), smat_full(:,:)
+    integer, intent(in) :: nocc, nbf
+    logical :: lost
+    real(kind=dp), allocatable :: c(:,:), e(:), f(:), sc(:,:), ov(:,:)
+
+    lost = .false.
+    if (nocc <= 0) return
+    allocate(c(nbf,nbf), e(nbf), sc(nbf,nocc), ov(nocc,nocc))
+    f = fock
+    call get_ab_initio_orbital(f, c, e, qmat)
+    call dgemm('n', 'n', nbf, nocc, nbf, 1.0_dp, smat_full, nbf, mo, nbf, 0.0_dp, sc, nbf)
+    call dgemm('t', 'n', nocc, nocc, nbf, 1.0_dp, c, nbf, sc, nbf, 0.0_dp, ov, nocc)
+    lost = sum(ov**2) < real(nocc, dp) - 0.5_dp
+  end function occupied_space_lost
+
   subroutine fock_diagonal_energies(fock, mo, mo_e, nbf)
     use precision, only: dp
     use mathlib, only: unpack_matrix
