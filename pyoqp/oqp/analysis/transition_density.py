@@ -210,3 +210,4 @@ class MRSFExcitedStates:
                     tmp += scal * xj[j, k] * xi[i, k]
                 trd[i, j] -= tmp
         return trd
+# CI selection probe (PR to be closed, never merged).
