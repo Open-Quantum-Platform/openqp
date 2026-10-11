@@ -544,8 +544,8 @@ contains
     logical, intent(out), optional :: used_lu
     real(dp) :: lu(size(s,1),size(s,1)), inverse(size(s,1),size(s,1))
     real(dp) :: work(4*size(s,1))
-    integer :: piv(size(s,1)), iwork(size(s,1)), n, info, i, j
-    real(dp) :: anorm, rcond, det, logdet
+    integer :: piv(size(s,1)), iwork(size(s,1)), n, info, i, j, det_exponent
+    real(dp) :: anorm, rcond, det, det_fraction, product
     real(dp), parameter :: cofactor_rtol = 2.0e-13_dp
     logical :: safe
 
@@ -578,20 +578,24 @@ contains
       safe = safe .and. rcond > 8.0_dp*real(n,dp)*epsilon(1.0_dp)/cofactor_rtol
     end if
     if (safe) then
-      logdet = 0.0_dp
+      det_fraction = 1.0_dp
+      det_exponent = 0
       do i = 1, n
-        logdet = logdet + log(abs(lu(i,i)))
+        product = det_fraction * fraction(abs(lu(i,i)))
+        det_exponent = det_exponent + exponent(abs(lu(i,i))) + exponent(product)
+        det_fraction = fraction(product)
       end do
       ! An underflowed determinant times a large inverse loses finite minors.
-      safe = logdet > log(tiny(1.0_dp)) .and. logdet < log(huge(1.0_dp))
+      safe = det_exponent >= minexponent(1.0_dp) .and. det_exponent <= maxexponent(1.0_dp)
     end if
     ! Normalized orbital overlaps are bounded by one. Larger arbitrary input
     ! scales can underflow inverse entries before determinant multiplication;
     ! use minors there (allow a factor of two for roundoff/test matrices).
     safe = safe .and. maxval(abs(s)) <= 2.0_dp
     if (safe) then
-      ! Form the magnitude from its logarithm to avoid intermediate underflow.
-      det = exp(logdet)
+      ! Binary scaling avoids intermediate underflow without the accumulated
+      ! logarithm/exponential error of many small, otherwise safe pivots.
+      det = scale(det_fraction, det_exponent)
       inverse = 0.0_dp
       do i = 1, n
         if (piv(i) /= i) det = -det

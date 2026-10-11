@@ -123,6 +123,29 @@ def test_near_dependent_nonsymmetric_overlap_uses_exact_minors():
     np.testing.assert_allclose(actual, _cofactors(s), rtol=2e-13, atol=1e-315)
 
 
+def test_accuracy_guard_accounts_for_matrix_dimension():
+    s = np.eye(3)
+    s[:2, :2] = [[1.0, 0.25], [0.0, 0.025]]
+    # The same rcond=0.020 accepted at n=2 exceeds the n=3 error budget.
+    actual, previous, used = _call(s)
+    assert not used
+    np.testing.assert_array_equal(actual, previous)
+    np.testing.assert_allclose(actual, _cofactors(s), rtol=2e-13, atol=1e-315)
+
+
+def test_small_pivot_product_does_not_accumulate_logarithm_error():
+    n = 20
+    pivot = 1e-15
+    actual, previous, used = _call(pivot * np.eye(n))
+    assert used
+    with localcontext() as ctx:
+        ctx.prec = 80
+        diagonal = float(Decimal(pivot) ** (n - 1))
+    np.testing.assert_allclose(np.diag(actual), diagonal, rtol=2e-13, atol=1e-315)
+    np.testing.assert_allclose(actual, previous, rtol=2e-13, atol=1e-315)
+    np.testing.assert_array_equal(actual - np.diag(np.diag(actual)), np.zeros((n, n)))
+
+
 def test_tiny_minor_pivot_preserves_previous_permutation():
     # The old minor ordering produces a tiny pivot even though the natural
     # Leibniz cofactor is subnormal. Keep the existing numerical contract.
