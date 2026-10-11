@@ -30,6 +30,9 @@ module tdhf_gradient_mod
     real(kind=dp), allocatable :: d_cart(:,:), p_cart(:,:), xpy_cart(:,:), xmy_cart(:,:)
     integer, allocatable :: cart_off(:)
     integer :: nbf = 0
+    !> .false. for the closed-shell triplet: the (X+Y)(X+Y) Coulomb term
+    !> vanishes for a spin-antisymmetric transition density
+    logical :: xpy_coulomb = .true.
   contains
     procedure :: init => grd2_tdhf_compute_data_t_init
     procedure :: clean => grd2_tdhf_compute_data_t_clean
@@ -74,7 +77,8 @@ contains
     use mod_dft, only: dft_initialize, dftclean
     use mathlib, only: symmetrize_matrix, orthogonal_transform
     use mod_dft_molgrid, only: dft_grid_t
-    use mod_dft_gridint_tdxc_grad, only: tddft_xc_gradient
+    use mod_dft_gridint_tdxc_grad, only: tddft_xc_gradient, utddft_xc_gradient
+    use tdhf_z_vector_mod, only: td_xc_spin_mode
     use mathlib, only: unpack_matrix
     use printing, only: print_module_info
 
@@ -90,7 +94,8 @@ contains
     type(dft_grid_t) :: molGrid
 
   ! General data
-    logical :: dft
+    logical :: dft, triplet, xc_unrestricted
+    real(kind=dp) :: xc_beta_sign
     integer :: scf_type, mol_mult
 
     real(kind=dp), allocatable :: p(:,:,:), d(:,:,:), xpy2(:,:,:), xmy2(:,:,:), wrk1(:,:), wrk2(:,:)
@@ -181,6 +186,49 @@ contains
       ! response of the normalized partition weights and the motion of each grid
       ! slice with its owner atom.  include_weight_derivative adds both for the
       ! reference XC energy, the relaxed linear probe and the f_xc term.
+      call td_xc_spin_mode(infos, triplet, xc_unrestricted, xc_beta_sign)
+      if (xc_unrestricted) then
+        ! Closed-shell triplet: spin-antisymmetric X+Y (xb = -xa) in the
+        ! f_xc gradient term; D and P are spin-symmetric (alpha = beta).
+        ! xc_beta_sign = +1 (test hook) must reproduce the restricted call.
+        ! (A) ground state and relaxed probe P: spin-symmetric, restricted
+        !     kernel, with the moving-grid response (no f_xc term here).
+        call tddft_xc_gradient(basis=basis, &
+               molGrid=molGrid, &
+               dedft=infos%atoms%grad, &
+               da=d(:,:,1), &
+               pa=p(:,:,1:1), &
+               nmtx=1, &
+               threshold=1.0d-14, &
+               infos=infos, &
+               include_weight_derivative=.true.)
+        ! (B) f_xc term of the spin-resolved X+Y (xb = xc_beta_sign * xa),
+        !     with its moving-grid response; P = 0 and no ground state, so
+        !     nothing of (A) is counted twice.  utddft_xc_gradient scales its
+        !     density arguments in place, hence the copies.
+        block
+          real(kind=dp), allocatable :: gd(:,:,:), gp(:,:,:), gx(:,:,:)
+          allocate(gd(nbf,nbf,2), gp(nbf,nbf,2), gx(nbf,nbf,2), source=0.0_dp)
+          ! OQP_DM_A of an RHF reference holds the total density (twice the
+          ! alpha one, see the 0.5*grad_d of the restricted XC gradient path);
+          ! the spin-resolved call needs the per-spin densities.
+          gd(:,:,1) = 0.5_dp*d(:,:,2)
+          gd(:,:,2) = 0.5_dp*d(:,:,2)
+          gx(:,:,1) = xpy2(:,:,1)
+          gx(:,:,2) = xc_beta_sign*xpy2(:,:,1)
+          call utddft_xc_gradient(basis=basis, &
+                 molGrid=molGrid, &
+                 dedft=infos%atoms%grad, &
+                 da=gd(:,:,1), db=gd(:,:,2), &
+                 pa=gp(:,:,1:1), pb=gp(:,:,2:2), &
+                 xa=gx(:,:,1:1), xb=gx(:,:,2:2), &
+                 nMtx=1, &
+                 threshold=1.0d-14, &
+                 infos=infos, &
+                 include_ground_state=.false., &
+                 include_weight_derivative=.true.)
+        end block
+      else
       call tddft_xc_gradient(basis=basis, &
              molGrid=molGrid, &
              dedft=infos%atoms%grad, &
@@ -191,6 +239,7 @@ contains
              threshold=1.0d-14, &
              infos=infos, &
              include_weight_derivative=.true.)
+      end if
       call dftclean(infos)
       call measure_time(print_total=1, log_unit=iw)
       call flush(iw)
@@ -335,6 +384,7 @@ contains
                                      , xmy2 = xmy &
                                      , hfscale = hfscale &
                                      , nbf = basis%nbf &
+                                     , xpy_coulomb = infos%tddft%mult /= 3 &
       ))
 
     call gcomp%init()
@@ -477,6 +527,7 @@ contains
 
             coul3 = d(i,j) *   d(k,l)
 
+            if (.not. this%xpy_coulomb) coul2 = 0.0_dp
             coul = 2*coul + 8*coul2 + coul3
 
             df1 = coulfact*coul
