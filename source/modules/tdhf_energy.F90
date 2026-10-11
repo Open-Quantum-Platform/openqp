@@ -250,11 +250,16 @@ contains
               scale_exchange=scale_exch)
       if (triplet) int2_data%scale_coulomb = 0.0_dp
 
+      ! int2_run_cam takes the Coulomb scale of each pass from its arguments
+      ! and resets the consumer's scale_coulomb, so the triplet's zero Coulomb
+      ! term has to be passed explicitly (regular pass 1 or 0, attenuated pass 0).
       call int2_driver%run(int2_data, &
                 cam=dft.and.infos%dft%cam_flag, &
                 alpha=infos%dft%cam_alpha, &
                 beta=infos%dft%cam_beta,&
-                mu=infos%dft%cam_mu)
+                mu=infos%dft%cam_mu, &
+                alpha_coulomb=merge(0.0_dp, 1.0_dp, triplet), &
+                beta_coulomb=0.0_dp)
       ab1 => int2_data%apb(:,:,:,1)
       ab2 => int2_data%amb(:,:,:,1)
 

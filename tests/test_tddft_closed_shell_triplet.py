@@ -137,11 +137,12 @@ class TestClosedShellTripletDFT(unittest.TestCase):
 class TestClosedShellTripletAntisymmetricPath(unittest.TestCase):
     """The triplet skips the beta half of the unrestricted XC contraction
     (dxb = -dxa makes it the negated alpha half).  It must equal the full
-    two-spin contraction (OQP_TDDFT_TRIPLET_FULL_UXC=1), for a GGA hybrid and
-    for a meta-GGA, whose tau response takes a separate branch."""
+    two-spin contraction (OQP_TDDFT_TRIPLET_FULL_UXC=1), for an LDA (no
+    gradient contractions), a GGA hybrid and a meta-GGA, whose tau response
+    takes a separate branch."""
 
     def test_fast_triplet_xc_equals_full_two_spin_contraction(self):
-        for func in ("b3lypv5", "m06-2x"):
+        for func in ("svwn", "b3lypv5", "m06-2x"):
             for td in ("tda", "rpa"):
                 with self.subTest(functional=func, td=td):
                     r0, e0, d0 = run(deck(H2O_C1, "6-31g*", func, td, 3, 4))
@@ -153,6 +154,42 @@ class TestClosedShellTripletAntisymmetricPath(unittest.TestCase):
                     self.assertEqual(len(e1), 4, d1)
                     for a, b in zip(e0, e1):
                         self.assertAlmostEqual(a, b, delta=1e-6)
+
+
+@unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime unavailable")
+class TestClosedShellTripletCAM(unittest.TestCase):
+    """Range-separated (CAM) exchange runs two integral passes, and
+    int2_run_cam sets each pass's Coulomb scale from its arguments.  With
+    [dftgrid] cam_alpha=0.2, cam_beta=0 the CAM route reproduces B3LYP's 20 %
+    full-range exchange, so its roots must equal the plain B3LYP roots.  A
+    triplet that leaks the Coulomb term through the CAM passes differs by
+    ~0.8 eV (RPA, C1 H2O)."""
+
+    CAM_AS_B3LYP = "cam_flag=true\ncam_alpha=0.2\ncam_beta=0.0\ncam_mu=0.33\n"
+
+    def test_cam_route_with_full_range_exchange_equals_plain_hybrid(self):
+        for mult in (1, 3):
+            for td in ("tda", "rpa"):
+                with self.subTest(mult=mult, td=td):
+                    plain = deck(H2O_C1, "6-31g*", "b3lypv5", td, mult, 4)
+                    r0, e0, d0 = run(plain)
+                    r1, e1, d1 = run(plain + self.CAM_AS_B3LYP)
+                    self.assertEqual(r0, 0, d0)
+                    self.assertEqual(r1, 0, d1)
+                    self.assertEqual(len(e0), 4, d0)
+                    self.assertEqual(len(e1), 4, d1)
+                    for a, b in zip(e0, e1):
+                        self.assertAlmostEqual(a, b, delta=1e-6)
+
+    def test_cam_b3lyp_triplets_lie_below_singlets(self):
+        for td in ("tda", "rpa"):
+            with self.subTest(td=td):
+                rcs, es, ds = run(deck(H2O_C1, "6-31g*", "cam-b3lyp", td, 1, 4))
+                rct, et, dt = run(deck(H2O_C1, "6-31g*", "cam-b3lyp", td, 3, 4))
+                self.assertEqual(rcs, 0, ds)
+                self.assertEqual(rct, 0, dt)
+                self.assertEqual(len(et), 4, dt)
+                self.assertLess(et[0], es[0] - 0.1)
 
 
 @unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime unavailable")
