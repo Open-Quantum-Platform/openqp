@@ -1214,8 +1214,9 @@ class SinglePoint(Calculator):
 
             if self.exception is True:
                 raise TDnotConverged()
-            else:
-                exit()
+            # A bare exit() raises SystemExit(None), i.e. process status 0,
+            # so a failed Davidson looked like a successful run.
+            raise RuntimeError("TD Davidson did not converge — stopping current run.")
 
         self.mol.energies = energies
 
