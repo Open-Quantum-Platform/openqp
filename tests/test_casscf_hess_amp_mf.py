@@ -9,6 +9,7 @@ stack with an on-the-fly sparse walk.  The two must agree to machine precision.
 """
 import numpy as np
 import pytest
+import sys
 
 from oqp.library.casscf_hessian import (
     _apply_active_operator,
@@ -161,6 +162,100 @@ def test_one_based_or_negative_permutation_is_rejected(position):
     assert lib.casscf_exc_stack_apply_wmat(1, 1, kp, kp, pp, vp, vp) == -1
     assert lib.casscf_hess_amp_mf(1, 1, 1, kp, kp, pp, vp, vp, vp, vp, vp) == -1
     np.testing.assert_array_equal(values, np.full_like(values, 123.0))
+
+
+@pytest.mark.parametrize('nact,ndet,npar', [
+    (1, 1, 0), (1, 1, -1),
+    (1, np.iinfo(np.int64).max, 2),
+    (31, np.iinfo(np.int64).max, 1),
+])
+def test_amplitude_extent_rejected_before_reading_arrays(nact, ndet, npar):
+    """A huge declared extent must fail before even reading the permutation."""
+    lib, ffi = _hess_amp_backend()
+    keys = np.zeros(1, dtype=np.int64)
+    values = np.full(1, 123.0)
+    kp = ffi.cast('int64_t *', keys.ctypes.data)
+    vp = ffi.cast('double *', values.ctypes.data)
+    assert lib.casscf_hess_amp_mf(
+        nact, ndet, npar, kp, kp, kp, vp, vp, vp, vp, vp) == -1
+    np.testing.assert_array_equal(values, [123.0])
+
+
+def test_w_extent_rejected_before_reading_arrays():
+    lib, ffi = _hess_amp_backend()
+    keys = np.zeros(1, dtype=np.int64)
+    values = np.full(1, 123.0)
+    kp = ffi.cast('int64_t *', keys.ctypes.data)
+    vp = ffi.cast('double *', values.ctypes.data)
+    assert lib.casscf_exc_stack_apply_wmat(
+        31, np.iinfo(np.int64).max, kp, kp, kp, vp, vp) == -1
+    np.testing.assert_array_equal(values, [123.0])
+
+
+@pytest.mark.skipif(sys.platform != 'linux', reason='glibc allocation injection')
+def test_allocation_failure_leaves_output_and_allows_recovery(tmp_path):
+    """Fail each of the three actual Fortran allocations, then call again."""
+    import os
+    import subprocess
+    from pathlib import Path
+    source = tmp_path / 'fault.c'
+    source.write_text(r'''
+#include <stddef.h>
+#include <stdint.h>
+extern void *__libc_malloc(size_t);
+extern void *__libc_calloc(size_t, size_t);
+static size_t target;
+static int failures;
+void arm(size_t bytes) { target=bytes; failures=0; }
+int disarm(void) { target=0; return failures; }
+void *malloc(size_t n) {
+  if (target && n==target) { target=0; ++failures; return NULL; }
+  return __libc_malloc(n);
+}
+void *calloc(size_t n, size_t width) {
+  if (width && n<=SIZE_MAX/width && target && n*width==target) {
+    target=0; ++failures; return NULL;
+  }
+  return __libc_calloc(n,width);
+}
+''')
+    shim = tmp_path / 'fault.so'
+    subprocess.run([os.environ.get('CC', 'gcc'), '-shared', '-fPIC',
+                    str(source), '-o', str(shim)], check=True)
+    child = tmp_path / 'allocation_test.py'
+    child.write_text(r'''
+import ctypes, os, runpy
+import numpy as np
+t=runpy.run_path(os.environ['CASSCF_TEST_SOURCE'])
+dets,stack,f,g,w,v,nd,ci=t['_case'](3,1,1,7,509)
+lib,ffi=t['_hess_amp_backend']()
+keys=np.asarray(dets,dtype=np.int64)
+sorted_keys=np.sort(keys)
+perm=np.argsort(keys).astype(np.int64)
+amp=np.full((7,nd),123.0)
+buffers=[keys,sorted_keys,perm,f,g,w,v,amp]
+pointers=[ffi.cast('int64_t *' if i<3 else 'double *',b.ctypes.data)
+          for i,b in enumerate(buffers)]
+fault=ctypes.CDLL(os.environ['LD_PRELOAD'])
+fault.arm.argtypes=[ctypes.c_size_t]
+fault.disarm.restype=ctypes.c_int
+reference=t['_mf_hess_amp'](dets,f,g,w,v)
+for size in [nd*7*8, nd*3*3*7*8, 3*3*7*8]:
+    amp.fill(123.0)
+    fault.arm(size)
+    status=lib.casscf_hess_amp_mf(3,nd,7,*pointers)
+    failures=fault.disarm()
+    assert failures==1, (size,failures)
+    assert status==-1, (size,status)
+    np.testing.assert_array_equal(amp,np.full_like(amp,123.0))
+    assert lib.casscf_hess_amp_mf(3,nd,7,*pointers)==0
+    np.testing.assert_array_equal(amp,reference)
+print('three allocation failures and recoveries passed')
+''')
+    env = dict(os.environ, LD_PRELOAD=str(shim),
+               CASSCF_TEST_SOURCE=str(Path(__file__).resolve()))
+    subprocess.run([sys.executable, str(child)], env=env, check=True,
+                   capture_output=True, text=True)
 
 
 def test_w_encoding_limit_and_reordered_determinants():

@@ -253,7 +253,7 @@ contains
   !> (sigma += 0.5 * stack^T @ xbuf) is replaced by a determinant walk that
   !> enumerates only the non-zero entries of E_tu, avoiding the entire
   !> O(nact² × ndet²) stack allocation.  Memory drops from nact²×ndet² doubles
-  !> to two ndet-length integer arrays for skeys/sperm. The W and x buffers
+  !> to determinant maps (skeys/sperm/mfperm in the context). The W and x buffers
   !> and dense CI spectrum are still required.
   !>
   !> @param[in]  nact   active orbitals
