@@ -73,7 +73,7 @@ system=
 {geom}
 charge=0
 method=tdhf
-basis=6-31g
+basis={basis}
 runtype=grad
 functional=
 d4=False
@@ -107,7 +107,7 @@ system=
 {geom}
 charge=0
 method=tdhf
-basis=6-31g
+basis={basis}
 runtype=energy
 functional=
 d4=False
@@ -207,7 +207,7 @@ class RestrictedTdBuildGate(unittest.TestCase):
 
 @unittest.skipUnless(RUNTIME_AVAILABLE, "compiled OpenQP runtime not available")
 class GasPhaseTdPropTests(unittest.TestCase):
-    def _check(self, td):
+    def _check(self, td, basis="6-31g", nbf_expected=None):
         import numpy as np
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -215,9 +215,9 @@ class GasPhaseTdPropTests(unittest.TestCase):
         grad_inp = os.path.join(work, "grad.inp")
         mrsf_inp = os.path.join(work, "mrsf.inp")
         with open(grad_inp, "w") as fh:
-            fh.write(RESTRICTED_GRAD_INPUT.format(geom=H2O, td=td))
+            fh.write(RESTRICTED_GRAD_INPUT.format(geom=H2O, td=td, basis=basis))
         with open(mrsf_inp, "w") as fh:
-            fh.write(MRSF_ENERGY_INPUT.format(geom=H2O))
+            fh.write(MRSF_ENERGY_INPUT.format(geom=H2O, basis=basis))
         env = dict(os.environ)
         env.setdefault("OMP_NUM_THREADS", "1")
         proc = subprocess.run([sys.executable, "-c", _GAS_DRIVER, grad_inp, mrsf_inp],
@@ -239,6 +239,9 @@ class GasPhaseTdPropTests(unittest.TestCase):
         dma = np.asarray(d["dm_a"])
         nbf2 = dma.size
         nbf = int(round((np.sqrt(8 * nbf2 + 1) - 1) / 2))
+        if nbf_expected is not None:
+            # spherical (5d/7f) basis: fewer functions than the Cartesian set
+            self.assertEqual(nbf, nbf_expected, f"{basis}: not the spherical basis")
         # OQP::td_dip_ao is a Fortran (nbf2, 3) array; the bridge hands back
         # its column-major buffer, so column k is the k-th contiguous block.
         dip_ao = np.asarray(d["dip_ao"]).reshape(-1)
@@ -275,6 +278,15 @@ class GasPhaseTdPropTests(unittest.TestCase):
     def test_tda_td_prop_relaxed_dipole(self):
         self._check("tda")
 
+    # AO-indexed consumers in a spherical basis (AGENTS.md): cc-pVDZ reaches
+    # the d-shell and cc-pVTZ the f-shell spherical/Cartesian mismatch
+    # (H2O: 24 vs 25 and 58 vs 65 functions).
+    def test_rpa_td_prop_relaxed_dipole_cc_pvdz(self):
+        self._check("rpa", basis="cc-pvdz", nbf_expected=24)
+
+    def test_rpa_td_prop_relaxed_dipole_cc_pvtz(self):
+        self._check("rpa", basis="cc-pvtz", nbf_expected=58)
+
 
 @unittest.skipUnless(RUNTIME_AVAILABLE, "compiled OpenQP runtime not available")
 class MissingBetaDensityTests(unittest.TestCase):
@@ -284,7 +296,7 @@ class MissingBetaDensityTests(unittest.TestCase):
         work = tmp.name
         inp = os.path.join(work, "grad.inp")
         with open(inp, "w") as fh:
-            fh.write(RESTRICTED_GRAD_INPUT.format(geom=H2O, td="rpa")
+            fh.write(RESTRICTED_GRAD_INPUT.format(geom=H2O, td="rpa", basis="6-31g")
                      .replace("td_prop=true", "td_prop=false"))
         env = dict(os.environ)
         env.setdefault("OMP_NUM_THREADS", "1")
@@ -387,7 +399,7 @@ class QMMMRestrictedExcitedForceTests(unittest.TestCase):
     # (0.019, ESPF grid weights); MM atoms agree to ~5e-4.
     TOL = 0.05
 
-    def _fd(self, td, env_extra=None, cfg=None):
+    def _fd(self, td, env_extra=None, cfg=None, coords=None):
         import inspect
         cfg = dict(QMMM_RESTRICTED_CFG if cfg is None else cfg, **{"tdhf.type": td})
         tmp = tempfile.TemporaryDirectory()
@@ -399,7 +411,7 @@ class QMMMRestrictedExcitedForceTests(unittest.TestCase):
             env.update(env_extra)
         proc = subprocess.run(
             [sys.executable, "-c", _QMMM_FD_DRIVER, inspect.getsource(_water_dimer),
-             json.dumps(cfg), json.dumps(self.COORDS), repr(self.H)],
+             json.dumps(cfg), json.dumps(coords or self.COORDS), repr(self.H)],
             cwd=tmp.name, env=env, capture_output=True, text=True, timeout=1800)
         detail = (f"returncode={proc.returncode}\n--- stdout ---\n{proc.stdout[-3000:]}"
                   f"\n--- stderr ---\n{proc.stderr[-3000:]}")
@@ -427,6 +439,15 @@ class QMMMRestrictedExcitedForceTests(unittest.TestCase):
 
     def test_tda_qmmm_excited_force_matches_finite_difference(self):
         self._check("tda")
+
+    def test_rpa_qmmm_force_cc_pvdz(self):
+        # spherical basis on the QM water (24 functions)
+        cfg = dict(QMMM_RESTRICTED_CFG, **{"input.basis": "cc-pvdz"})
+        res = self._fd("rpa", cfg=cfg, coords=[[3, 2], [0, 2]])
+        for r in res:
+            self.assertLess(abs(r["analytic"] - r["fd"]), self.TOL,
+                            f"cc-pVDZ atom {r['atom']} xyz {r['xyz']}: analytic "
+                            f"{r['analytic']:.5f} vs FD {r['fd']:.5f}")
 
     def test_rpa_force_without_explicit_qmmm_flag(self):
         # The driver must set input.qmmm_flag itself (config mode); without it
