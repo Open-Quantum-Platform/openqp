@@ -58,8 +58,19 @@ class SelectPrTestsTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIsNone(self.sel.select([path]))
 
-    def test_docs_only_change_runs_just_the_smoke_set(self):
-        chosen = self.sel.select(["README.md"])
+    def test_changed_document_selects_the_tests_that_read_it(self):
+        for path, reader in (("README.md", "tests/test_readme_log_metadata.py"),
+                             ("docs/logging.md", "tests/test_log_format.py"),
+                             (".gitignore", "tests/test_dftd4_shared_interface.py")):
+            with self.subTest(path=path):
+                chosen = self.sel.select([path])
+                self.assertIsNotNone(chosen)
+                self.assertIn(reader, chosen)
+
+    def test_document_no_test_reads_runs_just_the_smoke_set(self):
+        # Built at run time so no test source (this one included) names it.
+        unread = "docs/" + "-".join(("zz", "note", "no", "test", "reads")) + ".md"
+        chosen = self.sel.select([unread])
         self.assertIsNotNone(chosen)
         self.assertEqual(sorted(chosen), sorted(s for s in self.sel.SMOKE if (ROOT / s).exists()))
 

@@ -13,6 +13,9 @@ Selection, from ``git diff --name-only BASE...HEAD``:
   source names the module (``oqp.a.b`` or its last component as a word);
 * for each changed native source under ``source/`` or ``include/``, every test
   file that names the file stem (e.g. ``tdhf_energy``);
+* for each changed document (Markdown, docs/, LICENSE, .gitignore, CITATION),
+  every test file that names it, e.g. tests/test_readme_log_metadata.py for
+  README.md;
 * the smoke set below, always.
 
 The full suite is chosen instead when the change touches what every test
@@ -112,22 +115,26 @@ def public_names(path):
     return {n for n in names if not n.startswith("_")}
 
 
-# Paths that cannot change what a pytest test observes.
-NO_TEST_IMPACT = (r"\.md$", r"^docs/", r"^LICENSE", r"^\.gitignore$", r"^CITATION")
+# Documentation and repository metadata.  They run no code, but tests read some
+# of them (README.md, docs/logging.md, .gitignore), so a change selects every
+# test that names the file and is test-neutral only when none does.
+DOCUMENT_PATHS = (r"\.md$", r"^docs/", r"^LICENSE", r"^\.gitignore$", r"^CITATION")
 
 
 def select(paths):
     """Return the selected test files, or None for the full suite.
 
-    Conservative: a changed path that is neither known to be test-neutral nor
-    mapped to at least one test file selects the full suite.
+    Conservative: a changed path that is neither a document nor mapped to at
+    least one test file selects the full suite; a document selects the tests
+    that read it.
     """
     if any(needs_full_suite(p) for p in paths):
         return None
     sources = test_sources()
     selected = set()
     for p in paths:
-        if any(re.search(rx, p) for rx in NO_TEST_IMPACT):
+        if any(re.search(rx, p) for rx in DOCUMENT_PATHS):
+            selected |= tests_naming({p, Path(p).name}, sources)
             continue
         if re.match(r"^tests/test_[^/]+\.py$", p):
             if (ROOT / p).exists():

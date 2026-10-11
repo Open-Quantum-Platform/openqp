@@ -179,8 +179,10 @@ jobs:
            # plain `pip install .` build the runtime loader cannot find it, so
            # `import oqp` (hence every `openqp` invocation) fails with
            # "libddx.so: cannot open shared object file". Put its directory on
-           # LD_LIBRARY_PATH so the validate + test steps below can load liboqp.
-           if: ${{ matrix.MPI == 'OFF' && matrix.role != 'pytest' }}
+           # LD_LIBRARY_PATH so the validate, example and pytest steps below can
+           # load liboqp.  The pytest role builds with ENABLE_DDX=ON too, so it
+           # needs this step even though it skips the example steps.
+           if: ${{ matrix.MPI == 'OFF' }}
            run: |
             lib="$(find "$HOME"/.cache/openqp -name 'libddx.so*' -print -quit 2>/dev/null)"
             if [ -n "$lib" ]; then
