@@ -33,7 +33,7 @@ def test_compact_density_matches_dense_and_resizes_in_one_process():
             c = np.asfortranarray(rng.normal(size=(n, n)) / n)
             l2 = np.asfortranarray(rng.normal(size=(no, no, n-no, n-no)))
         g = np.empty((n, n, n, n), order="F")
-        oqp.lib.mp2_gradient_density_test(
+        oqp.mp2_gradient_density_test(
             n, no, oqp.ffi.cast("double *", c.ctypes.data),
             oqp.ffi.cast("double *", l2.ctypes.data),
             oqp.ffi.cast("double *", g.ctypes.data))
