@@ -140,7 +140,7 @@ def _fermion_action(det, operations):
         occupied = bool(det & (1 << orbital))
         if occupied == create:
             return None
-        phase *= (-1) ** (det & ((1 << orbital) - 1)).bit_count()
+        phase *= (-1) ** bin(det & ((1 << orbital) - 1)).count("1")
         det ^= 1 << orbital
     return det, phase
 
