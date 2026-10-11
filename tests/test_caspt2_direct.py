@@ -125,7 +125,8 @@ def test_single_state_reference_report_targets_match_runtime(method, variant, ta
     # than input.method. It must obey the same single-state contract.
     config = {"input": {"method": method, "runtype": "energy"},
               "ci": {"nroot": 2},
-              "pt2": {"reference_report": True, "variant": variant,
+              "pt2": {"reference_report": True, "reference": method,
+                      "variant": variant,
                       "target_roots": targets}}
     options = _caspt2_options(config)
     report = CheckReport()
