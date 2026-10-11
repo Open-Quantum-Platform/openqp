@@ -1,4 +1,4 @@
-"""The threaded ECP Hessian contraction does not depend on thread scheduling.
+"""The ECP Hessian contraction does not depend on thread scheduling or count.
 
 ``ecp_hess_contract`` (source/ecp.F90) splits shell pairs over OpenMP
 threads.  It used ``schedule(dynamic)`` with ``reduction(+:hloc)``: which
@@ -10,9 +10,10 @@ threads on TPX (GCC 13) the old code gives 0x1p-54 when the threads share one
 CPU and 0x1.8p-54 when they have two, every time; so pinning reproduces what
 CI hit by chance.
 
-For a fixed thread count every call must now give the same bits, wherever the
-threads run.  On Linux each child is pinned to one CPU and to two CPUs before
-OpenMP starts; elsewhere only repeated unpinned calls are compared.
+Each shell pair now writes its own 9 x 9 block and the blocks are summed in
+pair order, so every call must give the same bits with one or four threads,
+wherever the threads run.  On Linux the four-thread children are pinned to one
+CPU and to two CPUs before OpenMP starts; elsewhere they run unpinned.
 """
 import importlib.util
 import json
@@ -22,7 +23,6 @@ import sys
 import unittest
 
 REPEATS = 10
-THREADS = 4
 
 CHILD = r'''
 import ctypes, json, os, sys
@@ -58,13 +58,13 @@ print('RESULT ' + json.dumps(sorted(vectors)))
 
 
 class EcpHessContractReproducibleTests(unittest.TestCase):
-    def _run(self, cpus, required):
+    def _run(self, threads, cpus, required):
         env = os.environ.copy()
-        env['OMP_NUM_THREADS'] = str(THREADS)
+        env['OMP_NUM_THREADS'] = str(threads)
         env['OMP_DYNAMIC'] = 'false'
         for name in ('OMP_PROC_BIND', 'OMP_PLACES', 'GOMP_CPU_AFFINITY', 'KMP_AFFINITY'):
             env.pop(name, None)
-        result = subprocess.run([sys.executable, '-c', CHILD, str(REPEATS), str(THREADS),
+        result = subprocess.run([sys.executable, '-c', CHILD, str(REPEATS), str(threads),
                                  '1' if required else '0', cpus],
                                 env=env, capture_output=True, text=True, timeout=600)
         if result.returncode == 77:
@@ -73,7 +73,7 @@ class EcpHessContractReproducibleTests(unittest.TestCase):
         line = [l for l in result.stdout.splitlines() if l.startswith('RESULT ')][-1]
         return [tuple(v) for v in json.loads(line[len('RESULT '):])]
 
-    def test_four_thread_selftest_is_bitwise_identical_however_scheduled(self):
+    def test_selftest_is_bitwise_identical_for_any_threads_and_placement(self):
         required = os.getenv('OQP_REQUIRE_NATIVE_TESTS') == '1'
         if importlib.util.find_spec('oqp') is None:
             if required:
@@ -81,20 +81,21 @@ class EcpHessContractReproducibleTests(unittest.TestCase):
             self.skipTest('Native OpenQP is unavailable')
         if hasattr(os, 'sched_getaffinity') and len(os.sched_getaffinity(0)) >= 2:
             mine = sorted(os.sched_getaffinity(0))
-            placements = [str(mine[0]), f'{mine[0]},{mine[1]}']
+            runs = [(1, str(mine[0])), (4, str(mine[0])), (4, f'{mine[0]},{mine[1]}')]
         else:
-            placements = ['none']
+            runs = [(1, 'none'), (4, 'none')]
         vectors = {}
-        for cpus in placements:
-            with self.subTest(cpus=cpus):
-                vectors[cpus] = self._run(cpus, required)
-                self.assertEqual(len(vectors[cpus]), 1,
-                                 f'{REPEATS} calls on CPUs {cpus} gave {vectors[cpus]}')
+        for threads, cpus in runs:
+            with self.subTest(threads=threads, cpus=cpus):
+                got = self._run(threads, cpus, required)
+                vectors[(threads, cpus)] = got
+                self.assertEqual(len(got), 1,
+                                 f'{REPEATS} calls, {threads} threads on CPUs {cpus}: {got}')
                 # the contraction still agrees with the stored second derivatives
-                self.assertLess(vectors[cpus][0][9], 1e-13)
+                self.assertLess(got[0][9], 1e-13)
         distinct = {v for vs in vectors.values() for v in vs}
         self.assertEqual(len(distinct), 1,
-                         f'{THREADS}-thread error vectors depend on CPU placement: {vectors}')
+                         f'error vectors depend on thread count or placement: {vectors}')
 
 
 if __name__ == '__main__':
