@@ -599,13 +599,13 @@ void casscf_diis_coeffs(int32_t nvec, int32_t npar, const double *gmat,
  * The `twophase` (default), `ah`, `diis` and `auto` convergers all run here,
  * with either orbital-Hessian builder (`CAS_I_HESSIAN`).
  *
- * Returns 0, or a negative status meaning "could not do it here" -- the caller
- * then runs the Python optimizer, which remains the numerical pin and owns
- * every user-facing message.  Two negative statuses are refusals rather than
- * fallbacks and the Python re-raises their messages: -8, a root degeneracy
- * with non-zero orbital coupling (the state-averaged objective is not smooth,
- * so no orbital Hessian exists), and -9, an excitation stack past the
- * dense-spectrum memory guard.
+ * Returns 0 on success.  Allocation failure (-2) raises Python MemoryError
+ * without retrying.  Other negative statuses request the Python optimizer.
+ * It raises a Hessian-provider refusal only if that retry reaches the same
+ * condition: -8 denotes root degeneracy with non-zero orbital coupling (the
+ * state-averaged objective is not smooth), and -9 denotes an excitation stack
+ * beyond the dense-spectrum memory guard.  A retry may stop before building
+ * another Hessian; neither refusal guarantees the same Python exception.
  *
  * OPTION SCHEMA -- authoritative copy is the parameter block in
  * source/modules/casscf_driver.F90; pyoqp/oqp/library/casscf.py mirrors it and

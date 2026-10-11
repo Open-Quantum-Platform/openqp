@@ -446,7 +446,9 @@ contains
   !>                          (it, E, dE, |g_orb|, |step|)
   !> @param[out]    stats     [rows written, macroiterations, converged,
   !>                           energy/gradient evaluations]
-  !> @return        0, or a negative status meaning "run the Python optimizer"
+  !> @return        0 on success; -2 raises Python MemoryError without retry.
+  !>                Other negative statuses request the Python optimizer;
+  !>                Hessian refusals recur only if its retry reaches them.
   function casscf_energy_C(c_handle, iopt, dopt, weights, roots, energies, &
                            s2, history, stats) result(status) &
       bind(C, name="casscf_energy")
