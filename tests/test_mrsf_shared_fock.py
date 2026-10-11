@@ -27,11 +27,14 @@ class SharedMRSFFockTests(unittest.TestCase):
                 dispatches = list(re.finditer(
                     r"(?ms)^([ \t]*)if \(this%nthreads == 1\) then\n"
                     r"(.*?)^\1else\n(.*?)^\1end if", worker))
-                self.assertTrue(dispatches, "serial exchange dispatch is absent")
+                self.assertEqual(len(dispatches), 3,
+                                 "all three exchange loops need serial dispatch")
                 covered = 0
                 for dispatch in dispatches:
                     ordinary, atomic = dispatch.group(2), dispatch.group(3)
                     self.assertNotIn("!$omp atomic", ordinary)
+                    self.assertEqual(atomic.count("!$omp atomic update"), 8,
+                                     "threaded exchange must remain synchronized")
                     covered += atomic.count("!$omp atomic update")
                     stripped = "\n".join(line for line in atomic.splitlines()
                                          if "!$omp atomic update" not in line)
