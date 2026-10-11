@@ -43,6 +43,9 @@ module tdhf_lib
       integer :: nspin = 0
       integer :: nbf = 0
       logical :: tamm_dancoff = .false. !< Tamm-Dancoff approximation
+      !> .false. for the closed-shell triplet: H+[X+Y] has no Coulomb term
+      !> (spin-antisymmetric transition density); H+[T] keeps it
+      logical :: xpy_coulomb = .true.
     contains
         procedure :: parallel_start => int2_rpagrd_data_t_parallel_start
         procedure :: parallel_stop  => int2_rpagrd_data_t_parallel_stop
@@ -1239,7 +1242,8 @@ contains
 
     ! H+[X+Y]
     do i = 1, this%np
-      call this%hplus(buf, this%hpp(:,:,:,i, mythread), this%xpy(:,:,:,i))
+      call this%hplus(buf, this%hpp(:,:,:,i, mythread), this%xpy(:,:,:,i), &
+                      merge(1.0_dp, 0.0_dp, this%xpy_coulomb))
     end do
 
     ! H+[T]
@@ -1259,12 +1263,15 @@ contains
 !###############################################################################
 
 !> @brief Compute H^+[V] over a set of integrals
-  subroutine int2_rpagrd_data_t_update_hplus(this, buf, hp, v)
+  subroutine int2_rpagrd_data_t_update_hplus(this, buf, hp, v, coulomb_factor)
     implicit none
     class(int2_rpagrd_data_t), intent(inout) :: this
     type(int2_storage_t), intent(inout) :: buf
     real(kind=dp), intent(inout) :: hp(:,:,:)
     real(kind=dp), intent(in) :: v(:,:,:)
+    !> extra factor on the Coulomb term for this density (thread-safe; the
+    !> pass-level scale_coulomb is set by int2_run / int2_run_cam)
+    real(kind=dp), intent(in), optional :: coulomb_factor
     integer :: i, j, k, l, n
     real(kind=dp) :: xfact, cfact, &
                      val, xval, cval
@@ -1276,6 +1283,7 @@ contains
 
       xfact = 2 * this%scale_exchange
       cfact = 8 * this%scale_coulomb
+      if (present(coulomb_factor)) cfact = cfact*coulomb_factor
 
       do n = 1, buf%ncur
         i  = buf%ids(1,n)
@@ -1301,6 +1309,7 @@ contains
 
       xfact = 1 * this%scale_exchange
       cfact = 2 * this%scale_coulomb
+      if (present(coulomb_factor)) cfact = cfact*coulomb_factor
 
       do n = 1, buf%ncur
         i  = buf%ids(1,n)

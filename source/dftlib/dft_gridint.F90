@@ -2196,9 +2196,9 @@ contains
                 + xc%d3rt2(ids%ratatb, i) * dt(1)*dt(2) &
                 + xc%d3rt2(ids%ratbtb, i) * dt(2)*dt(2)
 
-          cr(2) = xc%d3rt2(ids%ratatb, i) * dt(1)*dt(1) &
+          cr(2) = xc%d3rt2(ids%rbtata, i) * dt(1)*dt(1) &
                 + xc%d3rt2(ids%rbtatb, i) * dt(2)*dt(1) &
-                + xc%d3rt2(ids%ratbtb, i) * dt(1)*dt(2) &
+                + xc%d3rt2(ids%rbtatb, i) * dt(1)*dt(2) &
                 + xc%d3rt2(ids%rbtbtb, i) * dt(2)*dt(2)
 
           g_r = g_r + cr
