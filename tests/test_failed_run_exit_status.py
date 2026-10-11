@@ -18,6 +18,11 @@ Two guards:
   an energy input whose TD Davidson cannot converge (``maxit=1``,
   ``conv=1e-30``), and asserts a non-zero status, the log marker, and the
   raised error.
+* ``SameProcessRecoveryTests`` runs, in ONE interpreter, a failing gradient,
+  a good gradient, a failing TD Davidson (larger basis), a good TD energy and
+  the good gradient again, and requires the good results to equal fresh-process
+  runs bit for bit (at one thread): a caught failure must leave native and
+  Python state reusable, with the basis growing and shrinking between calls.
 * ``SetBasisFailureTests`` drives ``set_basis`` with the native basis loader
   mocked to report ``basis_set_issue`` and asserts a ``RuntimeError``, not a
   ``SystemExit``.
@@ -110,6 +115,36 @@ multiplicity=1
 nstate=2
 maxit=1
 conv=1.0e-30
+"""
+
+
+GOOD_GRAD_INPUT = (GRAD_RPA_INPUT.replace("maxit_zv=1\n", "maxit_zv=50\n")
+                   .replace("zvconv=1.0e-30\n", "zvconv=1.0e-10\n"))
+GOOD_TDA_INPUT = (DAVIDSON_TDA_INPUT.replace("maxit=1\n", "maxit=50\n")
+                  .replace("conv=1.0e-30\n", "conv=1.0e-10\n"))
+
+# Driver executed in a fresh interpreter: runs each (name, expect) step through
+# oqp.pyoqp.Runner in the SAME process and prints one JSON line of results.
+_RUNNER_DRIVER = r"""
+import json, sys, traceback
+import numpy as np
+from oqp.pyoqp import Runner
+out = []
+for name, expect in json.loads(sys.argv[1]):
+    rec = {"name": name, "expect": expect}
+    try:
+        r = Runner(project=name, input_file=name + ".inp", log=name + ".log",
+                   silent=1, usempi=False)
+        r.run()
+        rec["energies"] = [float(e) for e in np.ravel(r.mol.energies)]
+        grads = getattr(r.mol, "grads", None)
+        rec["grads"] = None if grads is None else [float(g) for g in np.ravel(grads)]
+        rec["error"] = None
+    except Exception as exc:
+        rec["error"] = f"{type(exc).__name__}: {exc}"
+        rec["trace"] = traceback.format_exc()[-2000:]
+    out.append(rec)
+print("RESULT " + json.dumps(out))
 """
 
 
@@ -218,6 +253,73 @@ class ZVectorFailureExitStatusTests(unittest.TestCase):
         proc, log_text = self._run("h2o_tda_davidson_fail", DAVIDSON_TDA_INPUT)
         self._assert_failure(proc, log_text, "PyOQP: TD energy is not converged",
                              "TD Davidson did not converge")
+
+
+@unittest.skipUnless(RUNTIME_AVAILABLE, "compiled OpenQP runtime not available")
+class SameProcessRecoveryTests(unittest.TestCase):
+    INPUTS = {
+        "grad_fail": GRAD_RPA_INPUT,
+        "grad_good": GOOD_GRAD_INPUT,
+        "dav_fail": DAVIDSON_TDA_INPUT,
+        "tda_good": GOOD_TDA_INPUT,
+    }
+
+    def _drive(self, work, steps):
+        import json
+        env = dict(os.environ)
+        # One thread on purpose: with several threads the reduction order makes
+        # two FRESH processes differ by up to ~6e-9 Eh (measured at 4 threads),
+        # which would hide a small state leak.  At one thread fresh runs, repeated
+        # runs and runs after a caught failure are bit-identical, so exact
+        # equality is the contract checked here.
+        env["OMP_NUM_THREADS"] = "1"
+        proc = subprocess.run(
+            [sys.executable, "-c", _RUNNER_DRIVER, json.dumps(steps)],
+            cwd=work, env=env, capture_output=True, text=True, timeout=900)
+        lines = [l for l in proc.stdout.splitlines() if l.startswith("RESULT ")]
+        detail = (f"returncode={proc.returncode}\n--- stdout ---\n{proc.stdout[-3000:]}"
+                  f"\n--- stderr ---\n{proc.stderr[-3000:]}")
+        self.assertEqual(proc.returncode, 0, detail)
+        self.assertEqual(len(lines), 1, detail)
+        return {(i, r["name"]): r for i, r in enumerate(json.loads(lines[0][7:]))}
+
+    def _workdir(self, tag):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        work = Path(tmp.name)
+        for name, text in self.INPUTS.items():
+            # A unique project name per step keeps logs apart.
+            (work / f"{name}.inp").write_text(text)
+        return work
+
+    def assertSame(self, got, ref, what):
+        self.assertIsNotNone(got, what)
+        self.assertEqual(len(got), len(ref), what)
+        diff = max(abs(a - b) for a, b in zip(got, ref))
+        self.assertEqual(got, ref, f"{what}: not bit-identical, max |diff| = {diff:.3e}")
+
+    def test_failed_runs_leave_the_process_reusable(self):
+        # Fresh-process references, one interpreter per good input.
+        ref_grad = self._drive(self._workdir("ref_grad"), [["grad_good", "ok"]])[(0, "grad_good")]
+        ref_tda = self._drive(self._workdir("ref_tda"), [["tda_good", "ok"]])[(0, "tda_good")]
+        for ref in (ref_grad, ref_tda):
+            self.assertIsNone(ref["error"], ref.get("trace"))
+
+        # One interpreter: fail, succeed, fail (larger basis), succeed, repeat.
+        seq = [["grad_fail", "zv"], ["grad_good", "ok"], ["dav_fail", "dav"],
+               ["tda_good", "ok"], ["grad_good", "ok"]]
+        res = self._drive(self._workdir("seq"), seq)
+        self.assertIn("RuntimeError: TD Z-vector did not converge",
+                      res[(0, "grad_fail")]["error"] or "")
+        self.assertIn("RuntimeError: TD Davidson did not converge",
+                      res[(2, "dav_fail")]["error"] or "")
+        for key in ((1, "grad_good"), (3, "tda_good"), (4, "grad_good")):
+            self.assertIsNone(res[key]["error"], res[key].get("trace"))
+        for key in ((1, "grad_good"), (4, "grad_good")):
+            self.assertSame(res[key]["energies"], ref_grad["energies"], f"{key} energies")
+            self.assertSame(res[key]["grads"], ref_grad["grads"], f"{key} gradient")
+        self.assertSame(res[(3, "tda_good")]["energies"], ref_tda["energies"],
+                        "TDA energies after failures")
 
 
 @unittest.skipUnless(RUNTIME_AVAILABLE, "compiled OpenQP runtime not available")
