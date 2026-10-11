@@ -1435,14 +1435,24 @@ def native_caspt2_energy(mol, ref_energy=None):
     coeff = setup.coeff
     enuc = setup.enuc
 
-    # Publish the PT2 REFERENCE orbitals (RHF canonical, or the (SA-)CASSCF
-    # solution) before the semicanonicalization overwrites OQP::VEC_MO_A with a
+    defer_orbitals = (
+        options.family == "caspt2" and options.variant == "caspt2"
+        and options.h0 == "fock" and options.contraction == "none"
+        and options.ipea_shift == 0.0 and options.engine in {"direct", "fortran"}
+    )
+
+    # Retain the PT2 REFERENCE orbitals (RHF canonical, or the (SA-)CASSCF
+    # solution) before publishing OQP::VEC_MO_A with a
     # within-block rotation of them.  The analytic gradient
     # (oqp.library.caspt2_gradient) needs them: its orbital constraint --
     # RHF canonicality or CASSCF stationarity -- holds for THESE orbitals, not
     # for the semicanonical set, and there is no way to recover them afterwards.
-    mol.data["OQP::CASPT2_REFERENCE_MO"] = np.ascontiguousarray(
-        np.asarray(coeff, dtype=np.float64))
+    # Own this copy: coeff may borrow the native orbital record that a later
+    # publication replaces. Explicit direct requests publish only after the
+    # contraction succeeds, preserving the reference on recoverable failures.
+    reference_mo = np.array(coeff, dtype=np.float64, order="C", copy=True)
+    if not defer_orbitals:
+        mol.data["OQP::CASPT2_REFERENCE_MO"] = reference_mo
 
     # MS-CASPT2 with the Fock H0 uses the MULTI-SET construction (per-state
     # orbitals = the OpenMolcas state-specific Fock): each root's first-order
@@ -1471,9 +1481,11 @@ def native_caspt2_energy(mol, ref_energy=None):
     )
     s2, mult = fci_spin_diagnostics(coeffs, dets, nact, active_nelec)
 
-    # commit semicanonical orbitals (the rotation leaves the reference energy invariant)
-    target = np.asarray(mol.data["OQP::VEC_MO_A"], dtype=float)
-    mol.data["OQP::VEC_MO_A"][...] = np.ascontiguousarray(coeff_sc.T.reshape(target.shape))
+    # Stage semicanonical orbitals (the rotation leaves the reference energy invariant).
+    target_shape = np.asarray(mol.data["OQP::VEC_MO_A"], dtype=float).shape
+    semicanonical_mo = np.ascontiguousarray(coeff_sc.T.reshape(target_shape))
+    if not defer_orbitals:
+        mol.data["OQP::VEC_MO_A"][...] = semicanonical_mo
 
     # PT2 frozen core: fold the deepest atomic cores out of the first-order space.
     # Default (frozen<0) = the standard deep cores, matching OpenMolcas and removing the
@@ -1495,11 +1507,7 @@ def native_caspt2_energy(mol, ref_energy=None):
     # enter this uncontracted calculation.
     use_direct = (
         options.family == "qdpt" and options.engine in {"auto", "direct", "fortran"}
-    ) or (
-        options.family == "caspt2" and options.variant == "caspt2"
-        and options.h0 == "fock" and options.contraction == "none"
-        and options.ipea_shift == 0.0 and options.engine in {"direct", "fortran"}
-    )
+    ) or defer_orbitals
 
     if options.variant == "caspt2":
         # `roots` came from _reference_roots, which honours [pt2] target_roots;
@@ -1517,6 +1525,10 @@ def native_caspt2_energy(mol, ref_energy=None):
             e_casci = float(res["ref_energies"][0])
             e2 = float(res["e2"][0])
             e_caspt2 = e_casci + e2
+            if defer_orbitals:
+                mol.data["OQP::CASPT2_REFERENCE_MO"] = reference_mo
+                # Reacquire the native view after adding/replacing the record.
+                mol.data["OQP::VEC_MO_A"][...] = semicanonical_mo
             mol.energies = [e_caspt2]
             mol.mol_energy.energy = e_caspt2
             mol.data["OQP::CASPT2_ENERGIES"] = np.ascontiguousarray([e_caspt2], dtype=np.float64)

@@ -296,6 +296,72 @@ def test_direct_guards_are_explicit_errors(tmp_path, engine):
                                   "max_terms": "1", "nproc": "1"})
 
 
+@pytest.mark.parametrize("engine", ["direct", "fortran"])
+@pytest.mark.parametrize("reference", ["casci", "casscf"])
+@pytest.mark.parametrize("has_reference_record", [False, True])
+def test_term_guard_preserves_orbitals_for_same_molecule_retry(
+        tmp_path, monkeypatch, engine, reference, has_reference_record):
+    from oqp.library import caspt2_dyall
+
+    runner = _run_caspt2(
+        tmp_path, "before_failure", system=_H4, basis="sto-3g", cas=_CAS,
+        pt2={"reference": reference, "engine": "dense", "nproc": "1"})
+    mol = runner.mol
+    key = "OQP::CASPT2_REFERENCE_MO"
+    if has_reference_record:
+        # A pre-existing gradient reference belongs to the completed operation.
+        previous_reference = np.asarray(mol.data[key]).copy() + 0.125
+        mol.data[key] = previous_reference
+    else:
+        del mol.data[key]
+    mol.config["pt2"].update(engine=engine, max_terms=1)
+
+    original_setup = caspt2_dyall._caspt2_setup
+    original_semicanonicalize = caspt2_dyall._semicanonicalize
+    snapshots = []
+    semicanonical_snapshots = []
+
+    def record_reference(*args, **kwargs):
+        # Run the real CASCI/CASSCF setup and capture its orbitals before PT2's
+        # semicanonicalization; no contraction or guard is mocked.
+        setup = original_setup(*args, **kwargs)
+        snapshots.append(np.asarray(mol.data["OQP::VEC_MO_A"]).copy())
+        return setup
+
+    def record_semicanonical(*args, **kwargs):
+        result = original_semicanonicalize(*args, **kwargs)
+        shape = np.asarray(mol.data["OQP::VEC_MO_A"]).shape
+        semicanonical_snapshots.append(result[0].T.reshape(shape).copy())
+        return result
+
+    monkeypatch.setattr(caspt2_dyall, "_caspt2_setup", record_reference)
+    monkeypatch.setattr(caspt2_dyall, "_semicanonicalize", record_semicanonical)
+    with pytest.raises(ValueError, match="max_terms"):
+        caspt2_dyall.native_caspt2_energy(mol)
+    np.testing.assert_array_equal(mol.data["OQP::VEC_MO_A"], snapshots[-1])
+    if has_reference_record:
+        np.testing.assert_array_equal(mol.data[key], previous_reference)
+    else:
+        with pytest.raises(AttributeError, match="CASPT2_REFERENCE_MO"):
+            mol.data[key]
+
+    # The same molecule succeeds after raising the real term-count ceiling.
+    mol.config["pt2"]["max_terms"] = 30_000_000
+    caspt2_dyall.native_caspt2_energy(mol)
+    retry_energy = np.asarray(mol.energies).copy()
+    nbf = int(mol.data.get_basis()["nbf"])
+    np.testing.assert_array_equal(
+        mol.data[key], snapshots[-1].reshape((nbf, nbf)).T)
+    np.testing.assert_array_equal(
+        mol.data["OQP::VEC_MO_A"], semicanonical_snapshots[-1])
+    monkeypatch.setattr(caspt2_dyall, "_caspt2_setup", original_setup)
+    monkeypatch.setattr(caspt2_dyall, "_semicanonicalize", original_semicanonicalize)
+    fresh = _run_caspt2(
+        tmp_path, "fresh_after_failure", system=_H4, basis="sto-3g", cas=_CAS,
+        pt2={"reference": reference, "engine": engine, "nproc": "1"})
+    np.testing.assert_allclose(retry_energy, fresh.mol.energies, rtol=0, atol=1e-9)
+
+
 def test_word_boundary_empty_external_and_memory_budget():
     from oqp.library.caspt2_dyall import CASPT2Options
     from oqp.library.qdpt2_direct import direct_qdpt2, _stream_fortran
