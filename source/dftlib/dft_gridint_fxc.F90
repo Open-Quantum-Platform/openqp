@@ -460,6 +460,8 @@ contains
 
           Sigma = 0
           tauab = 0
+          ! LDA has no gradient contractions; the threshold test below reads them.
+          dsaa = 0; dsab = 0; dsba = 0; dsbb = 0
 
           if (xce%funTyp /= OQP_FUNTYP_LDA) then
             dsaa = dot_product(drRho(:,1,i,j), dRho(1:3,i))
@@ -525,6 +527,8 @@ contains
 
           Sigma = 0
           tauab = 0
+          ! LDA has no gradient contractions; the threshold test below reads them.
+          dsaa = 0; dsab = 0; dsba = 0; dsbb = 0
 
           if (xce%funTyp /= OQP_FUNTYP_LDA) then
             dsaa = dot_product(drRho(:,1,i,j), dRho(1:3,i))
