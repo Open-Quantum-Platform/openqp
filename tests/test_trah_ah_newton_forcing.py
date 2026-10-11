@@ -43,7 +43,7 @@ system=
    H 0.000000 -0.935100 -1.112000
 charge=0
 runtype=energy
-basis=6-31g*
+basis={basis}
 functional=blyp
 method=hf
 
@@ -71,16 +71,18 @@ def _runtime_available():
 
 
 @pytest.mark.skipif(not _runtime_available(), reason='compiled OpenQP runtime unavailable')
-@pytest.mark.parametrize('scftype,mult', [('rhf', 1), ('rohf', 3), ('uhf', 3)])
-def test_trah_converges_dft_to_tight_gradient(tmp_path, scftype, mult):
+@pytest.mark.parametrize('scftype,mult,basis', [('rhf', 1, '6-31g*'), ('rohf', 3, '6-31g*'),
+                                              ('uhf', 3, '6-31g*'), ('rhf', 1, 'cc-pvdz')])
+def test_trah_converges_dft_to_tight_gradient(tmp_path, scftype, mult, basis):
     """CH2O/BLYP/6-31G*: with the absolute Davidson stop TRAH reached
     |g| = 2.3e-8 (RKS), 1.2e-8 (ROKS triplet) and 3.6e-8 (UKS triplet) and
     gave up after 22-32 refinement steps; Newton steps reach 1e-11 in a couple
-    of steps."""
+    of steps.  The cc-pVDZ case runs the spherical-basis AO density through
+    the same response screening."""
     import re
     import sys
     deck = tmp_path / 'ch2o_trah.inp'
-    deck.write_text(CH2O_DECK.format(scftype=scftype, mult=mult))
+    deck.write_text(CH2O_DECK.format(scftype=scftype, mult=mult, basis=basis))
     env = dict(os.environ, OMP_NUM_THREADS='2')
     proc = subprocess.run([sys.executable, '-m', 'oqp.pyoqp', deck.name], cwd=tmp_path, env=env,
                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=300)
