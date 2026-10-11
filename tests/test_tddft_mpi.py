@@ -39,7 +39,7 @@ def _launcher():
     try:
         import mpi4py  # noqa: F401
         import oqp  # noqa: F401
-    except Exception:
+    except (ImportError, OSError):  # not installed, or liboqp/libmpi not loadable
         return None
     return shutil.which("mpiexec") or shutil.which("mpirun")
 
