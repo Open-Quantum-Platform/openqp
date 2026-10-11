@@ -57,7 +57,7 @@ contains
       int2_td_data_t
     use tdhf_lib, only: &
       inivec, iatogen, mntoia, rparedms, rpaeig, rpavnorm, &
-      rpaechk, rpaprint, rparesvec, rpaexpndv, rpanewb, esum, &
+      rpaechk, rpaprint, rparesvec, rpa_max_residual, rpaexpndv, rpanewb, esum, &
       tdhf_unrelaxed_density
     use mod_dft, only: dft_initialize, dftclean
     use mod_dft_gridint_fxc, only: tddft_fxc, xc_consumer_tde_t
@@ -295,10 +295,8 @@ contains
           ierr = 4
           exit
         end if
-        mxerr = maxval(errors(imax+1:ndsr))
-      else
-        mxerr = 0.0_dp
       end if
+      mxerr = rpa_max_residual(errors, imax, ndsr)
 
       if (infos%control%verbose >= 1) call rpaprint(eex, errors, cnvtol, iter, imax, ndsr)
 
