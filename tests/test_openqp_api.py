@@ -844,6 +844,23 @@ $$$$
         self.assertEqual(config["input"]["method"], "tdhf")
         self.assertEqual(config["input"]["functional"], "b3lyp5")
         self.assertEqual(config["tdhf"]["nstate"], "2")
+        self.assertEqual(config["tdhf"]["multiplicity"], "1")
+
+        # Closed-shell triplet response: the excited-state multiplicity goes to
+        # [tdhf], the RHF reference stays a singlet.
+        for build in (
+            lambda j: j.theory.tddft(functional="b3lyp5", basis="6-31g*", nstate=2,
+                                     state_multiplicity=3),
+            lambda j: j.theory("tddft", functional="b3lyp5", basis="6-31g*", nstate=2,
+                               state_multiplicity=3),
+            lambda j: j.theory("tdhf", basis="6-31g*", nstate=2, state_multiplicity=3),
+        ):
+            job = build(openqp.OpenQP(project="h2o_tddft_triplet")
+                        .molecule(geometry="water", charge=0, multiplicity=1))
+            config = job.to_input_dict()
+            self.assertEqual(config["scf"]["type"], "rhf")
+            self.assertEqual(config["scf"]["multiplicity"], "1")
+            self.assertEqual(config["tdhf"]["multiplicity"], "3")
 
         with self.assertRaisesRegex(ValueError, "DFT theory requires"):
             openqp.OpenQP(project="bad_dft_namespace").theory.dft()

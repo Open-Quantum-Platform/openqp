@@ -16,6 +16,15 @@ void oqp_ecp_selftest(double *err);
 void int2_mrsf_shared_selftest(int comm, bool use_mpi, int ranks, int threads,
                              double *error, int *checks, int *failures);
 
+/* Internal TDHF Davidson residual self-test (tests/fortran/rpa_residual_selftest.F90).
+   Arrays are column-major: w_l, w_r, v_l, v_r (n, ndsr); q (n, ndsr, 2). */
+void oqp_rpa_residual_selftest(int64_t n, int64_t ndsr, int64_t imax,
+                               bool tamm_dancoff, double tol,
+                               double *w_l, double *w_r, double *v_l, double *v_r,
+                               const double *ee, const double *abd,
+                               double *errors, double *q, double *mxerr,
+                               int *converged);
+
 typedef double xyz_t[3];
 
 typedef struct oqp_handle_t {

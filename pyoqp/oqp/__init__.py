@@ -87,6 +87,7 @@ for attr_name in dir(lib):
             'oqp_simplex_qp_solve', 'oqp_simplex_qp_solve_avoid',
             'oqp_ecp_selftest',
             'int2_mrsf_shared_selftest',
+            'oqp_rpa_residual_selftest',
         ):
             globals()[attr_name] = _oqp_wrapper(attr_value)
         else:
