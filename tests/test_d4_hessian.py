@@ -20,6 +20,7 @@ Skipped unless both the compiled OpenQP runtime and the dftd4 package are availa
 """
 
 import os
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -64,11 +65,16 @@ def _runtime_available():
 @unittest.skipUnless(_runtime_available(),
                      "compiled OpenQP runtime with native dftd4 not available")
 class D4AnalyticHessian(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="oqp_d4_hess_")
+        self.addCleanup(tmp.cleanup)
+        self.tmpdir = Path(tmp.name)
+
     def _hessian(self, hess_type, d4):
         from oqp.pyoqp import Runner
 
-        workdir = Path(f"/tmp/oqp_d4_hess_{hess_type}_{d4}")
-        workdir.mkdir(exist_ok=True)
+        workdir = self.tmpdir / f"{hess_type}_{d4}"
+        workdir.mkdir()
         inp = workdir / "h2o.inp"
         inp.write_text(INPUT_TMPL.format(hess_type=hess_type, d4=d4))
         runner = Runner(project=f"h2o_{hess_type}_{d4}", input_file=str(inp),

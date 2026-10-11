@@ -16,10 +16,11 @@ exact rather than tolerance-based:
 Skipped unless a built OpenQP is importable, like the other selftest drivers.
 """
 
+import os
+import tempfile
 import unittest
 from pathlib import Path
-
-SELFTEST_OUT = Path("/tmp/fci_symmetry_selftest.out")
+from unittest import mock
 
 
 def _runtime_available():
@@ -32,11 +33,18 @@ def _runtime_available():
 
 @unittest.skipUnless(_runtime_available(), "built OpenQP runtime not importable")
 class FciSymmetrySelfTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="oqp_fci_symmetry_")
+        self.addCleanup(tmp.cleanup)
+        self.tmpdir = Path(tmp.name)
+        # The native self-test writes its report to $OQP_SELFTEST_DIR
+        # (source/io/selftest_output.F90); keep it private to this test.
+        env = mock.patch.dict(os.environ, {"OQP_SELFTEST_DIR": str(self.tmpdir)})
+        env.start()
+        self.addCleanup(env.stop)
+
     def test_determinant_and_root_irreps(self):
         import oqp
-
-        if SELFTEST_OUT.exists():
-            SELFTEST_OUT.unlink()
 
         try:
             oqp.ffi.cdef("void fci_symmetry_selftest(void);")
@@ -45,10 +53,11 @@ class FciSymmetrySelfTest(unittest.TestCase):
             pass
         lib = oqp.ffi.dlopen(str(_library_path()))
         lib.fci_symmetry_selftest()
+        report = self.tmpdir / "fci_symmetry_selftest.out"
 
-        self.assertTrue(SELFTEST_OUT.exists(), "selftest produced no output")
+        self.assertTrue(report.exists(), "selftest produced no output")
         results = {}
-        for line in SELFTEST_OUT.read_text().splitlines():
+        for line in report.read_text().splitlines():
             if "=" not in line:
                 continue
             key, value = line.split("=", 1)

@@ -29,13 +29,13 @@ Skipped unless the compiled OpenQP runtime (pyoqp) and PySCF are importable.
 """
 
 import os
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
-
-BLOCKS = Path("/tmp/hess_nuc_blocks.txt")
 
 # Low-symmetry C1, all-distinct-atom geometry (H, O, F), deliberately
 # distorted so no charge-center cross block is zero/degenerate by symmetry.
@@ -251,6 +251,16 @@ def _build_map(d, mol):
 
 @unittest.skipIf(_SKIP, f"compiled OpenQP runtime or PySCF not available ({_REASON})")
 class HessNucOracle(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="oqp_hess_nuc_oracle_")
+        self.addCleanup(tmp.cleanup)
+        self.tmpdir = Path(tmp.name)
+        # The native self-test writes its report to $OQP_SELFTEST_DIR
+        # (source/io/selftest_output.F90); keep it private to this test.
+        env = mock.patch.dict(os.environ, {"OQP_SELFTEST_DIR": str(self.tmpdir)})
+        env.start()
+        self.addCleanup(env.stop)
+
     def test_per_nucleus_blocks_match_pyscf(self):
         if _REASON is not None:
             # OQP_ORACLE_REQUIRED was set: do not skip, fail loudly.
@@ -258,20 +268,18 @@ class HessNucOracle(unittest.TestCase):
         import oqp
         from oqp.pyoqp import Runner
 
-        workdir = Path("/tmp/oqp_hess_nuc_oracle")
-        workdir.mkdir(exist_ok=True)
+        workdir = self.tmpdir
         inp = workdir / "hof.inp"
         inp.write_text(INPUT)
-        if BLOCKS.exists():
-            BLOCKS.unlink()
 
         runner = Runner(project="hof_oracle", input_file=str(inp),
                         log=str(workdir / "hof.log"))
         runner.run()
         oqp.hess1_selftest(runner.mol)
-        self.assertTrue(BLOCKS.exists(), "oracle emitter produced no block dump")
+        blocks = self.tmpdir / "hess_nuc_blocks.txt"
+        self.assertTrue(blocks.exists(), "oracle emitter produced no block dump")
 
-        d = _parse_blocks(BLOCKS)
+        d = _parse_blocks(blocks)
         nbf, natom = int(d["nbf"]), int(d["natom"])
 
         # PySCF mol from the EXACT OpenQP-emitted basis and bohr coordinates.
@@ -330,7 +338,7 @@ class HessNucOracle(unittest.TestCase):
         # ---- SECONDARY (contracted) confirmation, only after the integral
         #      oracle above has passed. -------------------------------------
         sel = {}
-        for line in Path("/tmp/hess1_selftest.out").read_text().splitlines():
+        for line in (self.tmpdir / "hess1_selftest.out").read_text().splitlines():
             if "=" in line:
                 k, _, v = line.partition("=")
                 try:
@@ -348,7 +356,7 @@ class HessNucOracle(unittest.TestCase):
 
         # non-circular charge-charge: TI-built p_CC (block9) vs independent
         # finite difference of the HF charge gradient (fd_cc), which never uses TI.
-        sep = Path("/tmp/hess1_sep.out").read_text().splitlines()
+        sep = (self.tmpdir / "hess1_sep.out").read_text().splitlines()
         idx = [i for i, l in enumerate(sep) if "block9 - fd_cc" in l]
         self.assertTrue(idx, "separated-FD diagnostic missing block9 - fd_cc")
         rows = [r for r in sep[idx[0] + 1: idx[0] + 1 + 3 * natom] if r.strip()]

@@ -16,6 +16,7 @@ Skipped unless the compiled OpenQP runtime is importable.
 """
 
 import os
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -51,12 +52,17 @@ def _runtime_available():
 
 @unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime not available")
 class PolarizabilityDispatch(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="oqp_polar_dispatch_")
+        self.addCleanup(tmp.cleanup)
+        self.tmpdir = Path(tmp.name)
+
     def _alpha(self, scftype):
         import oqp
         from oqp.pyoqp import Runner
 
-        workdir = Path(f"/tmp/oqp_polar_dispatch_{scftype}")
-        workdir.mkdir(exist_ok=True)
+        workdir = self.tmpdir / scftype
+        workdir.mkdir()
         inp = workdir / "h2o.inp"
         inp.write_text(INPUT_TMPL.format(scftype=scftype))
         runner = Runner(project=f"h2o_disp_{scftype}", input_file=str(inp),

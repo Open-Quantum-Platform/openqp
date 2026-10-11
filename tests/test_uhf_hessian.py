@@ -19,6 +19,7 @@ Skipped unless the compiled OpenQP runtime is importable.
 """
 
 import os
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -58,11 +59,16 @@ def _runtime_available():
 
 @unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime not available")
 class UhfAnalyticHessian(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="oqp_uhf_hess_")
+        self.addCleanup(tmp.cleanup)
+        self.tmpdir = Path(tmp.name)
+
     def _hessian(self, hess_type):
         from oqp.pyoqp import Runner
 
-        workdir = Path(f"/tmp/oqp_uhf_hess_{hess_type}")
-        workdir.mkdir(exist_ok=True)
+        workdir = self.tmpdir / hess_type
+        workdir.mkdir()
         inp = workdir / "oh.inp"
         inp.write_text(INPUT_TMPL.format(hess_type=hess_type))
         runner = Runner(project=f"oh_{hess_type}", input_file=str(inp),

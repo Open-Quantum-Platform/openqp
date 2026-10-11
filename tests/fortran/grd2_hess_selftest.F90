@@ -10,6 +10,7 @@ module grd2_hess_selftest_mod
 !>   Validation harness only: it does not compute or return a physical Hessian
 !>   and is independent of the hf_hessian kernel.
 
+  use selftest_output, only: selftest_output_path
   implicit none
 
   character(len=*), parameter :: module_name = "grd2_hess_selftest_mod"
@@ -100,7 +101,7 @@ contains
 
     block
       integer :: u
-      open(newunit=u, file='/tmp/grd2_hess_selftest.out', status='replace', action='write')
+      open(newunit=u, file=selftest_output_path('grd2_hess_selftest.out'), status='replace', action='write')
       write(u,'(a,es12.4)') '2e hess max|an-fd|   = ', err
       write(u,'(a,es12.4)') '2e hess rel error    = ', errel
       write(u,'(a,es12.4)') '2e hess asymmetry    = ', sym
@@ -240,7 +241,7 @@ contains
 
     block
       integer :: u
-      open(newunit=u, file='/tmp/hess_skel_selftest.out', status='replace', action='write')
+      open(newunit=u, file=selftest_output_path('hess_skel_selftest.out'), status='replace', action='write')
       write(u,'(a,es12.4)') 'skeleton max|an-fd|  = ', maxval(abs(han - hfd))
       write(u,'(a,es12.4)') 'skeleton rel error   = ', err
       write(u,'(a,es12.4)') 'max|analytic|        = ', maxval(abs(han))
@@ -399,7 +400,7 @@ contains
 
     block
       integer :: u
-      open(newunit=u, file='/tmp/hess_skel_open_selftest.out', status='replace', action='write')
+      open(newunit=u, file=selftest_output_path('hess_skel_open_selftest.out'), status='replace', action='write')
       write(u,'(a,i0)')     'scftype              = ', infos%control%scftype
       write(u,'(a,es12.4)') 'skeleton max|an-fd|  = ', maxval(abs(han - hfd))
       write(u,'(a,es12.4)') 'skeleton rel error   = ', err
