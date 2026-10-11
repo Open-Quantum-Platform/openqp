@@ -16,6 +16,8 @@ import types
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import stub_module
+
 ROOT = Path(__file__).resolve().parents[1]
 RUNFUNC = ROOT / "pyoqp" / "oqp" / "library" / "runfunc.py"
 OQPDATA = ROOT / "pyoqp" / "oqp" / "molecule" / "oqpdata.py"
@@ -200,8 +202,8 @@ def load_input_checker_with_minimal_stubs():
 
     stub_names = ("oqp", "oqp.utils", "oqp.utils.mpi_utils")
     saved = {name: sys.modules.get(name) for name in stub_names}
-    sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-    sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+    stub_module("oqp")
+    stub_module("oqp.utils")
     sys.modules["oqp.utils.mpi_utils"] = mpi_utils
     try:
         spec = importlib.util.spec_from_file_location(

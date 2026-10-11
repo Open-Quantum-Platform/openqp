@@ -5,7 +5,7 @@ import types
 import unittest
 from pathlib import Path
 
-from oqp_module_isolation import isolate_modules
+from oqp_module_isolation import isolate_modules, stub_module
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -35,8 +35,8 @@ def minimal_config(**overrides):
 
 def load_input_checker():
     """Load the backend-free input checker with a narrow MPI stub."""
-    oqp_mod = sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-    utils_mod = sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+    oqp_mod = stub_module("oqp")
+    utils_mod = stub_module("oqp.utils")
     mpi_mod = types.ModuleType("oqp.utils.mpi_utils")
 
     class MPIManager:

@@ -6,7 +6,7 @@ import types
 import unittest
 from pathlib import Path
 
-from oqp_module_isolation import isolate_modules
+from oqp_module_isolation import isolate_modules, stub_module
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -90,8 +90,8 @@ def _load_regression():
 
 def _load_input_checker():
     """Import input_checker.py in isolation with a minimal MPI stub."""
-    sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-    sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+    stub_module("oqp")
+    stub_module("oqp.utils")
     mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
 
     class MPIManager:

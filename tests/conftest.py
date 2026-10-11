@@ -21,10 +21,15 @@ changes it: one that puts the source tree on ``sys.path``, points
 ``OPENQP_ROOT`` somewhere, or leaves a stub in ``sys.modules`` silently
 changes which ``oqp`` every later test (and every spawned interpreter, which
 inherits ``sys.path``) runs against, so results depended on file order.
+The guard also covers attributes rebound on the real modules: a stub created
+with ``sys.modules.setdefault`` is the real package whenever that is already
+imported, so ``oqp.ffi = object()`` or ``numpy.int32 = ...`` written "on the
+stub" broke every later native call (a SIGSEGV in test_state_tracking).
 """
 import importlib.util
 import os
 import sys
+import types
 import warnings
 
 import pytest
@@ -71,10 +76,37 @@ def _oqp_namespace():
             if name == "oqp" or name.startswith("oqp.")]
 
 
+# Attributes whose rebinding on the real module breaks later native calls.
+_PINNED_OQP_ATTRS = ("ffi", "lib", "__path__")
+_PINNED_NUMPY_ATTRS = ("void", "int8", "int16", "int32", "int64", "uint8", "uint16",
+                       "uint32", "uint64", "float32", "float64", "complex64",
+                       "complex128", "dtype", "ndarray", "empty", "zeros", "array",
+                       "asarray", "ascontiguousarray", "frombuffer")
+_MISSING = object()
+
+
+def _bindings():
+    """(module, attribute) -> value for attributes of real modules worth pinning."""
+    pinned = {}
+    for _name, module in _oqp_namespace():
+        if not _from_selected_package(module):
+            continue
+        for attr, value in vars(module).items():
+            if attr in _PINNED_OQP_ATTRS or isinstance(value, types.ModuleType):
+                pinned[(module, attr)] = value
+    numpy = sys.modules.get("numpy")
+    if numpy is not None:
+        for attr in _PINNED_NUMPY_ATTRS:
+            pinned[(numpy, attr)] = getattr(numpy, attr, _MISSING)
+    return pinned
+
+
 def _import_state():
     return {
         "sys.path": [p for p in sys.path if not _is_test_dir(p)],
         "OPENQP_ROOT": os.environ.get("OPENQP_ROOT"),
+        "numpy": sys.modules.get("numpy"),
+        "bindings": _bindings(),
     }
 
 
@@ -101,6 +133,21 @@ def _import_state_violations(before):
     if foreign:
         problems.append(f"sys.modules holds oqp modules not from {_OQP_PACKAGE_DIR}: "
                         f"{foreign}; restore every stub in teardown")
+    if before["numpy"] is not None and after["numpy"] is not before["numpy"]:
+        problems.append("sys.modules['numpy'] was replaced")
+    rebound = []
+    for (module, attr), value in before["bindings"].items():
+        if vars(module).get(attr, _MISSING) is not value:
+            rebound.append(f"{module.__name__}.{attr}")
+    for (module, attr), value in after["bindings"].items():
+        # A bare ModuleType stub has no __spec__; built-in modules (sys, time)
+        # have one but no __file__, so __file__ cannot tell them apart.
+        if (module, attr) not in before["bindings"] and isinstance(value, types.ModuleType) \
+                and getattr(value, "__spec__", None) is None:
+            rebound.append(f"{module.__name__}.{attr} (bound to a stub)")
+    if rebound:
+        problems.append(f"attributes of real modules were rebound: {sorted(rebound)}; "
+                        "build stubs as fresh modules (oqp_module_isolation.stub_module)")
     return problems
 
 
@@ -113,6 +160,13 @@ def _restore_import_state(state):
     for name, module in _oqp_namespace():
         if not _from_selected_package(module):
             del sys.modules[name]
+    if state["numpy"] is not None:
+        sys.modules["numpy"] = state["numpy"]
+    for (module, attr), value in state["bindings"].items():
+        if value is _MISSING:
+            module.__dict__.pop(attr, None)
+        else:
+            setattr(module, attr, value)
 
 
 @pytest.hookimpl(hookwrapper=True)

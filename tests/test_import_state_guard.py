@@ -58,12 +58,56 @@ def test_scoped_changes_are_allowed(monkeypatch):
 """
 
 
-def _run_child(tmp_path, files):
+REBINDING = """
+import sys
+import types
+
+import numpy
+import oqp
+import oqp.utils
+
+
+def test_rebinds_real_oqp_through_setdefault():
+    stub = sys.modules.setdefault("oqp", types.ModuleType("oqp"))
+    stub.ffi = object()
+
+
+def test_binds_stub_on_real_package():
+    oqp.utils.mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
+
+
+def test_rebinds_numpy_scalar_type():
+    numpy.int32 = type("int32", (), {})
+
+
+def test_importing_a_real_submodule_is_allowed():
+    import oqp.utils.helper  # binds built-in sys/time, which have no __file__
+
+
+def test_scoped_rebinding_is_allowed(monkeypatch):
+    monkeypatch.setattr(oqp, "ffi", object())
+    monkeypatch.setattr(numpy, "int32", type("int32", (), {}))
+"""
+
+
+def _fake_oqp_package(root):
+    # A pure-Python stand-in for an installed oqp, so the child can import a
+    # "real" package without a liboqp build.
+    (root / "oqp" / "utils").mkdir(parents=True)
+    (root / "oqp" / "__init__.py").write_text("ffi = object()\nlib = object()\n")
+    (root / "oqp" / "utils" / "__init__.py").write_text("")
+    (root / "oqp" / "utils" / "helper.py").write_text("import sys\nimport time\n")
+    return root
+
+
+def _run_child(tmp_path, files, pythonpath=None):
     (tmp_path / "conftest.py").write_text(CHILD_CONFTEST)
     for name, body in files.items():
         (tmp_path / name).write_text(textwrap.dedent(body))
     env = {k: v for k, v in os.environ.items()
            if k not in ("OPENQP_ROOT", "PYTEST_ADDOPTS", "PYTHONPATH")}
+    if pythonpath is not None:
+        env["PYTHONPATH"] = str(pythonpath)
     # importlib mode: the child's own test directory is outside tests/, so the
     # default prepend mode would put it on sys.path and trip the guard itself.
     result = subprocess.run(
@@ -94,3 +138,22 @@ def test_tests_that_leak_fail_and_scoped_changes_pass(tmp_path):
         assert reason in out, out
     assert "PASSED test_child_leaks.py::test_scoped_changes_are_allowed" in out, out
     assert "ERROR test_child_leaks.py::test_scoped_changes_are_allowed" not in out, out
+
+
+def test_rebinding_real_module_attributes_fails(tmp_path):
+    site = _fake_oqp_package(tmp_path / "site")
+    child = tmp_path / "child"
+    child.mkdir()
+    code, out = _run_child(child, {"test_child_rebinding.py": REBINDING}, pythonpath=site)
+    assert code != 0, out
+    for name, reason in (
+        ("test_rebinds_real_oqp_through_setdefault", "'oqp.ffi'"),
+        ("test_binds_stub_on_real_package", "'oqp.utils.mpi_utils (bound to a stub)'"),
+        ("test_rebinds_numpy_scalar_type", "'numpy.int32'"),
+    ):
+        assert f"ERROR test_child_rebinding.py::{name}" in out, out
+        assert reason in out, out
+    for name in ("test_importing_a_real_submodule_is_allowed",
+                 "test_scoped_rebinding_is_allowed"):
+        assert f"PASSED test_child_rebinding.py::{name}" in out, out
+        assert f"ERROR test_child_rebinding.py::{name}" not in out, out

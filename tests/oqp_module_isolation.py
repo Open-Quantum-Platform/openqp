@@ -14,6 +14,23 @@ imports the loaded module makes lazily at call time -- and are gone after it::
         sys.modules["oqp.utils.mpi_utils"] = mpi_utils_stub
 """
 import sys
+import types
+
+
+def stub_module(name):
+    """Return the stub installed under ``name``, installing a fresh one if needed.
+
+    Use this instead of ``sys.modules.setdefault(name, ModuleType(name))``:
+    when the real package is already imported, ``setdefault`` returns it, and
+    the attributes a test then sets (``oqp.ffi``, ``utils.mpi_utils``,
+    ``__path__``) rewrite the real package for the rest of the session --
+    restoring ``sys.modules`` cannot undo that.
+    """
+    module = sys.modules.get(name)
+    if module is None or getattr(module, "__file__", None) is not None:
+        module = types.ModuleType(name)
+        sys.modules[name] = module
+    return module
 
 
 def _in_namespace(name, prefixes):

@@ -5,7 +5,7 @@ import types
 import unittest
 from pathlib import Path
 
-from oqp_module_isolation import isolate_modules
+from oqp_module_isolation import isolate_modules, stub_module
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,8 +20,8 @@ def load_module(name, relative_path):
 
 
 def install_minimal_oqp_stubs():
-    sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-    sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+    stub_module("oqp")
+    stub_module("oqp.utils")
     mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
 
     class MPIManager:

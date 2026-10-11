@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
-from oqp_module_isolation import isolate_modules
+from oqp_module_isolation import isolate_modules, stub_module
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -33,7 +33,7 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
         molecule_mod = types.ModuleType("oqp.molecule")
         setattr(molecule_mod, "Molecule", object)
         sys.modules["oqp.molecule"] = molecule_mod
-        sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+        stub_module("oqp.utils")
         mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
 
         class MPIManager:
@@ -180,8 +180,8 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
 class AnalyticHessianInputValidationTests(unittest.TestCase):
     def setUp(self):
         self.addCleanup(isolate_modules())
-        sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-        sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+        stub_module("oqp")
+        stub_module("oqp.utils")
         mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
 
         class MPIManager:

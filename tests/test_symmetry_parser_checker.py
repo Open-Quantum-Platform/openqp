@@ -5,15 +5,15 @@ import types
 import unittest
 from pathlib import Path
 
-from oqp_module_isolation import isolate_modules
+from oqp_module_isolation import isolate_modules, stub_module
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def load_input_checker():
-    oqp_mod = sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-    utils_mod = sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+    oqp_mod = stub_module("oqp")
+    utils_mod = stub_module("oqp.utils")
     mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
 
     class MPIManager:
