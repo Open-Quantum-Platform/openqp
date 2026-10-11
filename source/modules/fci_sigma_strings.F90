@@ -30,7 +30,6 @@ module fci_sigma_strings_mod
 
   use, intrinsic :: iso_c_binding, only: c_int32_t, c_int64_t, c_double
 !$ use omp_lib
-  use blas_thread, only: blas_thread_count, blas_thread_set
   implicit none
   private
   ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
@@ -352,7 +351,6 @@ contains
     integer :: status
 
     integer :: na, nb, nkl, nlink_a, nthr, maxper_b, npartials
-    integer(i8) :: nblas_save
     integer(i8) :: nastr, nbstr, ia, ib, k, base, srow, drow
     integer(i8) :: e, m
     integer(i8) :: nblk, blk_start, blk_len, nrow, nrow_max, cbase
@@ -532,7 +530,7 @@ contains
       nblk = min(nastr, (work_bytes_cap - gram_bytes - partial_bytes) / row_bytes)
       nrow_max = nblk * nbstr
     end if
-    ! Allocate every owned buffer before changing the caller's BLAS setting.
+    ! Allocate every owned buffer before writing the caller's outputs.
     ! On failure local allocatables are released on return, including any
     ! objects allocated before a later checked allocation failed.
     ierr = 0
@@ -567,16 +565,6 @@ contains
       status = -1
       return
     end if
-
-    ! Each OpenMP worker contracts its own row interval.  A threaded BLAS
-    ! pool inside those workers would oversubscribe the caller's CPU budget.
-    ! All declining returns precede this change of the caller's setting.
-    ! Serialize overlapping OpenMP calls while they own the process-wide setting.
-    ! A serial build keeps the caller's BLAS pool and never changes global state.
-    !$omp critical(rdm_blas_thread_guard)
-    nblas_save = -1_i8
-!$  nblas_save = blas_thread_count()
-    if (nblas_save > 0_i8) call blas_thread_set(1_i8)
 
     ! The leading dimension stays nrow_max for every block; a short final block
     ! just passes a smaller row count to BLAS, which reads A(1:k, :) with the
@@ -634,17 +622,14 @@ contains
       end do
       !$omp end parallel do
 
-      ! d1 += T_blk^T c_blk and gram += T_blk^T T_blk, threaded over row
-      ! blocks BY US -- the linked BLAS is a serial build, so these ran on one
-      ! core.  Both contract OVER rows, so unlike the sigma's product each
-      ! thread needs private partials that are summed at the end.  The partials
-      ! occupy nact^2 + nact^4 doubles each and are included in the blocked
-      ! scratch ceiling above.
+      ! Contract row intervals outside an OpenMP region using the caller's
+      ! BLAS policy. Changing a process-wide BLAS count here would race with
+      ! other native kernels' save/set/restore sequences. The T construction
+      ! above remains parallel; BLAS owns any parallelism during contraction.
+      ! Keep the partial intervals and ordered sum, including their budgeted
+      ! nact^2 + nact^4 doubles, so the reduction order does not change.
       gloc = 0.0_dp
       dloc = 0.0_dp
-      !$omp parallel do num_threads(nthr) default(shared) &
-      !$omp   private(gi, grow0, growlen) &
-      !$omp   if(nrow * int(nkl, i8) >= par_min_elems)
       do gi = 0, npartials - 1
         grow0 = (nrow * int(gi, i8)) / int(npartials, i8)
         growlen = (nrow * int(gi + 1, i8)) / int(npartials, i8) - grow0
@@ -656,7 +641,6 @@ contains
                      tmat(grow0 + 1_i8, 1), int(nrow_max), 1.0_dp, gloc(1, 1, gi + 1), nkl)
         end if
       end do
-      !$omp end parallel do
       do gi = 1, npartials
         do t = 1, nkl
           d1(int(t, i8)) = d1(int(t, i8)) + dloc(t, gi)
@@ -699,8 +683,6 @@ contains
 
     deallocate(astr, bstr, ntab_a, kl_a, src_a, sgn_a, &
                cnt_b, tgt_b, src_bk, sgn_bk, tmat, gram, gloc, dloc)
-    if (nblas_save > 0_i8) call blas_thread_set(nblas_save)
-    !$omp end critical(rdm_blas_thread_guard)
     status = 0
   end function rdm12_strings
 

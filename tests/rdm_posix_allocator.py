@@ -8,12 +8,100 @@ fail if asked to run it. No synthetic controller is armed in these tests.
 
 import ctypes
 import os
+from pathlib import Path
 import subprocess
 import sys
 
 import pytest
 
 from test_rdm_fallback import native
+
+
+@pytest.mark.parametrize("threads", [1, 4])
+@pytest.mark.parametrize("norb,nelec", [(4, (2, 1)), (8, (4, 4))])
+def test_rdm_never_changes_foreign_blas_policy(native, tmp_path, threads, norb, nelec):
+    """Count setter calls while real RDM arithmetic uses the installed BLAS.
+
+    A separate process resolves the control fixture before loading liboqp.
+    The fixture changes only the control API; no numerical BLAS is replaced.
+    Both sides of the T-construction OpenMP threshold must leave a foreign
+    caller's temporary setting untouched, including overlapping RDM calls.
+    """
+    assert sys.platform in ("linux", "darwin"), "BLAS control lane requires POSIX"
+    source = Path(__file__).with_name("ecp_thread_control_fixture.c")
+    library = tmp_path / ("controls.dylib" if sys.platform == "darwin" else "controls.so")
+    if sys.platform == "darwin":
+        compiler = "/opt/homebrew/bin/gcc-15" if os.uname().machine == "arm64" else "/usr/local/bin/gcc-15"
+        command = [compiler, "-dynamiclib", str(source), "-o", str(library)]
+    else:
+        command = ["cc", "-shared", "-fPIC", str(source), "-o", str(library)]
+    subprocess.run(command, check=True, capture_output=True, text=True)
+    child = r'''
+import ctypes, sys
+fixture = ctypes.CDLL(sys.argv[1], mode=ctypes.RTLD_GLOBAL)
+fixture.openblas_set_num_threads.argtypes = [ctypes.c_int]
+import numpy as np
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+from oqp.library import rdm
+from oqp import runtime
+lib, ffi = rdm._rdm_backend()
+assert hasattr(lib, "rdm12_strings_c"), "Missing string RDM export"
+ctl = ctypes.CDLL(str(runtime.library_path(*runtime.resolve_oqp_root())))
+ctl.oqp_blas_thread_count.restype = ctypes.c_int64
+threads, norb, na, nb = map(int, sys.argv[2:])
+dets = np.ascontiguousarray(rdm.determinant_basis(norb, (na, nb)), dtype=np.int64)
+vectors = [np.random.default_rng(742+i).standard_normal(len(dets)) for i in range(2)]
+vectors = [np.ascontiguousarray(c / np.linalg.norm(c)) for c in vectors]
+def evaluate(c):
+    d1 = np.empty((norb, norb))
+    d2 = np.empty((norb,) * 4)
+    status = lib.rdm12_strings_c(norb, len(dets), ffi.cast("int64_t *", dets.ctypes.data),
+        ffi.cast("double *", c.ctypes.data), ffi.cast("double *", d1.ctypes.data),
+        ffi.cast("double *", d2.ctypes.data), threads)
+    assert status == 0, status
+    return d1, d2
+assert ctl.oqp_blas_thread_count() == 4, "Control fixture was not resolved"
+assert fixture.ecp_fixture_calls() == 0
+reference = [evaluate(c) for c in vectors]
+assert fixture.ecp_fixture_calls() == 0, "RDM mutated process-wide BLAS policy"
+# Another native kernel has saved 4 and temporarily selected 2. RDM must
+# participate in neither that save nor its later restore, in any build.
+fixture.openblas_set_num_threads(2)
+barrier = Barrier(2)
+def overlapping(c):
+    barrier.wait(timeout=10)
+    return evaluate(c)
+with ThreadPoolExecutor(max_workers=2) as pool:
+    actual = list(pool.map(overlapping, vectors))
+assert fixture.ecp_fixture_calls() == 1, "RDM interfered with the foreign transaction"
+assert ctl.oqp_blas_thread_count() == 2
+fixture.openblas_set_num_threads(4)
+assert fixture.ecp_fixture_calls() == 2
+assert ctl.oqp_blas_thread_count() == 4
+for c, result, previous in zip(vectors, actual, reference):
+    assert result[0].tobytes() == previous[0].tobytes()
+    assert result[1].tobytes() == previous[1].tobytes()
+    spin = rdm._lib_rdm2(c, dets, 2*norb)
+    assert spin is not None
+    signed = np.zeros((norb,) * 4)
+    for a in (0, norb):
+        for b in (0, norb):
+            signed += spin[a:a+norb,b:b+norb,a:a+norb,b:b+norb].transpose(0,2,1,3)
+    assert np.max(np.abs(signed - signed.swapaxes(0,1))) > 1e-4
+    np.testing.assert_allclose(result[1], signed, rtol=0, atol=2e-12)
+print("RDM setter calls=0; foreign BLAS policy and overlapping signed pins passed",
+      "threads=", threads, "norb=", norb)
+'''
+    env = os.environ.copy()
+    env["OMP_NUM_THREADS"] = str(threads)
+    env["OPENBLAS_NUM_THREADS"] = "1"
+    result = subprocess.run([sys.executable, "-c", child, str(library), str(threads),
+                             str(norb), str(nelec[0]), str(nelec[1])],
+                            env=env, capture_output=True, text=True, timeout=90)
+    assert result.returncode == 0, result.stdout + result.stderr
+    print(result.stdout)
+
 
 @pytest.fixture
 def allocation_interposer(native, tmp_path):
