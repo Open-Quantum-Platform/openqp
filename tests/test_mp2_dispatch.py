@@ -77,24 +77,29 @@ def test_n5_matches_direct_j(tmp_path, monkeypatch, scf, mult, atoms, variant):
 
 
 def test_input_dispatch_and_default_crossover(tmp_path, monkeypatch):
-    """Use the actual default threshold, with 124 spherical AOs (>120).
+    """Use the actual default threshold, with 127 spherical AOs (>120).
 
-    The small direct-J result pins the input route too. The large full and
-    occupied-virtual calculations share the same converged SCF reference.
+    The small direct-J result pins the input route too. The unrestricted
+    large case checks both spin components against an independent UMP2 result.
     """
     monkeypatch.delenv('OQP_MP2_MAX_JBUILDS', raising=False)
     monkeypatch.delenv('OQP_MEMORY_LIMIT_GB', raising=False)
     _, small_log = _run(tmp_path, 'small_input')
     assert 'MP2 path: direct-J' in small_log.read_text()
-    runner, log = _run(tmp_path, 'large_input', atoms='H 0 0 0; H 0 0 .74', basis='d-aug-cc-pvqz')
-    assert int(runner.mol.data.get_basis()['nbf']) > 120
-    assert 'MP2 path: n5 ' in log.read_text()
+    runner, log = _run(tmp_path, 'large_input', scf='uhf', mult=2,
+                       atoms='Li 0 0 0', basis='aug-cc-pv5z')
+    assert int(runner.mol.data.get_basis()['nbf']) == 127
+    assert 'MP2 path: n5 occupied-virtual' in log.read_text()
     assert 'MP2 path: direct-J' not in log.read_text()
     reference = _components(log)
-    # PySCF RHF/MP2 with the identical Basis Set Exchange d-aug-cc-pVQZ
-    # basis, 0.74 Angstrom, SCF conv_tol=1e-12, conv_tol_grad=1e-9.
-    np.testing.assert_allclose(reference[-2:], [-0.03325695678608737,
-                                               -1.1667414879132405], rtol=0, atol=1e-9)
+    # PySCF 2.9.0 UHF/UMP2 with the identical Basis Set Exchange aug-cc-pV5Z
+    # basis, Li doublet, SCF conv_tol=1e-12, conv_tol_grad=1e-9. The empty
+    # beta same-spin space has zero contribution; alpha and opposite spin
+    # are both nonzero. The failed H2/d-aug-cc-pVQZ evidence remains archived.
+    np.testing.assert_allclose(reference, [-0.000554399875408642, 0.0,
+                                          -0.02003057826966677,
+                                          -0.02058497814507541,
+                                          -7.385666870933013], rtol=0, atol=1e-9)
     # Restore the SCF energy before evaluating MP2 on the same native handle.
     scf_energy = float(re.findall(r'E\(reference, SCF\)\s*=\s*([-+0-9.eE]+)', log.read_text())[-1])
     runner.mol.data._data.mol_energy.energy = scf_energy
@@ -103,7 +108,28 @@ def test_input_dispatch_and_default_crossover(tmp_path, monkeypatch):
     log.write_text('')
     oqp.mp2_energy(runner.mol)
     assert 'MP2 path: n5 occupied-virtual' in log.read_text()
+    assert 'MP2 path: n5 full' not in log.read_text()
+    assert 'MP2 path: direct-J' not in log.read_text()
     np.testing.assert_allclose(reference, _components(log), rtol=0, atol=1e-9)
+    # Li's beta same-spin contribution is zero. Also compare full and
+    # occupied-virtual transformations of its nonzero alpha same-spin energy
+    # above the default threshold, using the same converged UHF orbitals.
+    runner.mol.data.set_mp2_opposite_spin_scale(0)
+    same_spin_reference = reference.copy()
+    same_spin_reference[2] = 0
+    same_spin_reference[3] = reference[0] + reference[1]
+    same_spin_reference[4] = scf_energy + same_spin_reference[3]
+    for budget, path in [('16', 'n5 full'), ('2', 'n5 occupied-virtual')]:
+        monkeypatch.setenv('OQP_MEMORY_LIMIT_GB', budget)
+        runner.mol.data._data.mol_energy.energy = scf_energy
+        runner.mol.data._data.mol_energy.etot = scf_energy
+        log.write_text('')
+        oqp.mp2_energy(runner.mol)
+        assert 'MP2 path: ' + path in log.read_text()
+        assert 'MP2 path: direct-J' not in log.read_text()
+        if budget == '2':
+            assert 'MP2 path: n5 full' not in log.read_text()
+        np.testing.assert_allclose(same_spin_reference, _components(log), rtol=0, atol=1e-9)
 
 
 def test_empty_beta_space_and_dimension_reuse(tmp_path, monkeypatch):

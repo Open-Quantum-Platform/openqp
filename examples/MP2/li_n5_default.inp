@@ -1,0 +1,14 @@
+# The 127 spherical AOs select the default nbf > 120 MP2 transform.
+[input]
+method=mp2
+runtype=energy
+basis=aug-cc-pv5z
+system=
+ Li 0 0 0
+[guess]
+type=hcore
+[scf]
+type=uhf
+multiplicity=2
+conv=1.0e-11
+maxit=200
