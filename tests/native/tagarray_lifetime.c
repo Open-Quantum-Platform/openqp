@@ -1,4 +1,5 @@
 /* Exercise the TagArray C ABI in the installed liboqp, not inline Record code. */
+#define _POSIX_C_SOURCE 200809L
 #include <dlfcn.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -28,6 +29,54 @@ static void *symbol(void *library, const char *name) {
         exit(3); \
     } \
 } while (0)
+
+/* Also exercise the production cofactor caller and its debug records. */
+static void cofactor_lifetime(void *library) {
+    void (*persistent)(int64_t, int64_t, const int64_t *, const double *,
+                        double *, double *, int *, int *) =
+        symbol(library, "occupied_cofactors_persistent_selftest");
+    const int64_t sizes[4] = {6, 7, 3, 6};
+    double inputs[7 * 7 * 4] = {0.0};
+    double actual[7 * 7 * 4], previous[7 * 7 * 4];
+    for (int step = 0; step < 4; ++step) {
+        for (int i = 0; i < sizes[step]; ++i) {
+            inputs[step * 49 + i * 7 + i] = 1.0;
+            if (i + 1 < sizes[step])
+                inputs[step * 49 + (i + 1) * 7 + i] = 0.125;
+        }
+    }
+    CHECK(setenv("NAC_DUMP_MINORS", "1", 1) == 0);
+    for (int repeat = 0; repeat < 3; ++repeat) {
+        int checks[6] = {-1, -1, -1, -1, -1, -1}, status = -1;
+        persistent(7, 4, sizes, inputs, actual, previous, checks, &status);
+        CHECK(status == 0);
+        CHECK(checks[0] == 1 && checks[1] == 4 && checks[2] == 16);
+        CHECK(checks[3] == 4 && checks[4] == 4 && checks[5] == 2);
+        for (int step = 0; step < 4; ++step) {
+            for (int j = 0; j < 7; ++j) {
+                for (int i = 0; i < 7; ++i) {
+                    double expected = 0.0;
+                    if (i < sizes[step] && j < sizes[step] && i >= j) {
+                        expected = 1.0;
+                        for (int k = j; k < i; ++k) expected *= -0.125;
+                    }
+                    int offset = step * 49 + j * 7 + i;
+                    CHECK(actual[offset] == expected);
+                    CHECK(previous[offset] == expected);
+                }
+            }
+        }
+        const int64_t invalid[4] = {6, 1, 7, 3};
+        persistent(7, 4, invalid, inputs, actual, previous, checks, &status);
+        CHECK(status == 1 && checks[0] == 0 && checks[5] == 2);
+        CHECK(unsetenv("NAC_DUMP_MINORS") == 0);
+        persistent(7, 4, sizes, inputs, actual, previous, checks, &status);
+        CHECK(status == 4 && checks[0] == 1 && checks[1] == 1);
+        CHECK(checks[2] == 0 && checks[5] == 2);
+        CHECK(setenv("NAC_DUMP_MINORS", "1", 1) == 0);
+    }
+    puts("Cofactor same-owner lifetime regression passed (3 x 4 sizes)");
+}
 
 int main(int argc, char **argv) {
     CHECK(argc == 2);
@@ -78,6 +127,7 @@ int main(int argc, char **argv) {
         CHECK(create(container, "owned_at_exit", 10, 1, &n, NULL, "") == 0);
         delete_container(container);
     }
+    cofactor_lifetime(library);
     CHECK(dlclose(library) == 0);
     puts("TagArray linked lifetime regression passed (3 x 7 sizes)");
     return 0;

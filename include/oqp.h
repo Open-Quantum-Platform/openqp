@@ -17,6 +17,11 @@ void occupied_cofactors_selftest(int64_t n, const double *s, double *actual,
 /* Internal guard regression shim; bypasses only the production size dispatch. */
 void occupied_cofactors_batch_selftest(int64_t n, const double *s, double *actual,
                                      double *previous, int *used_lu);
+/* Same owner across debug-record replacements. Arrays are (nmax,nmax,nsteps).
+   checks[0..5] count creation, owner checks, record checks, errors, recovery, cleanup. */
+void occupied_cofactors_persistent_selftest(int64_t nmax, int64_t nsteps,
+    const int64_t *sizes, const double *s, double *actual, double *previous,
+    int *checks, int *status);
 
 /* Internal TDHF Davidson residual self-test (tests/fortran/rpa_residual_selftest.F90).
    Arrays are column-major: w_l, w_r, v_l, v_r (n, ndsr); q (n, ndsr, 2). */

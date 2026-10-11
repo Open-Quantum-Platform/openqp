@@ -248,7 +248,72 @@ def test_debug_export_owns_its_temporary_container(monkeypatch):
         if n <= 6:
             np.testing.assert_array_equal(actual, previous)
         retained.append((actual, actual.copy(), previous, previous.copy()))
-    # Every native container is already deleted, and a later call resized it.
+    # Every native container is already deleted, and later calls used fresh owners.
     for actual, saved_actual, previous, saved_previous in retained:
         np.testing.assert_array_equal(actual, saved_actual)
         np.testing.assert_array_equal(previous, saved_previous)
+
+
+def _persistent_call(sizes):
+    root, source = runtime.resolve_oqp_root()
+    lib = ctypes.CDLL(runtime.library_path(root, source))
+    fn = lib.occupied_cofactors_persistent_selftest  # mandatory export
+    p = ctypes.POINTER(ctypes.c_double)
+    pi64 = ctypes.POINTER(ctypes.c_int64)
+    pi = ctypes.POINTER(ctypes.c_int)
+    fn.argtypes = [ctypes.c_int64, ctypes.c_int64, pi64, p, p, p, pi, pi]
+    fn.restype = None
+    sizes = np.array(sizes, dtype=np.int64)
+    nmax = int(max(sizes))
+    inputs = np.zeros((nmax, nmax, len(sizes)), dtype=np.float64, order="F")
+    for step, n in enumerate(sizes):
+        inputs[:n, :n, step] = np.eye(n) + np.arange(n*n).reshape(n, n) * 0.002
+    saved = inputs.copy()
+    actual = np.full_like(inputs, np.nan, order="F")
+    previous = np.full_like(inputs, np.nan, order="F")
+    checks = np.full(6, -1, dtype=np.int32)
+    status = ctypes.c_int(-1)
+    fn(nmax, len(sizes), sizes.ctypes.data_as(pi64), inputs.ctypes.data_as(p),
+       actual.ctypes.data_as(p), previous.ctypes.data_as(p),
+       checks.ctypes.data_as(pi), ctypes.byref(status))
+    np.testing.assert_array_equal(inputs, saved)
+    return inputs, actual, previous, checks, status.value
+
+
+@pytest.mark.parametrize("sizes", [(6, 7, 3, 6), (7, 3, 6, 7)])
+def test_debug_records_replace_in_one_owner_and_recover(monkeypatch, sizes):
+    monkeypatch.setenv("NAC_DUMP_MINORS", "1")
+    inputs, actual, previous, checks, status = _persistent_call(sizes)
+    assert status == 0, f"persistent cofactor lifetime check failed: status={status}, checks={checks}"
+    np.testing.assert_array_equal(checks, [1, len(sizes), 4*len(sizes), len(sizes), len(sizes), 2])
+    assert actual.flags.owndata and previous.flags.owndata
+    assert not np.shares_memory(actual, previous)
+    for step, n in enumerate(sizes):
+        # Checked after all replacements and both native owner deletions.
+        expected = np.zeros_like(actual[:, :, step])
+        expected[:n, :n] = _cofactors(inputs[:n, :n, step])
+        np.testing.assert_allclose(actual[:, :, step], expected, rtol=2e-13, atol=1e-15)
+        np.testing.assert_allclose(actual[:, :, step], previous[:, :, step], rtol=2e-13, atol=1e-15)
+        if n <= 6:
+            np.testing.assert_array_equal(actual[:, :, step], previous[:, :, step])
+
+
+def test_persistent_debug_invalid_dimension_reports_failure_and_cleans(monkeypatch):
+    monkeypatch.setenv("NAC_DUMP_MINORS", "1")
+    _, actual, previous, checks, status = _persistent_call((6, 1, 7))
+    assert status == 1
+    np.testing.assert_array_equal(checks, [0, 0, 0, 0, 0, 2])
+    np.testing.assert_array_equal(actual, np.zeros_like(actual))
+    np.testing.assert_array_equal(previous, np.zeros_like(previous))
+
+
+def test_persistent_debug_missing_records_cleans_live_owner(monkeypatch):
+    monkeypatch.delenv("NAC_DUMP_MINORS", raising=False)
+    inputs, actual, previous, checks, status = _persistent_call((6, 7))
+    assert status == 4  # one computed call, then the absent-record contract fails
+    np.testing.assert_array_equal(checks, [1, 1, 0, 0, 0, 2])
+    np.testing.assert_array_equal(actual[:, :, 1], np.zeros((7, 7)))
+    np.testing.assert_array_equal(previous[:, :, 1], np.zeros((7, 7)))
+    np.testing.assert_array_equal(actual[:, :, 0], previous[:, :, 0])
+    np.testing.assert_allclose(actual[:6, :6, 0], _cofactors(inputs[:6, :6, 0]),
+                               rtol=2e-13, atol=1e-15)
