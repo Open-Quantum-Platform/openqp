@@ -14,6 +14,12 @@ void oqp_ecp_selftest(double *err);
 
 /* Internal analytic-Hessian status conversion, also pinned by native tests. */
 int64_t cas_hessian_driver_status(int64_t hessian_status);
+/* Internal, explicitly pytest-gated, calling-thread Hessian fault controller.
+ * Site 1 supplies zero CI to the real builder; site 2 injects solver error info.
+ * request consumes one fault; end resets state and returns the reached count. */
+int32_t oqp_casscf_test_fault_begin(int32_t site);
+int32_t oqp_casscf_test_fault_end(int32_t *count);
+int32_t oqp_casscf_test_fault_request(int32_t site);
 
 /* Internal TDHF Davidson residual self-test (tests/fortran/rpa_residual_selftest.F90).
    Arrays are column-major: w_l, w_r, v_l, v_r (n, ndsr); q (n, ndsr, 2). */
@@ -295,7 +301,7 @@ int64_t qdpt2_stream_kernel(int32_t norb, int32_t ncore, int32_t nact,
  * transform is four DGEMMs with transposed output, so the index roll between
  * quarter transformations is free and no nbf^4 temporary is transposed.
  * mo_transform_eri returns 0, or -1 when its one internal nbf^4 buffer could
- * not be allocated (the caller falls back to the Python einsum). */
+ * not be allocated. CASSCF propagates that allocation failure without retry. */
 void mo_transform_h1e(int32_t nbf, const double *hcore, const double *coeff,
     double *h1e);
 int64_t mo_transform_eri(int32_t nbf, const double *eri_ao, const double *coeff,

@@ -46,7 +46,8 @@ module mo_transform_mod
   integer, parameter :: i8 = c_int64_t
   integer, parameter :: dp = c_double
 
-  public :: mo_transform_h1e, mo_transform_eri
+  public :: mo_transform_h1e, mo_transform_eri, MO_TRANSFORM_ERR_ALLOC
+  integer(i8), parameter :: MO_TRANSFORM_ERR_ALLOC = -1_i8
 
 contains
 
@@ -92,7 +93,7 @@ contains
   !> @param[in]  coeff   MO coefficients, C-order [nbf,nbf], coeff[u,p]
   !> @param[out] eri_mo  MO ERIs, C-order [nbf,nbf,nbf,nbf]
   !> @return     0 on success, -1 when the internal buffer cannot be allocated
-  !>             (the caller then falls back to the Python reference)
+  !>             (CASSCF propagates allocation failure without retry)
   function mo_transform_eri(nbf, eri_ao, coeff, eri_mo) result(status) &
       bind(C, name="mo_transform_eri")
     integer(c_int32_t), value :: nbf
@@ -112,7 +113,7 @@ contains
 
     allocate(work(0:n4-1), stat=ierr)
     if (ierr /= 0) then
-      status = -1_i8
+      status = MO_TRANSFORM_ERR_ALLOC
       return
     end if
 

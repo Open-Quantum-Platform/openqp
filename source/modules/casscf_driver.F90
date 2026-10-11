@@ -114,7 +114,7 @@ module casscf_driver_mod
                             FCI_D_ECORE, FCI_D_EIG_TOL, FCI_D_CUTOFF, &
                             FCI_NDOPT, FCI_MAX_NSPIN
   use fci_hamiltonian_mod, only: oqp_dsyevd_f
-  use mo_transform_mod, only: mo_transform_h1e, mo_transform_eri
+  use mo_transform_mod, only: mo_transform_h1e, mo_transform_eri, MO_TRANSFORM_ERR_ALLOC
   use casscf_kernel_mod, only: casscf_gfock_grad, casscf_effective_fock, &
                                casscf_gfock_grad_w
   use casscf_fastints_mod, only: cas_partial_eri, cas_ao_density, &
@@ -151,6 +151,15 @@ module casscf_driver_mod
   !> gradient from re-deriving any of that and drifting from the energy.
   public :: cas_ctx_t, cas_context_init, cas_evaluate
   public :: cas_hessian_driver_status
+  public :: oqp_casscf_test_fault_request
+  interface
+    function oqp_casscf_test_fault_request(site) result(fault) &
+        bind(C, name="oqp_casscf_test_fault_request")
+      import c_int32_t
+      integer(c_int32_t), value :: site
+      integer(c_int32_t) :: fault
+    end function oqp_casscf_test_fault_request
+  end interface
 
   ! ------------------------------------------------------------------ schema
   ! AUTHORITATIVE OPTION SCHEMA -- mirrored in include/oqp.h and in
@@ -213,7 +222,7 @@ module casscf_driver_mod
   integer(i8), parameter :: CAS_ERR_TAGS        = -3_i8  ! handle is missing a record
   integer(i8), parameter :: CAS_ERR_CI          = -4_i8  ! fci_solve declined
   integer(i8), parameter :: CAS_ERR_EIGEN       = -5_i8  ! LAPACK failure
-  integer(i8), parameter :: CAS_ERR_TRANSFORM   = -6_i8  ! AO->MO buffer allocation
+  integer(i8), parameter :: CAS_ERR_TRANSFORM   = -6_i8  ! other AO->MO failure
   integer(i8), parameter :: CAS_ERR_ROTATE      = -7_i8  ! expm/Pade failure
   integer(i8), parameter :: CAS_ERR_DEGEN       = -8_i8  ! non-smooth SA objective
   integer(i8), parameter :: CAS_ERR_STACK       = -9_i8  ! active space too large
@@ -403,6 +412,19 @@ module casscf_driver_mod
   end type cas_trah_provider_t
 
 contains
+
+  pure function cas_transform_driver_status(rc) result(status)
+    integer(i8), intent(in) :: rc
+    integer(i8) :: status
+    select case (rc)
+    case (0_i8)
+      status = 0_i8
+    case (MO_TRANSFORM_ERR_ALLOC)
+      status = CAS_ERR_ALLOC
+    case default
+      status = CAS_ERR_TRANSFORM
+    end select
+  end function cas_transform_driver_status
 
   !> Preserve the cause of an analytic-Hessian refusal at the driver boundary.
   !> Only the allocator status may enter Python's no-fallback MemoryError path.
@@ -643,10 +665,9 @@ contains
 
     ! ================================ final CI on the optimized orbitals
     call mo_transform_h1e(int(n, c_int32_t), ctx%hcore, cbuf, ctx%h1e)
-    if (mo_transform_eri(int(n, c_int32_t), ctx%eri_ao, cbuf, ctx%eri) /= 0_i8) then
-      status = CAS_ERR_TRANSFORM
-      return
-    end if
+    status = cas_transform_driver_status(mo_transform_eri( &
+        int(n, c_int32_t), ctx%eri_ao, cbuf, ctx%eri))
+    if (status < 0_i8) return
     ctx%iopt_ci(FCI_I_NROOT) = int(nroot, c_int32_t)
     ctx%iopt_ci(FCI_I_WANT_S2) = 1_c_int32_t
     ndet_ok = int(fci_solve(ctx%iopt_ci, ctx%dopt_ci, ctx%active, ctx%core, &
@@ -1705,11 +1726,12 @@ contains
     npar = ctx%npar
     ctx%nhess = ctx%nhess + 1
     call mo_transform_h1e(int(ctx%n, c_int32_t), ctx%hcore, cbuf, ctx%h1e_h)
-    if (mo_transform_eri(int(ctx%n, c_int32_t), ctx%eri_ao, cbuf, ctx%eri_h) &
-        /= 0_i8) then
-      status = CAS_ERR_TRANSFORM
-      return
-    end if
+    status = cas_transform_driver_status(mo_transform_eri( &
+        int(ctx%n, c_int32_t), ctx%eri_ao, cbuf, ctx%eri_h))
+    if (status < 0_i8) return
+    ! Test-only zero CI enters the real builder's zero-norm INPUT producer.
+    ! The controller is inert unless explicitly armed by its pytest caller.
+    if (oqp_casscf_test_fault_request(1_c_int32_t) /= 0_c_int32_t) ctx%civ_ref = 0.0_dp
     rc = cas_anhess_build(ctx%ah, ctx%pairs, ctx%weights, ctx%roots, ctx%nroot, &
                           ctx%dets, ctx%h1e_h, ctx%eri_h, ctx%civ_ref, hess)
     if (rc < 0_i8) then
@@ -2395,10 +2417,9 @@ contains
     na = ctx%na
 
     call mo_transform_h1e(int(n, c_int32_t), ctx%hcore, cbuf, ctx%h1e)
-    if (mo_transform_eri(int(n, c_int32_t), ctx%eri_ao, cbuf, ctx%eri) /= 0_i8) then
-      status = CAS_ERR_TRANSFORM
-      return
-    end if
+    status = cas_transform_driver_status(mo_transform_eri( &
+        int(n, c_int32_t), ctx%eri_ao, cbuf, ctx%eri))
+    if (status < 0_i8) return
     ctx%iopt_ci(FCI_I_NROOT) = 1_c_int32_t
     rc = fci_solve(ctx%iopt_ci, ctx%dopt_ci, ctx%active, ctx%core, ctx%h1e, &
                    ctx%eri, ctx%enci, ctx%civ, ctx%s2w)

@@ -36,6 +36,7 @@ static int selected, count, active, strings_only;
 static size_t total_bytes, largest_bytes;
 void rdm_fail_allocation(int n) { selected=n; count=0; active=1; strings_only=0; total_bytes=largest_bytes=0; }
 void rdm_fail_strings_allocation(int n) { rdm_fail_allocation(n); strings_only=1; }
+void rdm_fail_transform_allocation(int n) { rdm_fail_allocation(n); strings_only=2; }
 size_t rdm_total_bytes(void) { return total_bytes; }
 size_t rdm_largest_bytes(void) { return largest_bytes; }
 int rdm_allocation_count(void) { active=0; return count; }
@@ -43,7 +44,8 @@ static int fail(void *caller, size_t n) {
     Dl_info info;
     if (active && dladdr(caller, &info) && info.dli_fname &&
         strstr(info.dli_fname, "liboqp") && (!strings_only ||
-        (info.dli_sname && strstr(info.dli_sname, "_MOD_rdm12_strings")))) {
+        (info.dli_sname && strings_only==1 && strstr(info.dli_sname, "_MOD_rdm12_strings")) ||
+        (info.dli_sname && strings_only==2 && !strcmp(info.dli_sname, "mo_transform_eri")))) {
         total_bytes += n; if (n > largest_bytes) largest_bytes=n;
         if (++count == selected) { active=0; errno=ENOMEM; return 1; }
     }
@@ -133,7 +135,9 @@ finally:
 
 
 @pytest.mark.parametrize("threads", [1, 4])
-def test_persistent_casscf_real_allocator_recovery(native, allocation_interposer, tmp_path, threads):
+@pytest.mark.parametrize("failure_target", ["rdm", "transform"])
+def test_persistent_casscf_real_allocator_recovery(native, allocation_interposer, tmp_path, threads,
+                                                 failure_target):
     """One Runner/Molecule: success, native failure, then two top-level recoveries."""
     library, env = allocation_interposer
     child = r'''
@@ -142,8 +146,10 @@ import numpy as np
 from oqp.library import casscf as cs
 from oqp.pyoqp import Runner
 requested_threads = int(sys.argv[3])
+failure_target = sys.argv[4]
 shim = ctypes.CDLL(sys.argv[1])
 shim.rdm_fail_strings_allocation.argtypes = [ctypes.c_int]
+shim.rdm_fail_transform_allocation.argtypes = [ctypes.c_int]
 real_backend = cs._casscf_energy_backend
 lib, ffi = real_backend()
 for name in ("casscf_energy",):
@@ -152,9 +158,11 @@ initial_mo = None
 controls = None
 seen = []
 phase = "success"
+ordinal = 0
+optimized_mo = None
 class FailRDM:
     def casscf_energy(self, *args):
-        global initial_mo, controls
+        global initial_mo, controls, optimized_mo
         # All four calls share a Molecule. Pin the native input orbitals after
         # the top-level SCF, so separate SCF reductions cannot mask recovery.
         if initial_mo is None:
@@ -169,19 +177,34 @@ class FailRDM:
             controls = current
         assert current == controls, "Recovery changed native controls"
         if phase == "failure":
-            shim.rdm_fail_strings_allocation(1)
+            if failure_target == "transform":
+                shim.rdm_fail_transform_allocation(ordinal)
+            else:
+                shim.rdm_fail_strings_allocation(ordinal)
             try:
                 status = int(lib.casscf_energy(*args))
             finally:
                 count = shim.rdm_allocation_count()
-            assert count == 1, (status, count)
+            assert count == ordinal, (status, count, ordinal)
             assert status == -2, status
             # Reacquire the native record; never keep a borrowed view across calls.
-            assert runner.mol.data["OQP::VEC_MO_A"].tobytes() == initial_mo.tobytes()
+            expected = optimized_mo if failure_target == "transform" and ordinal == 3 else initial_mo
+            assert runner.mol.data["OQP::VEC_MO_A"].tobytes() == expected.tobytes()
         else:
-            status = int(lib.casscf_energy(*args))
+            if failure_target == "transform":
+                shim.rdm_fail_transform_allocation(0)
+            try:
+                status = int(lib.casscf_energy(*args))
+            finally:
+                if failure_target == "transform":
+                    count = shim.rdm_allocation_count()
+            if failure_target == "transform":
+                # One analytic build, canonicalization, then post-commit final CI.
+                assert count == 3, count
             assert status == 0, status
             native_energies.append(bytes(ffi.buffer(args[5], 8)))
+            if optimized_mo is None:
+                optimized_mo = runner.mol.data["OQP::VEC_MO_A"].copy()
         seen.append(status)
         return status
 config = {
@@ -195,6 +218,9 @@ config = {
     "casscf": {"max_macro_iterations": "50", "canonicalize": "true"},
     "tests": {"exception": "True"},
 }
+if failure_target == "transform":
+    config["casscf"].update({"converger": "ah", "hessian": "analytic",
+                             "max_macro_iterations": "1"})
 runner = Runner(project="persistent-recovery", input_file=None, silent=1, usempi=False,
                 input_dict=config, log=str(pathlib.Path(sys.argv[2])/"recovery.log"))
 molecule = runner.mol
@@ -205,7 +231,10 @@ def forbidden_fallback(*args, **kwargs):
 cs._optimize = forbidden_fallback
 cs._casscf_energy_backend = lambda: (FailRDM(), ffi)
 try:
-    for phase in ("success", "failure", "recovery1", "recovery2"):
+    phases = [("success", 0)]
+    for failure_ordinal in range(1, 4 if failure_target == "transform" else 2):
+        phases.extend([(name, failure_ordinal) for name in ("failure", "recovery1", "recovery2")])
+    for phase, ordinal in phases:
         if phase == "failure":
             try:
                 runner.run(test_mod=True)
@@ -219,13 +248,14 @@ try:
 finally:
     cs._casscf_energy_backend = real_backend
     cs._optimize = real_optimize
-assert seen == [0, -2, 0, 0], seen
-assert native_energies[0] == native_energies[1] == native_energies[2], native_energies
+assert seen == [0] + [-2, 0, 0]*(3 if failure_target == "transform" else 1), seen
+assert all(value == native_energies[0] for value in native_energies), native_energies
 print("native CASSCF status -2 propagated; persistent top-level recoveries compared")
 '''
     env["OMP_NUM_THREADS"] = str(threads)
     env["OQP_FCI_THREADS"] = str(threads)
-    result = subprocess.run([sys.executable, "-c", child, str(library), str(tmp_path), str(threads)],
+    result = subprocess.run([sys.executable, "-c", child, str(library), str(tmp_path), str(threads),
+                             failure_target],
                             env=env, capture_output=True, text=True, timeout=90)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "persistent top-level recoveries compared" in result.stdout

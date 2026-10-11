@@ -66,6 +66,15 @@ module casscf_anhess_mod
   public :: cas_anhess_ctx_t, cas_anhess_init, cas_anhess_free, cas_anhess_build
   public :: CAS_HESS_OK, CAS_HESS_ERR_INPUT, CAS_HESS_ERR_ALLOC, &
             CAS_HESS_ERR_EIGEN, CAS_HESS_ERR_DEGEN, CAS_HESS_ERR_STACK
+  public :: oqp_casscf_test_fault_request
+  interface
+    function oqp_casscf_test_fault_request(site) result(fault) &
+        bind(C, name="oqp_casscf_test_fault_request")
+      import c_int32_t
+      integer(c_int32_t), value :: site
+      integer(c_int32_t) :: fault
+    end function oqp_casscf_test_fault_request
+  end interface
 
   !> Mirrors casscf_hessian.py: `_MAX_STACK_BYTES`, `_DEGENERACY_TOL`,
   !> `_COUPLING_NOISE`.  Fixed constants there, so fixed constants here.
@@ -359,7 +368,13 @@ contains
     do idx = 0_i8, nd - 1_i8
       ctx%vecs(0:nd-1, idx) = ctx%hact(idx*nd : idx*nd + nd - 1_i8)
     end do
-    call oqp_dsyevd_f(int(nd), ctx%vecs, ctx%eps, ierr)
+    if (oqp_casscf_test_fault_request(2_c_int32_t) /= 0_c_int32_t) then
+      ! Test-only solver error info enters the real EIGEN producer below.
+      ! This is deterministic fault injection, not LAPACK nonconvergence.
+      ierr = 1
+    else
+      call oqp_dsyevd_f(int(nd), ctx%vecs, ctx%eps, ierr)
+    end if
     if (ierr /= 0) then
       status = CAS_HESS_ERR_EIGEN
       return

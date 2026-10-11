@@ -24,6 +24,7 @@ add_subdirectory(dftlib)
 # be compiled into the library.
 list(APPEND SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/rdm_allocation_probe.c"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tests/casscf_fault_probe.c"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/response_cache_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/response_workspace_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/fock_deriv_selftest.F90"
