@@ -303,6 +303,19 @@ jobs:
             name: tagarray-memory-${{ github.run_id }}-${{ github.run_attempt }}
             path: tagarray-memory/
             if-no-files-found: ignore
+         - name: Pin CASPT2 direct engines on two MPI ranks
+           timeout-minutes: 5
+           if: ${{ matrix.MPI == 'ON' && matrix.os == 'ubuntu-24.04' }}
+           env:
+            OMP_NUM_THREADS: "1"
+            OMP_DYNAMIC: "FALSE"
+            OPENBLAS_NUM_THREADS: "1"
+           run: |
+            pip install pytest mpi4py
+            ddx_lib="$(find "$HOME"/.cache/openqp -name 'libddx.so*' -print -quit 2>/dev/null)"
+            test -n "$ddx_lib"
+            export LD_LIBRARY_PATH="$(dirname "$ddx_lib"):${LD_LIBRARY_PATH:-}"
+            mpiexec --oversubscribe -n 2 python -m mpi4py tests/caspt2_direct_mpi.py "$(mktemp -d)"
          # The example suite above validates numerical references end to end, but
          # it never touches the pure-Python layer -- the tests/ pytest suite was
          # not executed by CI at all, so everything under pyoqp/oqp (the analysis
@@ -318,6 +331,7 @@ jobs:
             # This is a post-build job.  Native EDIIS/A-DIIS tests must fail,
             # rather than skip, if the extension or its C ABI symbols are absent.
             OQP_REQUIRE_NATIVE_TESTS: "1"
+            OMP_DYNAMIC: "FALSE"
             # Opt the analytic-TDHF-Hessian end-to-end gate in. Without this the
             # only test that actually compares an analytic Hessian against its
             # finite-difference reference never runs, and the file's remaining
