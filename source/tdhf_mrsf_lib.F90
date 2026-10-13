@@ -1007,10 +1007,13 @@ contains
     implicit none
 
     type(information), intent(in) :: infos
-    real(kind=dp), intent(in), dimension(:,:) :: &
-      va, vb, bvec
+    real(kind=dp), intent(in), dimension(:,:) :: va
+    real(kind=dp), target, intent(in) :: &
+      vb(infos%basis%nbf,infos%basis%nbf), bvec(infos%basis%nbf,infos%basis%nbf)
     real(kind=dp), intent(inout), target, dimension(:,:,:) :: &
       fmrsf
+
+    real(kind=dp), contiguous, pointer :: vb_storage(:), bvec_storage(:)
 
     real(kind=dp), allocatable, dimension(:,:) :: &
       tmp
@@ -1027,6 +1030,10 @@ contains
     bco2 => fmrsf(4,:,:)
     o21v => fmrsf(5,:,:)
     co12 => fmrsf(6,:,:)
+
+    ! Call-local borrowed storage retains the complete column stride.
+    vb_storage(1:size(vb)) => vb
+    bvec_storage(1:size(bvec)) => bvec
 
     nbf = infos%basis%nbf
     nocca = infos%mol_prop%nelec_A
@@ -1053,10 +1060,13 @@ contains
     !
     ! Step 1: Intermediate vector tmp = sum_a C^beta_(mu,a) X_(HOMO,a)
     !   tmp_mu = sum_{a in virt_beta} C^beta_(mu,a) * X_(HOMO,a)
+    tmp(:,1) = 0.0_dp
+    if (nbf > nocca) then
     call dgemm('n', 't', nbf, 1, nbf-nocca, &
-               1.0_dp, vb(:,nocca+1), nbf, &
-                       bvec(lr2:lr2,nocca+1), nbf, &
+               1.0_dp, vb_storage(nocca*nbf+1:), nbf, &
+                       bvec_storage(nocca*nbf+lr2:), nbf, &
                0.0_dp, tmp(:,1), nbf)
+    end if
 
     ! Step 2: Outer product to form AO-basis matrix
     !   P^bo2v_(mu,nu) += C^alpha_(mu,HOMO) * tmp_nu
@@ -1078,10 +1088,13 @@ contains
     !
     ! Step 1: Intermediate vector tmp = sum_a C^beta_(mu,a) X_(HOMO-1,a)
     !   tmp_mu = sum_{a in virt_beta} C^beta_(mu,a) * X_(HOMO-1,a)
+    tmp(:,1) = 0.0_dp
+    if (nbf > nocca) then
     call dgemm('n', 't', nbf, 1, nbf-nocca, &
-               1.0_dp, vb(:,nocca+1), nbf, &
-                       bvec(lr1:lr1,nocca+1), nbf, &
+               1.0_dp, vb_storage(nocca*nbf+1:), nbf, &
+                       bvec_storage(nocca*nbf+lr1:), nbf, &
                0.0_dp, tmp(:,1), nbf)
+    end if
 
     ! Step 2: Outer product to form AO-basis matrix
     !   P^bo1v_(mu,nu) += C^alpha_(mu,HOMO-1) * tmp_nu
@@ -1167,10 +1180,13 @@ contains
     !
     ! Step 1: Intermediate vector from HOMO -> virt_beta amplitudes
     !   tmp_mu = sum_{a in virt_beta} C^beta_(mu,a) * X_(HOMO,a)
+    tmp(:,1) = 0.0_dp
+    if (nbf > nocca) then
     call dgemm('n', 't', nbf, 1, nbf-nocca, &
-               1.0_dp, vb(:,nocca+1), nbf, &
-                       bvec(lr2:lr2,nocca+1), nbf, &
+               1.0_dp, vb_storage(nocca*nbf+1:), nbf, &
+                       bvec_storage(nocca*nbf+lr2:), nbf, &
                0.0_dp, tmp(:,1), nbf)
+    end if
 
     ! Combined outer products with subtraction
     !   P^o21v_(mu,nu) += C^alpha_(mu,HOMO-1) * tmp_nu (positive contribution)
@@ -1181,10 +1197,13 @@ contains
 
     ! Step 1: Intermediate vector from HOMO-1 -> virt_beta amplitudes
     !   tmp_mu = sum_{a in virt_beta} C^beta_(mu,a) * X_(HOMO-1,a)
+    tmp(:,1) = 0.0_dp
+    if (nbf > nocca) then
     call dgemm('n', 't', nbf, 1, nbf-nocca, &
-               1.0_dp, vb(:,nocca+1), nbf, &
-                       bvec(lr1:lr1,nocca+1), nbf, &
+               1.0_dp, vb_storage(nocca*nbf+1:), nbf, &
+                       bvec_storage(nocca*nbf+lr1:), nbf, &
                0.0_dp, tmp(:,1), nbf)
+    end if
 
     !   P^o21v_(mu,nu) -= C^alpha_(mu,HOMO) * tmp_nu (negative contribution)
     call dgemm('n', 't', nbf, nbf, 1, &
@@ -1260,10 +1279,13 @@ contains
     !
     if (noccb > 0) then
     ! Step 1: Intermediate tmp_(mu,i) = sum_a C^beta_(mu,a) * X_(i,a)
+    tmp(:,1:noccb) = 0.0_dp
+    if (nbf > nocca .and. noccb > 0) then
     call dgemm('n', 't', nbf, noccb, nbf-nocca, &
-               1.0_dp, vb(:,nocca+1), nbf, &
-                       bvec(:,nocca+1), nbf, &
+               1.0_dp, vb_storage(nocca*nbf+1:), nbf, &
+                       bvec_storage(nocca*nbf+1:), nbf, &
                0.0_dp, tmp(:,1:noccb), nbf)
+    end if
 
     ! Step 2: Outer product P^ball_(mu,nu) += sum_i C^alpha_(mu,i) * tmp_(nu,i)
     call dgemm('n', 't', nbf, nbf, noccb, &
@@ -1359,10 +1381,13 @@ contains
     implicit none
 
     type(information), intent(in) :: infos
-    real(kind=dp), intent(in), dimension(:,:) :: &
-      va, vb, bvec
+    real(kind=dp), intent(in), dimension(:,:) :: va
+    real(kind=dp), target, intent(in) :: &
+      vb(infos%basis%nbf,infos%basis%nbf), bvec(infos%basis%nbf,infos%basis%nbf)
     real(kind=dp), intent(inout), target, dimension(:,:,:) :: &
       mrsf_density
+
+    real(kind=dp), contiguous, pointer :: vb_storage(:), bvec_storage(:)
 
     real(kind=dp), allocatable, dimension(:,:) :: &
       tmp, tmp1, tmp2
@@ -1384,6 +1409,10 @@ contains
     bco2b => mrsf_density(8,:,:)
     o21v  => mrsf_density(9,:,:)
     co12  => mrsf_density(10,:,:)
+
+    ! Call-local borrowed storage retains the complete column stride.
+    vb_storage(1:size(vb)) => vb
+    bvec_storage(1:size(bvec)) => bvec
 
     nbf = infos%basis%nbf
     nocca = infos%mol_prop%nelec_A
@@ -1437,10 +1466,10 @@ contains
     ! Closed->Virtual block: empty when there is no doubly-occupied core
     ! (nocca-2 = noccb = 0, e.g. H2 triplet). Skip explicitly so the UHF path
     ! mirrors the ROHF guard (the do i=1,nocca-2 loop above is already a no-op).
-    if (nocca > 2) then
+    if (nocca > 2 .and. nbf > nocca) then
     call dgemm('n','t', nbf, nocca-2, nbf-nocca, &
-               1.0_dp, vb(:,nocca+1), nbf, &
-                       bvec(:,nocca+1), nbf, &
+               1.0_dp, vb_storage(nocca*nbf+1:), nbf, &
+                       bvec_storage(nocca*nbf+1:), nbf, &
                0.0_dp, tmp, nbf)
 
     call dgemm('n','t', nbf, nbf, nocca-2, &
@@ -1533,8 +1562,11 @@ contains
     real(kind=dp), intent(in), target, dimension(:,:,:) :: &
       fmrsf
     real(kind=dp), intent(out), dimension(:,:) :: pmo
-    real(kind=dp), intent(in), dimension(:,:) :: va, vb
+    real(kind=dp), intent(in), dimension(:,:) :: va
+    real(kind=dp), target, intent(in) :: vb(infos%basis%nbf,infos%basis%nbf)
     integer, intent(in) :: ivec
+
+    real(kind=dp), contiguous, pointer :: vb_storage(:)
 
     real(kind=dp), allocatable :: &
       scr(:,:), tmp(:), wrk(:,:)
@@ -1546,6 +1578,9 @@ contains
     real(kind=dp), parameter :: one = 1.0_dp
     real(kind=dp), parameter :: sqrt2 = 1.0_dp/sqrt(2.0_dp)
     logical :: debug_mode
+
+    ! Call-local borrowed storage retains the complete column stride.
+    vb_storage(1:size(vb)) => vb
 
     nbf = infos%basis%nbf
     mrst = infos%tddft%mult
@@ -1705,7 +1740,7 @@ contains
     ! Step 3: Project onto virtual beta-orbitals
     !   F^MO_(HOMO-1,a) += sum_mu C^beta_(mu,a) * tmp_mu  (a=noca+1:nbf)
     call dgemm('t','n',nbf-noca,1,nbf, &
-               one, vb(:,noca+1), nbf, &
+               one, vb_storage(noca*nbf+1:), nbf, &
                     tmp, nbf, &
                one, wrk(lr1:lr1,noca+1:nbf), nbf-noca)
     !-----------------------------------------------------------------------
@@ -1739,7 +1774,7 @@ contains
     ! Step 3: Project onto virtual beta-orbitals
     !   F^MO_(HOMO,a) += sum_mu C^beta_(mu,a) * tmp_mu  (a=noca+1:nbf)
     call dgemm('t','n',nbf-noca,1,nbf, &
-               one, vb(:,noca+1), nbf, &
+               one, vb_storage(noca*nbf+1:), nbf, &
                     tmp, nbf, &
                one, wrk(lr2:lr2,noca+1:nbf), nbf-noca)
     end if  ! nbf > noca
@@ -1824,8 +1859,11 @@ contains
     real(kind=dp), intent(in), target, dimension(:,:,:) :: &
       fmrsf
     real(kind=dp), intent(out), dimension(:,:) :: pmo
-    real(kind=dp), intent(in), dimension(:,:) :: va, vb
+    real(kind=dp), target, intent(in) :: &
+      va(infos%basis%nbf,infos%basis%nbf), vb(infos%basis%nbf,infos%basis%nbf)
     integer, intent(in) :: ivec
+
+    real(kind=dp), contiguous, pointer :: va_storage(:), vb_storage(:)
 
     real(kind=dp), allocatable :: &
       scr(:,:), tmp(:), wrk(:,:)
@@ -1839,6 +1877,10 @@ contains
     real(kind=dp), parameter :: half = 0.5_dp
     real(kind=dp), parameter :: sqrt2 = 1.0_dp/sqrt(2.0_dp)
     logical :: debug_mode
+
+    ! Call-local borrowed storage retains the complete column stride.
+    va_storage(1:size(va)) => va
+    vb_storage(1:size(vb)) => vb
 
     nbf = infos%basis%nbf
     mrst = infos%tddft%mult
@@ -1950,7 +1992,7 @@ contains
                      va(:,lr1:lr1), nbf, &
                zero, tmp, nbf)
     call dgemm('t','n',nbf-noca,1,nbf, &
-               one, va(:,noca+1), nbf, &
+               one, va_storage(noca*nbf+1:), nbf, &
                     tmp, nbf, &
                one, wrk(lr1:lr1,noca+1:nbf), nbf-noca)
 
@@ -1959,7 +2001,7 @@ contains
                      vb(:,lr1:lr1), nbf, &
                zero, tmp, nbf)
     call dgemm('t','n',nbf-noca,1,nbf, &
-               one, vb(:,noca+1), nbf, &
+               one, vb_storage(noca*nbf+1:), nbf, &
                     tmp, nbf, &
                one, wrk(lr1:lr1,noca+1:nbf), nbf-noca)
 
@@ -1968,7 +2010,7 @@ contains
                     va(:,lr2:lr2), nbf, &
                zero, tmp, nbf)
     call dgemm('t','n',nbf-noca,1,nbf, &
-               one, vb(:,noca+1), nbf, &
+               one, vb_storage(noca*nbf+1:), nbf, &
                     tmp, nbf, &
                one, wrk(lr1:lr1,noca+1:nbf), nbf-noca)
 ! 6
@@ -1977,7 +2019,7 @@ contains
                      va(:,lr2:lr2), nbf, &
                zero, tmp, nbf)
     call dgemm('t','n',nbf-noca,1,nbf, &
-               one, va(:,noca+1), nbf, &
+               one, va_storage(noca*nbf+1:), nbf, &
                     tmp, nbf, &
                one, wrk(lr2:lr2,noca+1:nbf), nbf-noca)
 
@@ -1986,7 +2028,7 @@ contains
                      vb(:,lr2:lr2), nbf, &
                zero, tmp, nbf)
     call dgemm('t','n',nbf-noca,1,nbf, &
-               one, vb(:,noca+1), nbf, &
+               one, vb_storage(noca*nbf+1:), nbf, &
                     tmp, nbf, &
                one, wrk(lr2:lr2,noca+1:nbf), nbf-noca)
 
@@ -1995,7 +2037,7 @@ contains
                     va(:,lr1:lr1), nbf, &
                zero, tmp, nbf)
     call dgemm('t','n',nbf-noca,1,nbf, &
-              -one, vb(:,noca+1), nbf, &
+              -one, vb_storage(noca*nbf+1:), nbf, &
                     tmp, nbf, &
                one, wrk(lr2:lr2,noca+1:nbf), nbf-noca)
 
@@ -2056,18 +2098,20 @@ contains
     implicit none
 
     type(information), intent(in) :: infos
-    real(kind=dp), intent(in), dimension(:,:) :: &
-      wrk, fij, fab
+    real(kind=dp), intent(in) :: wrk(:,:), fij(:,:)
+    real(kind=dp), target, intent(in) :: fab(infos%basis%nbf,infos%basis%nbf)
     real(kind=dp), intent(inout), dimension(:,:) :: &
       pmo
     integer, intent(in) :: iv
 
     real(kind=dp), allocatable, dimension(:,:) :: scr, tmp1, wrk1
+    real(kind=dp), contiguous, pointer :: fab_storage(:)
     real(kind=dp) :: dumn, xlr
     integer :: nbf, nocca, noccb, mrst, i, ij, j, lr1, lr2, ok
     real(kind=dp), parameter :: sqrt2 = 1.0_dp/sqrt(2.0_dp)
     logical :: debug_mode
 
+    fab_storage(1:size(fab)) => fab
     nbf = infos%basis%nbf
     nocca = infos%mol_prop%nelec_a
     noccb = infos%mol_prop%nelec_b
@@ -2083,17 +2127,20 @@ contains
     scr(lr1,lr1) = 0.0_dp
     scr(lr2,lr2) = 0.0_dp
 
+    if (nbf > noccb) then
     ! Contraction 1
     call dgemm('n', 't', nocca, nbf-noccb, nbf-noccb, &
                1.0_dp, scr(1,noccb+1), nbf, &
-                       fab(noccb+1:,noccb+1), nbf, &
+                       fab_storage(noccb*nbf+noccb+1:), nbf, &
                0.0_dp, tmp1(1,noccb+1), nbf)
 
     ! Contraction 2
     call dgemm('n', 'n', nocca, nbf-noccb, nocca, &
-              -1.0_dp, fij(:,1), nbf, &
-                       scr(:,noccb+1), nbf, &
+              -1.0_dp, fij, nbf, &
+                       scr(1,noccb+1), nbf, &
                1.0_dp, tmp1(1,noccb+1), nbf)
+
+    end if
 
     xlr = wrk(lr1,lr1)
 
