@@ -1013,6 +1013,16 @@ def _multiset_spin_diagnostics(hcore_ao, eri_ao, coeff_ref, ncore, nact,
     return fci_spin_diagnostics(coeffs, dets, nact, active_nelec)
 
 
+def _multiset_coupling_action(hamiltonian, first_order):
+    """Return H.T |Psi(1)> for the bra-side inter-state contraction.
+
+    The cross term is Psi(1).T H Psi(0), so this action can be retained
+    instead of H.  Use the transpose explicitly rather than relying on H's
+    symmetry; the action owns its storage after H is released.
+    """
+    return hamiltonian.T @ first_order
+
+
 def _multistate_multiset(mol, hcore_ao, eri_ao, coeff_ref, settings, ncore, nact,
                          active_nelec, nbf, enuc, roots, options, nfrozen):
     """Multi-set MS-CASPT2 (per-state orbitals = OpenMolcas state-specific Fock).
@@ -1062,23 +1072,24 @@ def _multistate_multiset(mol, hcore_ao, eri_ao, coeff_ref, settings, ncore, nact
     _ndet_un = comb(nbf, full_nelec_un[0]) * comb(nbf, full_nelec_un[1])
     # max_det bounds the determinant COUNT; these dense operators are what the
     # count costs.  Each ndet x ndet matrix is 8*ndet^2 bytes, and the branch
-    # holds several at once -- Hf_full per root, H0_f, and the transient of
+    # holds several at once -- Hf_full, H0_f, and the transient of
     # `Hf_f + enucf * np.eye(...)`, which materializes the identity and the
     # result while the original is still live.  A 4-electron/12-orbital case
     # with CAS(2,2) is 4356 determinants: inside the default max_det=5000, and
     # ~145 MiB per matrix.
     _mem_ms, _mem_ms_label = _pt2_memory(options, settings)
     _one_mat = 8 * int(_ndet_un) * int(_ndet_un)
-    # Live at the iteration peak: the retained per-root Hf_full, plus Hf_f,
-    # H0_f, denom and Uq, plus the two copies _symmetric_eigh makes (the
-    # symmetrized input and the eigenvector output), plus the input/identity/
-    # result triple of `Hf_full + enuc * eye`.  len(roots)+3 was roughly half.
+    # Retain the existing conservative admission bound, including its former
+    # per-root Hamiltonian allowance.  The cross-coupling now retains only
+    # vectors, but Hf_f/H0_f/denom/Uq, eigensolver copies and the nuclear-energy
+    # shift transient still require dense matrices during each iteration.
     _live_ms = _one_mat * (len(roots) + 8)
     if _live_ms > max(1, int(_mem_ms)) * 1024 ** 2:
         raise ValueError(
-            "multi-set CASPT2 dense operators need ~%.2f GiB (%d x %d matrices, "
-            "%d live at once: one per root, plus Hf_f/H0_f/denom/Uq, the "
-            "eigensolver copies and the shift transient), "
+            "multi-set CASPT2 conservative dense-operator bound is ~%.2f GiB "
+            "(%d x %d matrices, %d matrix allowances including the legacy "
+            "per-root allowance, Hf_f/H0_f/denom/Uq, eigensolver copies "
+            "and the shift transient), "
             "exceeding the %s max_memory budget of %d MiB.  Reduce the basis or "
             "the root count, raise %s max_memory, or use method=xms-caspt2, "
             "which is single-set."
@@ -1162,8 +1173,10 @@ def _multistate_multiset(mol, hcore_ao, eri_ao, coeff_ref, settings, ncore, nact
         psi1_f = np.zeros(len(dets_f)); psi1_f[ext] = C1
         psi1_full = _lift_to_full(psi1_f, didx_f, didx_un, nfrozen, norbf, nbf,
                                   active_nelec, ncf, ncore)
+        hpsi1_full = _multiset_coupling_action(Hf_full, psi1_full)
         per.append(dict(r=r, U=U, e2=e2, min_denom=min_denom, ci_active=ci_active_I,
-                        Hf_full=Hf_full, ref_full=ref_full, psi1_full=psi1_full))
+                        hpsi1_full=hpsi1_full, ref_full=ref_full, psi1_full=psi1_full))
+        del Hf_full
 
     nstate = len(roots)
     heff = np.zeros((nstate, nstate))
@@ -1177,10 +1190,10 @@ def _multistate_multiset(mol, hcore_ao, eri_ao, coeff_ref, settings, ncore, nact
             # C_I = C_J @ (U_J.T @ U_I), not the I -> J orbital rotation.
             Rji = per[j]["U"].T @ per[i]["U"]
             vecj_in_i = _rotate_det_vector(per[j]["ref_full"], Rji, nbf, full_nelec_un)
-            cij = float(per[i]["psi1_full"] @ (per[i]["Hf_full"] @ vecj_in_i))
+            cij = float(per[i]["hpsi1_full"] @ vecj_in_i)
             Rij = per[i]["U"].T @ per[j]["U"]
             veci_in_j = _rotate_det_vector(per[i]["ref_full"], Rij, nbf, full_nelec_un)
-            cji = float(per[j]["psi1_full"] @ (per[j]["Hf_full"] @ veci_in_j))
+            cji = float(per[j]["hpsi1_full"] @ veci_in_j)
             heff[i, j] = 0.5 * (cij + cji)
     heff = 0.5 * (heff + heff.T)
     ms_energies, mixing = _symmetric_eigh(heff)
