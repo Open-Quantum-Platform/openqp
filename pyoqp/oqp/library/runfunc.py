@@ -3,7 +3,7 @@ import os
 
 import numpy as np
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 
 import oqp
 import oqp.library
@@ -75,6 +75,64 @@ def _single_gradient_target(mol, target_types=("umrsf",)):
         # converges every reported root, since all are published downstream.
         mol.data.set_tdhf_target(target)
     yield
+
+
+def _soc_requested(mol):
+    """True when this run computes spin-orbit coupling as a step of the flow."""
+    from oqp.utils.spin_states import soc_requested
+    return soc_requested(mol.config)
+
+
+def _spin_setup(mol):
+    """This run's spin labels and the gradient request of each ladder.
+
+    Returns (configured label, other label, {'s': [...], 't': [...]}).
+    """
+    from oqp.utils.spin_states import configured_spin, grad_requests, other_spin
+
+    label = configured_spin(mol.config)
+    return label, other_spin(label), grad_requests(mol.config)
+
+
+def _configured_manifold(sp, label, per_manifold):
+    """Enter the configured ladder when a two-ladder run sizes it.
+
+    response_manifold sizes the ladder it answers from nstate_s / nstate_t.
+    A run that solves one ladder, or names neither count, keeps [tdhf] nstate
+    and answers whatever multiplicity it configured, so nothing is entered and
+    nothing changes -- as before nstate_s / nstate_t meant anything outside
+    runtype=soc.
+    """
+    from oqp.library.single_point import response_manifold
+
+    td = sp.mol.config['tdhf']
+    named = (per_manifold and int(td.get('multiplicity', 1)) in (1, 3)
+             and int(td.get(f'nstate_{label}', 0)))
+    return response_manifold(sp, label) if named else nullcontext()
+
+
+def _soc_driver(mol, sp=None, ref_energy=None, tb_soc=None):
+    """The SOC calculator for this flow.
+
+    Imported at use time, like the native optimizers in get_optimizer(): several
+    harnesses import runfunc with a stubbed single_point that carries only the
+    names it used to need, and a module-level import would break them all.
+    """
+    from oqp.library.single_point import SOC
+    return SOC(mol, sp=sp, ref_energy=ref_energy, tb_soc=tb_soc)
+
+
+def _tb_soc(mol):
+    """The tight-binding SOC driver for this backend.
+
+    It solves both spin manifolds itself and publishes the same OQP:: tags as
+    the native kernel, so there is no per-manifold round to add around it.
+    """
+    if tb_section_name(mol.config) == 'xtb':
+        from oqp.library.openqp_xtb import xtb_soc as tb_soc
+    else:
+        from oqp.library.openqp_dftb import dftb_soc as tb_soc
+    return tb_soc
 
 
 def compute_energy(mol):
@@ -187,21 +245,49 @@ def compute_scf_prop(mol):
 
 
 def compute_grad(mol):
-    # compute energy
-    # Set the requested response state while converging the full reported spectrum.
-    with _single_gradient_target(mol):
-        SinglePoint(mol).energy()
+    from oqp.library.single_point import grad_request, response_manifold
 
-    # compute gradient
-    Gradient(mol).gradient()
+    label, other, requests = _spin_setup(mol)
+    # A second ladder is published only when something named it, and only then do
+    # the file names carry a spin label.
+    per_manifold = bool(requests[other])
+    spin_label = label if per_manifold else None
 
-    # compute properties
-    compute_scf_prop(mol)
-#    if mol.config['input']['qmmm_flag']:
-#       oqp.resp_charges(mol)
+    sp = SinglePoint(mol)
+    with _configured_manifold(sp, label, per_manifold):
+        # compute energy
+        # Set the requested response state while converging the full reported
+        # spectrum.  grad_request first: _single_gradient_target reads
+        # [properties] grad.
+        with grad_request(mol, requests[label]), _single_gradient_target(mol):
+            sp.energy()
 
-    # compute dftd4
-    LastStep(mol).compute(mol, grad_list=mol.config['properties']['grad'])
+            # compute gradient, unless only the other ladder asked for one
+            if requests[label] or not per_manifold:
+                Gradient(mol).gradient()
+
+        # compute properties
+        compute_scf_prop(mol)
+#        if mol.config['input']['qmmm_flag']:
+#           oqp.resp_charges(mol)
+
+        # compute dftd4
+        LastStep(mol).compute(mol, grad_list=requests[label], spin_label=spin_label)
+
+    if per_manifold:
+        # Record each ladder under its own label, as the properties and data
+        # flows do, so a checkpoint of this run can seed a later step's history.
+        record = _soc_driver(mol, sp=sp)
+        record.snapshot(label)
+
+        # compute the gradient of the other spin manifold
+        with response_manifold(sp, other):
+            sp.excitation([mol.mol_energy.energy])
+            # before LastStep saves the molecule
+            record.snapshot(other)
+            with grad_request(mol, requests[other]):
+                Gradient(mol).gradient()
+            LastStep(mol).compute(mol, grad_list=requests[other], spin_label=other)
 
 def compute_md(mol):
     """Run gas-phase ground-state Born--Oppenheimer dynamics.
@@ -250,50 +336,28 @@ def compute_nac(mol):
     NAC(mol).nac()
 
 def compute_soc(mol):
+    from oqp.library.single_point import response_manifold
+
     if is_tb_method(mol.config['input']['method']):
-        if tb_section_name(mol.config) == 'xtb':
-            from oqp.library.openqp_xtb import xtb_soc as tb_soc
-        else:
-            from oqp.library.openqp_dftb import dftb_soc as tb_soc
-        tb_soc(mol)
+        # The tight-binding driver solves both spin manifolds itself.
+        _soc_driver(mol, tb_soc=_tb_soc(mol)).coupling()
         LastStep(mol).compute(mol)
         return
 
     sp = SinglePoint(mol)
-    ref_energy = sp.reference()          # SCF один раз
+    ref_energy = sp.reference()          # one SCF feeds both manifolds
+    soc = _soc_driver(mol, sp=sp, ref_energy=ref_energy)
 
-    td = mol.config['tdhf']
-    saved_mult = int(td.get('multiplicity', 1))
-    saved_nstate = int(td.get('nstate', 1))
-    ns = int(td.get('nstate_s', 0)) or saved_nstate
-    nt = int(td.get('nstate_t', 0)) or saved_nstate
+    # compute the two response manifolds the kernel reads, and publish each
+    # under its own label.  Gradients belong to runtype=grad, prop and data.
+    for label in ('s', 't'):
+        with response_manifold(sp, label):
+            sp.excitation(ref_energy)
+            soc.snapshot(label)
+            LastStep(mol).compute(mol, spin_label=label)
 
-    def select_manifold(mult, nstate):
-        # Keep config and native state synchronized so Python/native log labels
-        # describe the manifold that is actually being calculated.
-        td['multiplicity'] = mult
-        td['nstate'] = nstate
-        mol.data.set_tdhf_multiplicity(mult)
-        mol.data.set_tdhf_nstate(nstate)
-        sp.nstate = nstate
-        mol.data['OQP::state_sign'] = np.ones(nstate)
-
-    try:
-        select_manifold(1, ns)
-        mol.singlet_energies = sp.excitation(ref_energy)
-        mol.data['OQP::td_singlet_energies'] = mol.data['OQP::td_energies'].copy()
-        mol.data['OQP::td_bvec_mo_s'] = mol.data['OQP::td_bvec_mo'].copy()
-
-        select_manifold(3, nt)
-        mol.triplet_energies = sp.excitation(ref_energy)
-        mol.data['OQP::td_triplet_energies'] = mol.data['OQP::td_energies'].copy()
-        mol.data['OQP::td_bvec_mo_t'] = mol.data['OQP::td_bvec_mo'].copy()
-    finally:
-        select_manifold(saved_mult, saved_nstate)
-
-    oqp.soc_mrsf(mol)
-
-    LastStep(mol).compute(mol) 
+    # compute spin-orbit coupling
+    soc.coupling()
 
 def compute_hess(mol):
     # compute energy
@@ -322,57 +386,149 @@ def compute_geom(mol):
 
 
 def compute_properties(mol):
+    from oqp.library.single_point import grad_request, response_manifold
+
+    soc_on = _soc_requested(mol)
+    label, other, requests = _spin_setup(mol)
+    grad_list = requests[label]
+    # Two ladders are published side by side whenever a second one was asked
+    # for, by its own selector or by spin-orbit coupling; only then does a file
+    # name have to say which manifold it holds.
+    per_manifold = soc_on or bool(requests[other])
+    spin_label = label if per_manifold else None
+    nac_type = mol.config['properties']['nac']
+
     # compute reference energy
     sp = SinglePoint(mol)
     ref_energy = sp.reference()
 
-    # compute mo overlap and apply alignment
-    BasisOverlap(mol).overlap()
+    with _configured_manifold(sp, label, per_manifold):
+        # compute mo overlap and apply alignment
+        BasisOverlap(mol).overlap()
 
-    # compute excitation energy
-    with _single_gradient_target(mol):
-        sp.excitation(ref_energy)
+        # compute excitation energy; _single_gradient_target reads this
+        # ladder's request, so install it first
+        with grad_request(mol, grad_list), _single_gradient_target(mol):
+            sp.excitation(ref_energy)
 
-    # Transport the central-geometry response-vector gauge before gradients,
-    # numerical-NAC workers, and the checkpoint JSON are produced.  PyRAI2MD
-    # feeds that JSON into the next MD step; aligning only inside displaced
-    # workers leaves the time-series phase undefined.
-    nacme = NACME(mol)
-    nacme.align_x()
+        # Transport the central-geometry response-vector gauge before gradients,
+        # numerical-NAC workers, and the checkpoint JSON are produced.  PyRAI2MD
+        # feeds that JSON into the next MD step; aligning only inside displaced
+        # workers leaves the time-series phase undefined.
+        nacme = NACME(mol)
+        if per_manifold:
+            # The unlabelled history tag holds whichever ladder the previous step
+            # answered last, so align this ladder against its own record first.
+            nacme.load_state_history(label)
+        nacme.align_x()
 
-    # compute gradient
-    Gradient(mol).gradient()
+        # compute gradient, unless only the other ladder asked for one
+        if grad_list or not per_manifold:
+            with grad_request(mol, grad_list):
+                Gradient(mol).gradient()
 
-    # compute dftd4
-    LastStep(mol).compute(mol, grad_list=mol.config['properties']['grad'])
+        # compute dftd4
+        LastStep(mol).compute(mol, grad_list=grad_list, spin_label=spin_label)
 
-    # compute nac or nacme
-    nac_type = mol.config['properties']['nac']
-    if nac_type == 'nac':
-        NAC(mol).nac()
-    elif nac_type == 'nacme':
-        nacme.nacme(align=False)
-    else:
-        pass
+        # compute nac or nacme
+        if nac_type == 'nac':
+            NAC(mol).nac(spin_label=spin_label)
+        elif nac_type == 'nacme':
+            nacme.nacme(align=False, spin_label=spin_label)
+
+    if requests[other] or soc_on:
+        other_grad_list = requests[other]
+        soc = _soc_driver(mol, sp=sp, ref_energy=ref_energy)
+        # Record each ladder under its own label whenever two are solved, not
+        # only for the coupling: the unlabelled tags end up holding the ladder
+        # solved last, so the next step pairs each ladder with its own history
+        # through these records (NACME.load_state_history).
+        soc.snapshot(label)
+
+        # compute the other spin manifold
+        with response_manifold(sp, other):
+            sp.excitation(ref_energy)
+            # before LastStep saves the molecule
+            soc.snapshot(other)
+
+            # compute its gradient, if it requested one
+            if other_grad_list:
+                with grad_request(mol, other_grad_list):
+                    Gradient(mol).gradient()
+                    LastStep(mol).compute(mol, grad_list=other_grad_list,
+                                          spin_label=other)
+            else:
+                LastStep(mol).compute(mol, spin_label=other)
+
+            # compute its couplings, against its own previous step
+            if soc_on and nac_type == 'nacme':
+                other_nacme = NACME(mol)
+                if other_nacme.load_state_history(other):
+                    other_nacme.align_x()
+                    other_nacme.nacme(align=False, spin_label=other)
+
+        if soc_on:
+            # publish the phase-fixed amplitudes, then the coupling between them
+            soc.snapshot(other)
+            soc.coupling()
 
 def compute_data(mol):
-    # compute reference energy
-    with _single_gradient_target(mol):
-        SinglePoint(mol).energy()
+    from oqp.library.single_point import grad_request, response_manifold
 
-    # compute gradient
-    Gradient(mol).gradient()
+    soc_on = _soc_requested(mol)
+    label, other, requests = _spin_setup(mol)
+    grad_list = requests[label]
+    # Two ladders are published side by side whenever a second one was asked
+    # for, by its own selector or by spin-orbit coupling; only then does a file
+    # name have to say which manifold it holds.
+    per_manifold = soc_on or bool(requests[other])
+    spin_label = label if per_manifold else None
 
-    # compute dftd4
-    LastStep(mol).compute(mol, grad_list=mol.config['properties']['grad'])
+    # compute energy
+    sp = SinglePoint(mol)
 
-    # compute nac or nacme
-    nac_type = mol.config['properties']['nac']
-    if nac_type == 'nac':
-        NAC(mol).nac()
-    else:
-        pass
+    with _configured_manifold(sp, label, per_manifold):
+        # _single_gradient_target reads this ladder's request, so install it first
+        with grad_request(mol, grad_list), _single_gradient_target(mol):
+            sp.energy()
 
+        # compute gradient, unless only the other ladder asked for one
+        if grad_list or not per_manifold:
+            with grad_request(mol, grad_list):
+                Gradient(mol).gradient()
+
+        # compute dftd4
+        LastStep(mol).compute(mol, grad_list=grad_list, spin_label=spin_label)
+
+        # compute nac
+        if mol.config['properties']['nac'] == 'nac':
+            NAC(mol).nac(spin_label=spin_label)
+
+    if requests[other] or soc_on:
+        other_grad_list = requests[other]
+        soc = _soc_driver(mol, sp=sp, ref_energy=[mol.mol_energy.energy])
+        # Record each ladder under its own label whenever two are solved, as
+        # compute_properties does: a later step reads its history from them.
+        soc.snapshot(label)
+
+        # compute the other spin manifold
+        with response_manifold(sp, other):
+            sp.excitation(soc.ref_energy)
+            # before LastStep saves the molecule
+            soc.snapshot(other)
+
+            # compute its gradient, if it requested one
+            if other_grad_list:
+                with grad_request(mol, other_grad_list):
+                    Gradient(mol).gradient()
+                    LastStep(mol).compute(mol, grad_list=other_grad_list,
+                                          spin_label=other)
+            else:
+                LastStep(mol).compute(mol, spin_label=other)
+
+        if soc_on:
+            # compute the coupling between the two recorded ladders
+            soc.coupling()
 
 
 def get_optimizer(mol):

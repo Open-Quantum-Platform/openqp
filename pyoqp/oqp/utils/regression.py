@@ -168,11 +168,14 @@ REGISTRY = (
     # (Debug vs Release, OpenBLAS vs Accelerate, response integral cutoff). Use a
     # relative tolerance instead; a real SOC regression is >>1e-6 relative, and
     # the response itself stays exact-checked via td_*_energies below.
-    RegKey('soc', runtypes=frozenset({'soc'}), required=True, rtol=1e-6),
+    RegKey('soc', runtypes=frozenset({'soc', 'prop', 'data'}), required=False, rtol=1e-6),
     # A SOC run computes both spin-resolved excitation ladders; the public
     # td_energies mirrors only one, so test the singlet and triplet explicitly.
-    RegKey('td_singlet_energies', runtypes=frozenset({'soc'}), required=True),
-    RegKey('td_triplet_energies', runtypes=frozenset({'soc'}), required=True),
+    # Not `required`: the prop/data references predate properties.soc, and a
+    # key that is missing there must not fail -- it is still compared wherever
+    # a run publishes it.
+    RegKey('td_singlet_energies', runtypes=frozenset({'soc', 'prop', 'data'}), required=False),
+    RegKey('td_triplet_energies', runtypes=frozenset({'soc', 'prop', 'data'}), required=False),
     # Non-adiabatic / derivative couplings are sign/phase ambiguous between
     # runs, so compare magnitudes.
     RegKey('nac', runtypes=frozenset({'nac', 'nacme'}), required=True,

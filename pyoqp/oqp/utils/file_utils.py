@@ -986,58 +986,82 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
     with open(logfile, mode) as out:
         out.write(loginfo)
 
+_EXPORT_STEMS = {
+    'ENERGY': 'energies',
+    'GRADIENT': 'grad',
+    'NACME': 'nacme',
+    'DCME': 'dcme',
+    'NACV': 'nac',
+    'SOCME': 'socme',
+}
+
+
+def _export_stem(title, spin_label=None):
+    """File stem for exported data, keeping any spin label in the name.
+
+    A spin-orbit run publishes one manifold per label, so ``('GRADIENT', 't')``
+    gives ``grad_t``.  The unlabelled stem must stay free: those names are the
+    channel between the numerical Hessian / numerical NAC parent and its
+    displaced workers, which read them back by name.
+    """
+    stem = _EXPORT_STEMS[title]
+    if spin_label is None:
+        return stem
+    if spin_label not in ('s', 't'):
+        raise ValueError(f'spin label must be "s" or "t", got {spin_label!r}')
+    return f'{stem}_{spin_label}'
+
+
+def _prefixed(stem, prefix):
+    """Export file name: the optional [properties] title comes before the stem."""
+    return f'{prefix}.{stem}' if prefix else stem
+
+
 @mpi_dump
-def dump_data(mol, data, title=None, fpath='.'):
+def dump_data(mol, data, title=None, fpath='.', spin_label=None):
     # function to write data in specific logs
     if title == 'ENERGY':
-        energies, title = data
-        filename = 'energies'
-
-        if title:
-            filename = f'{title}.{filename}'
-
-        np.savetxt(f'{fpath}/{filename}', np.array(energies).reshape((-1, 1)), fmt='%24.16f')
+        energies, prefix = data
+        np.savetxt(f'{fpath}/{_prefixed(_export_stem(title, spin_label), prefix)}',
+                   np.array(energies).reshape((-1, 1)), fmt='%24.16f')
 
     if title == 'GRADIENT':
-        grads, title, grad_list = data
-        filename = 'grad'
-
-        if title:
-            filename = f'{title}.{filename}'
-
+        grads, prefix, grad_list = data
+        filename = _prefixed(_export_stem(title, spin_label), prefix)
         for i in grad_list:
             np.savetxt(f'{fpath}/{filename}_{i}', grads[i], fmt='%24.16f')
 
     if title == 'NACME':
-        nacme, title = data
-        filename = 'nacme'
-
-        if title:
-            filename = f'{title}.{filename}'
-
-        np.savetxt(f'{fpath}/{filename}', nacme, fmt='%24.16f')
+        nacme, prefix = data
+        np.savetxt(f'{fpath}/{_prefixed(_export_stem(title, spin_label), prefix)}',
+                   nacme, fmt='%24.16f')
 
     if title == 'DCME':
-        dcme, title = data
-        filename = 'dcme'
+        dcme, prefix = data
+        np.savetxt(f'{fpath}/{_prefixed(_export_stem(title, spin_label), prefix)}',
+                   dcme, fmt='%24.16f')
 
-        if title:
-            filename = f'{title}.{filename}'
-
-        np.savetxt(f'{fpath}/{filename}', dcme, fmt='%24.16f')
+    if title == 'SOCME':
+        table, prefix = data
+        # One row per (singlet, triplet, Ms) triple, in the same order as the
+        # singlet-triplet table the native kernel prints.  Re and Im carry the
+        # per-state phase of the Davidson amplitudes, which is a gauge freedom
+        # and flips between runs; Absolute is the invariant.
+        np.savetxt(f'{fpath}/{_prefixed(_export_stem(title), prefix)}', table,
+                   fmt=('%6d', '%6d', '%6d', '%24.16f', '%24.16f', '%24.16f'),
+                   header='S_index T_index Ms Re(cm-1) Im(cm-1) Absolute(cm-1) '
+                          '[merged 1e+2e, MCH singlet-triplet block; Ms=-1,0,+1; '
+                          'per-state Re/Im phase is arbitrary, Absolute is invariant]',
+                   comments='# ')
 
     if title == 'NACV':
-        mol, nacv, title = data
-        filename = 'nac'
+        mol, nacv, prefix = data
+        filename = _prefixed(_export_stem(title, spin_label), prefix)
         states = mol.config['nac']['states']
-
-        if title:
-            filename = f'{title}.{filename}'
 
         for ij in states:
             i, j = np.sort(ij)
-            filename_ext = f'{filename}_{i}_{j}'
-            np.savetxt(f'{fpath}/{filename_ext}', nacv[i - 1, j - 1], fmt='%24.16f')
+            np.savetxt(f'{fpath}/{filename}_{i}_{j}', nacv[i - 1, j - 1], fmt='%24.16f')
 
     if title == 'BP':
         mol, g1, g2, h, x, y, i, j = data

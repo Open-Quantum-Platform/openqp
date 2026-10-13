@@ -335,6 +335,23 @@ def _pop_int(consumer: _Consumer, section: str, key: str, default: int) -> int:
         raise ConversionError("%s.%s must be an integer" % (section, key)) from exc
 
 
+def _soc_requested(consumer: _Consumer) -> bool:
+    """True when this deck asks for spin-orbit coupling as a step of the run."""
+    value = str(consumer.sections.get("properties", {}).get("soc", "")).strip().lower()
+    return value in ("true", "t", "1", "yes", "on")
+
+
+def _pop_roots(consumer: _Consumer, key: str) -> list:
+    """The response roots of one manifold's comma-separated selector."""
+    value = consumer.pop("properties", key, "")
+    if not str(value).strip():
+        return []
+    try:
+        return [int(item) for item in str(value).split(",") if item.strip()]
+    except ValueError as exc:
+        raise ConversionError("properties.%s must be a list of integers" % key) from exc
+
+
 def _consume_backend_options(
     consumer: _Consumer, runtime: str, warnings: list[str]
 ) -> None:
@@ -464,8 +481,26 @@ def _driver_and_sections(
             warnings.append("dropped properties.grad (NACME selects its pair through nac.states)")
     elif runtime == "prop":
         driver_name = "prop"
-        root = _pop_int(consumer, "properties", "grad", 1)
-        states = [_state(model, root, target_mult)]
+        if _soc_requested(consumer):
+            # A spin-orbit run solves two ladders, so grad_s / grad_t name the
+            # manifold each index belongs to; the shared selector is not read.
+            if consumer.has("properties", "grad"):
+                raise ConversionError(
+                    "runtype=prop with properties.soc selects states through "
+                    "grad_s / grad_t, not grad")
+            singlets = _pop_roots(consumer, "grad_s")
+            if len(singlets) > 1:
+                raise ConversionError(
+                    "prop(S1, S2) is not a thing the concise language can say: it "
+                    "accepts one target state, so a multi-root singlet request "
+                    "stays legacy-only")
+            states = [_state(model, root, 1) for root in singlets]
+            # grad_t is deliberately left in the consumer: it renders as an
+            # explicit properties(grad_t=...) option, which the concise language
+            # can say without widening prop() to two target states.
+        else:
+            root = _pop_int(consumer, "properties", "grad", 1)
+            states = [_state(model, root, target_mult)]
         if consumer.sections.get("nac"):
             raise ConversionError("non-empty [nac] options alongside runtype=prop are ambiguous")
         consumer.take("nac")
@@ -477,6 +512,10 @@ def _driver_and_sections(
             states = [_state(model, target, target_mult)]
     elif runtime == "soc":
         driver_name = "soc"
+        if consumer.has("properties", "grad_s") or consumer.has("properties", "grad_t"):
+            raise ConversionError(
+                "the concise soc driver takes no target state, so a runtype=soc "
+                "deck that requests per-manifold gradients stays legacy-only")
         if input_soc_2e is not None:
             driver_kwargs["soc_2e"] = _coerce(input_soc_2e)
         warnings.append("normalized legacy tdhf.multiplicity (SOC evaluates both spin manifolds)")
