@@ -359,13 +359,11 @@ jobs:
             selection="$(python .github/scripts/select_pr_tests.py | sed '\|^tests/test_mp2_dispatch.py$|d')"
             if [ "$selection" = "ALL" ]; then
               echo "Running the full pytest suite (MP2 runs separately)"
-              OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
-                python -m pytest tests -q -n auto --forked --tb=short -rf --ignore=tests/test_mp2_dispatch.py
+              python -m pytest tests -q -n auto --forked --tb=short -rf --ignore=tests/test_mp2_dispatch.py
             else
-              echo "Running $(echo "$selection" | wc -l) selected test files (MP2 runs separately):"
+              echo "Running $(echo "$selection" | wc -l) selected test files (full suite runs after merge to main; MP2 runs separately):"
               echo "$selection"
-              OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
-                python -m pytest $selection -q -n auto --forked --tb=short -rf --ignore=tests/test_mp2_dispatch.py
+              python -m pytest $selection -q -n auto --forked --tb=short -rf --ignore=tests/test_mp2_dispatch.py
             fi
          - name: Check MP2 transforms and thread restoration
            if: ${{ matrix.role == 'pytest' }}
