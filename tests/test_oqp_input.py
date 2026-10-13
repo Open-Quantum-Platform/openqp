@@ -2369,7 +2369,10 @@ def test_every_wf_methods_example_has_a_committed_oqp_twin():
     # 31 since correlated-state irrep selection added H2O_CASCI_IRREP_B1.inp
     # ([ci] irrep) and H2_FCI_IRREP_B1U.inp ([fci] irrep with irrep_min_purity,
     # and the branch where the symmetry and spin filters must agree on a root).
-    assert len(WF_EXAMPLES) == 32
+    # 33 since H2O_CASSCF_CAS66_ANALYTIC.inp added the 400-determinant analytic
+    # CASSCF Hessian that selects the direct excitation products above the
+    # 4 MiB excitation-stack storage threshold.
+    assert len(WF_EXAMPLES) == 33
     missing = [
         name for name in WF_EXAMPLES
         if not (WF_EXAMPLE_DIR / name).with_suffix(".oqp").is_file()
