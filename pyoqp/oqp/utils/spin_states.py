@@ -53,11 +53,16 @@ def grad_requests(config) -> dict:
     grad_s and grad_t name a ladder outright.  The historical selector describes
     the ladder this run already answers, so it fills only that one when nothing
     named it; that is what keeps every existing deck asking for the same states.
+
+    A spin-orbit run never reads it: the input checker refuses anything but its
+    schema default there, and that default (root 0, the internal reference of an
+    MRSF ladder) is not a request -- falling back to it would differentiate the
+    reference through the response Z-vector.
     """
     properties = config.get('properties') or {}
     requests = {label: _states(properties.get(f'grad_{label}', []))
                 for label in ('s', 't')}
     configured = configured_spin(config)
-    if not requests[configured]:
+    if not requests[configured] and not soc_requested(config):
         requests[configured] = _states(properties.get('grad', []))
     return requests

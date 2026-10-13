@@ -94,6 +94,21 @@ def _spin_setup(mol):
     return label, other_spin(label), grad_requests(mol.config)
 
 
+def _configured_manifold(sp, label):
+    """Enter the configured ladder when nstate_s / nstate_t sizes it.
+
+    response_manifold sizes the ladder it answers from nstate_s / nstate_t.
+    Without one of those, the run keeps [tdhf] nstate and answers whatever
+    multiplicity it configured, so nothing is entered and nothing changes.
+    """
+    from oqp.library.single_point import response_manifold
+
+    td = sp.mol.config['tdhf']
+    named = (int(td.get('multiplicity', 1)) in (1, 3)
+             and int(td.get(f'nstate_{label}', 0)))
+    return response_manifold(sp, label) if named else nullcontext()
+
+
 def _soc_driver(mol, sp=None, ref_energy=None, tb_soc=None):
     """The SOC calculator for this flow.
 
@@ -236,22 +251,25 @@ def compute_grad(mol):
     per_manifold = bool(requests[other])
     spin_label = label if per_manifold else None
 
-    # compute energy
-    # Set the requested response state while converging the full reported spectrum.
     sp = SinglePoint(mol)
-    with _single_gradient_target(mol), grad_request(mol, requests[label]):
-        sp.energy()
+    with _configured_manifold(sp, label):
+        # compute energy
+        # Set the requested response state while converging the full reported
+        # spectrum.  grad_request first: _single_gradient_target reads
+        # [properties] grad.
+        with grad_request(mol, requests[label]), _single_gradient_target(mol):
+            sp.energy()
 
-        # compute gradient
-        Gradient(mol).gradient()
+            # compute gradient
+            Gradient(mol).gradient()
 
-    # compute properties
-    compute_scf_prop(mol)
-#    if mol.config['input']['qmmm_flag']:
-#       oqp.resp_charges(mol)
+        # compute properties
+        compute_scf_prop(mol)
+#        if mol.config['input']['qmmm_flag']:
+#           oqp.resp_charges(mol)
 
-    # compute dftd4
-    LastStep(mol).compute(mol, grad_list=requests[label], spin_label=spin_label)
+        # compute dftd4
+        LastStep(mol).compute(mol, grad_list=requests[label], spin_label=spin_label)
 
     if per_manifold:
         # compute the gradient of the other spin manifold
@@ -374,18 +392,13 @@ def compute_properties(mol):
     sp = SinglePoint(mol)
     ref_energy = sp.reference()
 
-    # response_manifold sizes the ladder it answers from nstate_s / nstate_t.
-    # Without one of those, the run keeps [tdhf] nstate and answers whatever
-    # multiplicity it configured, so nothing is entered and nothing changes.
-    td = mol.config['tdhf']
-    named = (int(td.get('multiplicity', 1)) in (1, 3)
-             and int(td.get(f'nstate_{label}', 0)))
-    with response_manifold(sp, label) if named else nullcontext():
+    with _configured_manifold(sp, label):
         # compute mo overlap and apply alignment
         BasisOverlap(mol).overlap()
 
-        # compute excitation energy
-        with _single_gradient_target(mol):
+        # compute excitation energy; _single_gradient_target reads this
+        # ladder's request, so install it first
+        with grad_request(mol, grad_list), _single_gradient_target(mol):
             sp.excitation(ref_energy)
 
         # Transport the central-geometry response-vector gauge before gradients,
@@ -416,12 +429,17 @@ def compute_properties(mol):
     if requests[other] or soc_on:
         other_grad_list = requests[other]
         soc = _soc_driver(mol, sp=sp, ref_energy=ref_energy)
-        if soc_on:
-            soc.snapshot(label)
+        # Record each ladder under its own label whenever two are solved, not
+        # only for the coupling: the unlabelled tags end up holding the ladder
+        # solved last, so the next step pairs each ladder with its own history
+        # through these records (NACME.load_state_history).
+        soc.snapshot(label)
 
         # compute the other spin manifold
         with response_manifold(sp, other):
             sp.excitation(ref_energy)
+            # before LastStep saves the molecule
+            soc.snapshot(other)
 
             # compute its gradient, if it requested one
             if other_grad_list:
@@ -459,14 +477,9 @@ def compute_data(mol):
     # compute energy
     sp = SinglePoint(mol)
 
-    # response_manifold sizes the ladder it answers from nstate_s / nstate_t.
-    # Without one of those, the run keeps [tdhf] nstate and answers whatever
-    # multiplicity it configured, so nothing is entered and nothing changes.
-    td = mol.config['tdhf']
-    named = (int(td.get('multiplicity', 1)) in (1, 3)
-             and int(td.get(f'nstate_{label}', 0)))
-    with response_manifold(sp, label) if named else nullcontext():
-        with _single_gradient_target(mol):
+    with _configured_manifold(sp, label):
+        # _single_gradient_target reads this ladder's request, so install it first
+        with grad_request(mol, grad_list), _single_gradient_target(mol):
             sp.energy()
 
         # compute gradient, unless only the other ladder asked for one
@@ -484,12 +497,15 @@ def compute_data(mol):
     if requests[other] or soc_on:
         other_grad_list = requests[other]
         soc = _soc_driver(mol, sp=sp, ref_energy=[mol.mol_energy.energy])
-        if soc_on:
-            soc.snapshot(label)
+        # Record each ladder under its own label whenever two are solved, as
+        # compute_properties does: a later step reads its history from them.
+        soc.snapshot(label)
 
         # compute the other spin manifold
         with response_manifold(sp, other):
             sp.excitation(soc.ref_energy)
+            # before LastStep saves the molecule
+            soc.snapshot(other)
 
             # compute its gradient, if it requested one
             if other_grad_list:
@@ -501,8 +517,7 @@ def compute_data(mol):
                 LastStep(mol).compute(mol, spin_label=other)
 
         if soc_on:
-            # publish its amplitudes, then the coupling between them
-            soc.snapshot(other)
+            # compute the coupling between the two recorded ladders
             soc.coupling()
 
 

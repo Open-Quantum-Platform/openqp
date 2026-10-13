@@ -3180,8 +3180,10 @@ def lower_to_legacy(
 
     # A spin-orbit run solves two response ladders, so a gradient index has to
     # say which one it belongs to.  The spin letter of the state label picks the
-    # key: prop(S1, soc=true) asks for the singlet manifold, prop(T1, soc=true)
-    # for the triplet one, and a deck naming both gets both.
+    # key: prop(S1, soc=true) asks for the singlet manifold and prop(T1,
+    # soc=true) for the triplet one.  prop() takes one target state, so a deck
+    # that wants both names the other ladder explicitly, e.g.
+    # prop(S1) properties(soc=true, grad_t=2).
     properties = config.get("properties", {})
     if str(properties.get("soc", "")).strip().lower() in ("true", "1", "yes", "on") \
             and "grad" in properties:

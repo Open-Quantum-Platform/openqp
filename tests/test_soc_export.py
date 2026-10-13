@@ -316,6 +316,48 @@ class SOCManifoldCouplingTests(unittest.TestCase):
                            'the two steps produced the same triplet amplitudes')
 
 
+class TwoLadderHistoryWithoutSOCTests(unittest.TestCase):
+    """A two-ladder step without spin-orbit coupling still records its history.
+
+    The unlabelled amplitude tags end up holding the ladder solved last (the
+    triplet), so the next step's singlet NACME must read the labelled singlet
+    record.  Without one, it overlapped singlet amplitudes with the previous
+    step's triplets, measured 1.3e-1 off the singlet-only oracle here with
+    nothing reported.  Agreeing with that oracle to 1e-6 therefore only holds
+    if the singlets were paired with their own history.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp = tempfile.TemporaryDirectory(prefix='history_nosoc_')
+        cls.workdir = Path(cls._tmp.name)
+        deck = (SOC_DECK.read_text(encoding='utf-8')
+                .replace('soc=true\n', '')
+                .replace('basis=6-31G*', 'basis=STO-3G')
+                .replace('d4=true\n', ''))
+        single = deck.replace('grad_t=2\n', '').replace('grad_s=2', 'grad=2')
+        run = SOCManifoldCouplingTests._run
+        for name, text in (('both', deck), ('singlet', single)):
+            folder = cls.workdir / name
+            (folder / 'step1').mkdir(parents=True)
+            first = SYSTEM_BLOCK.sub(GEOMETRY_PREVIOUS, text, count=1)
+            previous = run(first.replace('nac=nacme\n', ''), folder / 'step1', 'step1')
+            run(text, folder, 'step2', previous)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def test_singlet_couplings_use_the_singlet_history(self):
+        produced = np.loadtxt(self.workdir / 'both' / 'nacme_s', ndmin=2)
+        oracle = np.loadtxt(self.workdir / 'singlet' / 'nacme', ndmin=2)
+        self.assertEqual(produced.shape, oracle.shape)
+        difference = np.abs(produced - oracle).max()
+        self.assertLess(difference, 1e-6,
+                        'nacme_s differs from the singlet-only run by '
+                        f'{difference:.3e}')
+
+
 PER_LADDER_ROOTS_DECK = """# per-ladder root counts only: nstate_s / nstate_t, no nstate
 [input]
 system=
@@ -466,6 +508,51 @@ class SOCBranchTests(unittest.TestCase):
             present = {path.name for path in here.iterdir()}
             self.assertEqual(present & set(labelled), set(),
                              f'a run without properties.soc wrote {labelled}')
+
+    def test_a_triplet_only_request_does_not_differentiate_the_reference(self):
+        # soc=true with grad_t alone: the singlet ladder has no request.  The
+        # [properties] grad default (root 0, the internal ROHF reference) used
+        # to fill it, so the run took a Z-vector of the reference, which does
+        # not converge, and stopped before publishing anything.
+        deck = (SOC_DECK.read_text(encoding='utf-8')
+                .replace('runtype=prop', 'runtype=data')
+                .replace('basis=6-31G*', 'basis=STO-3G')
+                .replace('nac=nacme\n', '')
+                .replace('grad_s=2\n', '')
+                .replace('grad_t=2', 'grad_t=1')
+                .replace('d4=true\n', ''))
+        with tempfile.TemporaryDirectory(prefix='soc_triplet_only_') as workdir:
+            log = _run_deck_text(deck, workdir, 'triplet_only')
+            here = Path(workdir)
+            for name in ('socme', 'energies_s', 'energies_t', 'grad_t_1'):
+                self.assertTrue((here / name).is_file(), f'{name} missing')
+            self.assertEqual(sorted(path.name for path in here.glob('grad_s_*')), [],
+                             'no singlet gradient was requested')
+            self.assertNotIn('Gradient of triplet ROHF reference',
+                             log.read_text(encoding='utf-8'))
+
+    def test_gradient_run_sizes_the_configured_ladder_from_its_own_count(self):
+        # runtype=grad answered its configured ladder on [tdhf] nstate even when
+        # nstate_s named another count, while the checker (like prop and data)
+        # judged grad_s against nstate_s: a deck the checker passed then refused
+        # the gradient after the solve.
+        deck = (SOC_DECK.read_text(encoding='utf-8')
+                .replace('runtype=prop', 'runtype=grad')
+                .replace('basis=6-31G*', 'basis=STO-3G')
+                .replace('soc=true\n', '')
+                .replace('nac=nacme\n', '')
+                .replace('back_door=true\n', '')
+                .replace('nstate=2', 'nstate=1\nnstate_s=2')
+                .replace('grad_t=2', 'grad_t=1')
+                .replace('d4=true\n', ''))
+        with tempfile.TemporaryDirectory(prefix='grad_counts_') as workdir:
+            _run_deck_text(deck, workdir, 'counts')
+            here = Path(workdir)
+            # one reference row plus the roots of that ladder
+            self.assertEqual(np.loadtxt(here / 'energies_s').shape, (1 + 2,))
+            self.assertEqual(np.loadtxt(here / 'energies_t').shape, (1 + 1,))
+            for name in ('grad_s_2', 'grad_t_1'):
+                self.assertTrue((here / name).is_file(), f'{name} missing')
 
     def test_data_runtype_publishes_the_second_manifold_and_socme(self):
         # The same request on runtype=data, one basis smaller and without a NAC
@@ -707,6 +794,72 @@ class SOCGateTests(unittest.TestCase):
         config['properties'] = {'grad': [0], 'grad_t': [1]}
         self.assertEqual(self._paths(config), set(),
                          self._report(config).to_text())
+
+    def test_a_spin_orbit_run_never_falls_back_to_the_shared_selector(self):
+        # The schema default grad=[0] names the internal reference, not a state:
+        # a spin-orbit run with grad_t alone asks for no singlet gradient.
+        from oqp.utils.spin_states import grad_requests
+
+        config = self._config()
+        config['properties'] = {'soc': True, 'grad': [0], 'grad_t': [1]}
+        self.assertEqual(grad_requests(config), {'s': [], 't': [1]})
+        self.assertEqual(self._paths(config), set(),
+                         self._report(config).to_text())
+        # Without spin-orbit coupling the shared selector keeps describing the
+        # configured ladder, as every existing deck relies on.
+        config['properties'] = {'grad': [2], 'grad_t': [1]}
+        self.assertEqual(grad_requests(config), {'s': [2], 't': [1]})
+
+    def test_tight_binding_spin_orbit_is_only_offered_standalone(self):
+        # The properties/data flow switches ladders through [tdhf]
+        # multiplicity, which the tight-binding adapters do not read.
+        for method in ('dftb', 'xtb'):
+            for runtype in ('prop', 'data'):
+                config = self._config(runtype)
+                config['input']['method'] = method
+                config['properties'] = {'soc': True}
+                self.assertIn('properties.soc', self._paths(config),
+                              f'{method} {runtype}')
+            config = self._config('soc')
+            config['input']['method'] = method
+            config['properties'] = {}
+            self.assertNotIn('properties.soc', self._paths(config), method)
+
+    def test_per_manifold_selectors_need_the_mrsf_ladders(self):
+        # Without spin-orbit coupling as well: the second ladder is reached by
+        # switching [tdhf] multiplicity, which only the MRSF response answers.
+        for method, td_type in (('dftb', 'mrsf'), ('xtb', 'mrsf'), ('tdhf', 'rpa'),
+                                ('hf', 'mrsf')):
+            config = self._config('prop')
+            config['input']['method'] = method
+            config['tdhf']['type'] = td_type
+            config['properties'] = {'grad_t': [1]}
+            self.assertIn('properties.grad_t', self._paths(config),
+                          f'{method}/{td_type}')
+        # A runtype that never reads the selectors must not drop them quietly.
+        config = self._config('energy')
+        config['properties'] = {'grad_t': [1]}
+        self.assertIn('properties.grad_t', self._paths(config))
+        # The root count is checked without spin-orbit coupling too.
+        config = self._config('grad')
+        config['tdhf']['nstate_s'] = 1
+        config['properties'] = {'grad_s': [2], 'grad_t': [1]}
+        self.assertIn('tdhf.nstate_s', self._paths(config))
+        # Roots count from 1; 0 and below would reach the native Z-vector.
+        for states in ([0], [-1, 2]):
+            config = self._config()
+            config['properties']['grad_t'] = states
+            self.assertIn('properties.grad_t', self._paths(config), states)
+
+    def test_data_runtype_refuses_nacme(self):
+        # runtype=data has no overlap with the previous step, so a nacme
+        # request there would finish without its coupling matrices.
+        config = self._config('data')
+        config['properties']['nac'] = 'nacme'
+        self.assertIn('properties.nac', self._paths(config))
+        config = self._config('prop')
+        config['properties']['nac'] = 'nacme'
+        self.assertNotIn('properties.nac', self._paths(config))
 
 
 class SOCExampleReferenceTests(unittest.TestCase):

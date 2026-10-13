@@ -136,18 +136,6 @@ PT2_GRAD_METHODS = frozenset({
     'nevpt2', 'sc-nevpt2', 'scnevpt2',
     'mrmp2', 'mcqdpt2', 'xmcqdpt2',
 })
-
-
-def soc_requested(config):
-    """True when this run computes spin-orbit coupling as a step of the flow.
-
-    The value can still be the input-file string, because scripting callers and
-    partial configurations never pass through schema normalization.
-    """
-    value = (config.get('properties') or {}).get('soc', False)
-    if isinstance(value, str):
-        return value.strip().lower() in ('true', 't', '1', 'yes', 'on')
-    return bool(value)
 import oqp.utils.qmmm as qmmm
 
 MP2_VARIANT_SCALES = {

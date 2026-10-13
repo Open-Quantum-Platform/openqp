@@ -11,6 +11,27 @@ from typing import Any
 
 from oqp.utils.mpi_utils import MPIManager
 
+try:
+    from oqp.utils.spin_states import grad_requests
+except ModuleNotFoundError as exc:
+    # Many source-only tests load this file directly with oqp.utils stubbed as
+    # a plain module.  Load the pure config sibling in that narrow case, as
+    # oqp.utils.state_labels does for log_format; do not hide unrelated
+    # missing dependencies.
+    if exc.name not in {"oqp", "oqp.utils", "oqp.utils.spin_states"}:
+        raise
+    import importlib.util
+    from pathlib import Path
+
+    _spin_states_spec = importlib.util.spec_from_file_location(
+        "oqp_spin_states_for_input_checker",
+        Path(__file__).with_name("spin_states.py"))
+    if _spin_states_spec is None or _spin_states_spec.loader is None:
+        raise
+    _spin_states = importlib.util.module_from_spec(_spin_states_spec)
+    _spin_states_spec.loader.exec_module(_spin_states)
+    grad_requests = _spin_states.grad_requests
+
 
 SUPPORTED_RUNTYPES = {
     "energy", "grad", "hess", "nac", "nacme", "bp", "optimize",
@@ -5712,10 +5733,86 @@ def _check_planned_wavefunction_methods(config: dict[str, Any], report: CheckRep
 
 def _all_grad_requests(config: dict[str, Any]) -> list[int]:
     """Every response state this run asks a gradient for, across spin ladders."""
-    from oqp.utils.spin_states import grad_requests
-
     requests = grad_requests(config)
     return sorted(set(requests['s']) | set(requests['t']))
+
+
+def _check_per_manifold_gradients(config: dict[str, Any], report: CheckReport,
+                                  requested: dict[str, list]) -> None:
+    """grad_s / grad_t: one gradient list per spin ladder of the MRSF response.
+
+    The drivers reach the second ladder by switching [tdhf] multiplicity
+    (oqp.library.single_point.response_manifold).  Only the Gaussian-basis MRSF
+    response has both ladders behind that switch: the tight-binding adapters
+    select theirs through [dftb] / [xtb] target_multiplicity, so the "other"
+    ladder would silently be the configured one again, and no other method has
+    a spin ladder at all.  Only runtype=grad, prop and data read the keys.
+    """
+    method = _as_lower(_get(config, "input", "method", "hf"))
+    td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+    runtype = _as_lower(_get(config, "input", "runtype", "energy"))
+    nstate = int(_get(config, "tdhf", "nstate", 1) or 1)
+    for key, states in requested.items():
+        if runtype not in ("grad", "prop", "data"):
+            report.add(
+                "ERROR",
+                f"properties.{key}",
+                f"properties.{key} is read by runtype=grad, prop and data only; "
+                f"runtype={runtype} would drop the request.",
+                value=states,
+                expected="runtype=grad, prop or data",
+                action=f"Set [input] runtype=grad, prop or data, or drop "
+                       f"[properties] {key}.",
+            )
+            continue
+        if method != "tdhf" or td_type != "mrsf":
+            report.add(
+                "ERROR",
+                f"properties.{key}",
+                f"properties.{key} selects a gradient on one spin ladder of the "
+                "MRSF response, which the drivers reach by switching [tdhf] "
+                f"multiplicity; method={method} with tdhf.type={td_type} has no "
+                "ladder behind that switch (the tight-binding backends select "
+                "theirs through their own target_multiplicity).",
+                value=states,
+                expected="method=tdhf with tdhf.type=mrsf",
+                action="Use [properties] grad for the configured ladder, or run "
+                       "the Gaussian-basis MRSF response for per-manifold gradients.",
+            )
+            continue
+        # Response roots count from 1: root 0 of an MRSF ladder is the internal
+        # reference, and the gradient driver hands each index to the native
+        # Z-vector as a target.
+        if min(int(item) for item in states) < 1:
+            report.add(
+                "ERROR",
+                f"properties.{key}",
+                f"properties.{key} names response roots, which count from 1; "
+                "root 0 is the internal MRSF reference, not a state.",
+                value=states,
+                expected="positive response roots (S0 is root 1, T0 is root 1)",
+                action=f"Renumber [properties] {key} from 1.",
+            )
+            continue
+        # Each ladder publishes gradients for its own list, so each has to
+        # converge the highest root that list names.
+        label = key[-1]
+        name = "singlet" if label == "s" else "triplet"
+        count_key = f"nstate_{label}"
+        count = int(_get(config, "tdhf", count_key, 0) or nstate)
+        highest = max(int(item) for item in states)
+        if highest > count:
+            report.add(
+                "ERROR",
+                f"tdhf.{count_key}",
+                f"properties.{key} takes the gradient of state {highest} of the "
+                f"{name} manifold, but that manifold converges only {count} "
+                "response roots.",
+                value=states,
+                expected=f"at most {count} as the highest {name} gradient state",
+                action=f"Raise [tdhf] {count_key} (or nstate, which it falls back "
+                       f"to), or drop that state from [properties] {key}.",
+            )
 
 
 def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
@@ -5870,6 +5967,15 @@ def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
     # driver fulfils can never be silently dropped.
     soc_requested = (_is_true(_get(config, "properties", "soc", False))
                      or runtype == "soc")
+    per_manifold = {
+        key: [item for item in _as_list(_get(config, "properties", key, []))
+              if str(item).strip() != ""]
+        for key in ("grad_s", "grad_t")
+    }
+    per_manifold = {key: states for key, states in per_manifold.items() if states}
+    # runtype=soc refuses both selectors outright, below.
+    if per_manifold and runtype != "soc":
+        _check_per_manifold_gradients(config, report, per_manifold)
     if soc_requested:
         # runtype=soc computes energies and couplings only: its gradients belong
         # to runtype=grad, prop and data.
@@ -5916,21 +6022,6 @@ def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
                     action="Move the request to [properties] grad_s / grad_t, one "
                            "list per spin manifold.",
                 )
-        elif runtype in ("prop", "data"):
-            # runtype=soc already says it takes no gradient at all.
-            for key in ("grad_s", "grad_t"):
-                if [item for item in _as_list(_get(config, "properties", key, []))
-                        if str(item).strip() != ""]:
-                    report.add(
-                        "ERROR",
-                        f"properties.{key}",
-                        f"properties.{key} needs a per-manifold response solve, "
-                        "which the tight-binding spin-orbit driver does not offer.",
-                        value=_get(config, "properties", key, ""),
-                        expected="grad_s / grad_t unset with method=dftb or xtb",
-                        action="Drop the request, or run the Gaussian-basis MRSF "
-                               "response (method=tdhf) for per-manifold gradients.",
-                    )
 
     if runtype != "grad":
         return
@@ -7381,6 +7472,24 @@ def _check_soc(config: dict[str, Any], report: CheckReport,
                 expected="mrsf",
                 action="Set [tdhf] type=mrsf.",
             )
+        # The properties/data flow reaches its second ladder by switching
+        # [tdhf] multiplicity, which the tight-binding adapters do not read
+        # (they select through their own target_multiplicity), and its coupling
+        # step is the native Gaussian-basis kernel.  The tight-binding SOC
+        # driver, which solves both ladders itself, is reached by runtype=soc.
+        if runtype != "soc":
+            report.add(
+                "ERROR",
+                "properties.soc",
+                f"properties.soc is not available with method={method}: the "
+                "properties/data flow switches spin ladders through [tdhf] "
+                "multiplicity, which the tight-binding backend does not read.",
+                value=f"{method} with runtype={runtype}",
+                expected="runtype=soc for tight-binding spin-orbit coupling",
+                action="Use [input] runtype=soc for a tight-binding spin-orbit "
+                       "run, or method=tdhf for spin-orbit coupling inside "
+                       "runtype=prop/data.",
+            )
         return
 
     if method != "tdhf":
@@ -7438,30 +7547,6 @@ def _check_soc(config: dict[str, Any], report: CheckReport,
             action="Leave [tdhf] ixcore at its default for a spin-orbit run.",
         )
 
-    # Each manifold publishes gradients for its own list, so each has to
-    # converge the highest root that list names.
-    per_manifold = (
-        ('s', 'singlet', 'nstate_s', int(_get(config, "tdhf", "nstate", 1) or 1)),
-        ('t', 'triplet', 'nstate_t', int(_get(config, "tdhf", "nstate", 1) or 1)),
-    )
-    for key, name, count_key, fallback in per_manifold:
-        count = int(_get(config, "tdhf", count_key, 0) or fallback)
-        requested = [int(item) for item
-                     in _as_list(_get(config, "properties", f"grad_{key}", []))
-                     if str(item).strip() != ""]
-        if requested and max(requested) > count:
-            report.add(
-                "ERROR",
-                f"tdhf.{count_key}",
-                f"SOC ({origin}) takes the gradient of state {max(requested)} of "
-                f"the {name} manifold, but that manifold converges only {count} "
-                f"response roots.",
-                value=requested,
-                expected=f"at most {count} as the highest {name} gradient state",
-                action=f"Raise [tdhf] {count_key} (or nstate, which it falls back "
-                       f"to), or drop that state from [properties] grad_{key}.",
-            )
-
     # NAC vectors are not available per spin manifold.  The analytic engine
     # implements the singlet fold only (oqp.library.nac_analytic raises
     # NotImplementedError for a triplet target), and the numerical route would
@@ -7478,9 +7563,24 @@ def _check_soc(config: dict[str, Any], report: CheckReport,
             "no manifold slot.",
             value=_get(config, "nac", "type", "numerical"),
             expected="properties.nac=nacme",
-            action="Use nac=nacme, which publishes the coupling matrix of each "
-                   "spin manifold, or drop properties.soc to take the singlet "
-                   "vectors alone.",
+            action="Use nac=nacme (runtype=prop), which publishes the coupling "
+                   "matrix of each spin manifold, or drop properties.soc to take "
+                   "the singlet vectors alone.",
+        )
+    # runtype=data has no overlap-with-the-previous-step path at all
+    # (runfunc.compute_data computes nac vectors only), so a nacme request
+    # there would finish without the coupling matrices it asked for.
+    if (runtype == "data"
+            and _as_lower(_get(config, "properties", "nac", "")) == "nacme"):
+        report.add(
+            "ERROR",
+            "properties.nac",
+            "SOC (properties.soc) with runtype=data computes no nacme: that "
+            "runtype has no overlap with the previous step.",
+            value="nacme with runtype=data",
+            expected="runtype=prop for nacme, or properties.nac unset",
+            action="Use [input] runtype=prop for per-manifold coupling matrices, "
+                   "or drop [properties] nac.",
         )
 
     clash = _soc_2e_harmonic_clash(config, input_dir)
