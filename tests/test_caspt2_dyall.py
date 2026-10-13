@@ -28,7 +28,7 @@ def _backend_available() -> bool:
     return bool(getattr(oqp, "BACKEND_AVAILABLE", False)) and hasattr(oqp, "fci_ao_integrals")
 
 
-def _run_caspt2(tmp_path, project, *, system, basis, cas, pt2, ci=None, method="caspt2"):
+def _run_caspt2(tmp_path, project, *, system, basis, cas, pt2, ci=None, method="caspt2", usempi=False):
     from oqp.pyoqp import Runner
 
     ci_block = {
@@ -67,7 +67,7 @@ def _run_caspt2(tmp_path, project, *, system, basis, cas, pt2, ci=None, method="
             "tests": {"exception": "True"},
         },
         silent=1,
-        usempi=False,
+        usempi=usempi,
     )
     runner.run(test_mod=True)
     return runner

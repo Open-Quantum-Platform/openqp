@@ -25,8 +25,9 @@ memory ~ the merged external space (guarded by ``[pt2] max_terms``).  Numerical
 conventions (integrals, phases, shifts) are pinned to the dense engine by the
 equivalence tests in ``tests/test_qdpt2_direct.py`` (agreement <= 1e-10 Eh).
 
-Scope: the diagonal-Fock QDPT family only.  The CASPT2 Fock-MATRIX H0 and the
-Dyall H0 are not diagonal in the determinant basis and keep the dense path.
+Scope: the diagonal-Fock QDPT family, plus explicit single-state uncontracted
+CASPT2 energies with the diagonal Fock H0 and zero IPEA shift. The full-Fock
+multistate and Dyall H0 are not diagonal and keep the dense path.
 Alpha/beta strings are encoded in uint64 words (norb <= 63 per spin).
 """
 from __future__ import annotations

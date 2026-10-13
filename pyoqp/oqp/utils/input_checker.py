@@ -5240,14 +5240,29 @@ def _check_pt2(config: dict[str, Any], report: CheckReport) -> None:
         )
     elif engine_mode in {"direct", "python", "fortran"} \
             and canonical_method not in PT2_QDPT_METHODS:
-        report.add(
-            "ERROR",
-            "pt2.engine",
-            "The matrix-free direct engine requires a diagonal H0 (QDPT family).",
-            value={"method": canonical_method, "engine": engine_mode},
-            expected="method=mrmp2/mcqdpt2/xmcqdpt2 for engine=direct/fortran",
-            action="Use the QDPT-family methods, or engine=dense for CASPT2/NEVPT2.",
+        # This is an uncontracted, single-state energy contraction. In
+        # particular it must not intercept a strong-contraction request.
+        _h0_direct = _as_lower(_get(config, "pt2", "h0", "fock") or "fock")
+        _contr_direct = _as_lower(_get(config, "pt2", "contraction", "none") or "none")
+        _ipea_valid, _ipea_direct = _check_float_literal(
+            _get(config, "pt2", "ipea_shift", 0.0), "pt2.ipea_shift", report)
+        _caspt2_direct = (
+            canonical_method == "caspt2" and normalized_variant == "caspt2"
+            and _h0_direct in {"fock", "caspt2"}
+            and _contr_direct in {"none", "uncontracted", "full"}
+            and _ipea_valid and _ipea_direct == 0.0
+            and _as_lower(_get(config, "input", "runtype", "energy")) == "energy"
         )
+        if not _caspt2_direct:
+            report.add(
+                "ERROR",
+                "pt2.engine",
+                "The direct engine requires diagonal-Fock QDPT or uncontracted "
+                "single-state CASPT2 energy with zero IPEA shift.",
+                value={"method": canonical_method, "engine": engine_mode},
+                expected="CASPT2 energy: h0=fock, contraction=none, ipea_shift=0",
+                action="Use engine=dense for other CASPT2/NEVPT2 requests.",
+            )
     _check_int_literal(
         _get(config, "pt2", "max_terms", 30000000),
         "pt2.max_terms",
@@ -5423,6 +5438,15 @@ def _check_pt2(config: dict[str, Any], report: CheckReport) -> None:
             "PT2 target roots must be unique.",
             value=target_roots,
             action="Remove duplicate PT2 root slots.",
+        )
+    if normalized_variant in PT2_SINGLE_STATE_METHODS and len(parsed_target_roots) > 1:
+        report.add(
+            "ERROR",
+            "pt2.target_roots",
+            "Single-state PT2 corrects exactly one target root at a time.",
+            value=target_roots,
+            expected="one root slot (or leave unset for root 0)",
+            action="Select one target root, or use a multistate PT2 method.",
         )
     # A one-element explicit list passes the count/bounds checks below, and
     # _reference_roots then honours it -- so the runtime diagonalises a 1x1
