@@ -668,7 +668,17 @@ OQP_CONFIG_SCHEMA = {
         'acid_padding': {'type': float, 'default': '5.0'},
         'td_prop': {'type': bool, 'default': 'False'},
         'grad': {'type': iarray, 'default': '0'},
+        # Per-manifold gradient selectors, read only by a spin-orbit run.  A
+        # plain 'grad' index cannot say which spin ladder it means once a run
+        # solves two, so the manifold is named by the key.
+        'grad_s': {'type': iarray, 'default': ''},
+        'grad_t': {'type': iarray, 'default': ''},
         'nac': {'type': str, 'default': ''},
+        # Spin-orbit coupling as a step of a properties/data run.  Consumed by
+        # the Python driver only (like tdhf nstate_s/nstate_t), so it never
+        # reaches the native control block; runtype=soc remains the standalone
+        # SOC entry point and [md] soc the one inside surface hopping.
+        'soc': {'type': bool, 'default': 'False'},
         'export': {'type': bool, 'default': 'False'},
         'title': {'type': str, 'default': ''},
         'back_door': {'type': bool, 'default': False}

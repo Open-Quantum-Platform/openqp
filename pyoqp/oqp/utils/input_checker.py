@@ -5710,10 +5710,18 @@ def _check_planned_wavefunction_methods(config: dict[str, Any], report: CheckRep
         wiki=WIKI_HELP["input.method"],
     )
 
+def _all_grad_requests(config: dict[str, Any]) -> list[int]:
+    """Every response state this run asks a gradient for, across spin ladders."""
+    from oqp.utils.spin_states import grad_requests
+
+    requests = grad_requests(config)
+    return sorted(set(requests['s']) | set(requests['t']))
+
+
 def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     runtype = _as_lower(_get(config, "input", "runtype", "energy"))
-    grad_states = _as_list(_get(config, "properties", "grad", []))
+    grad_states = _all_grad_requests(config)
     td_prop = _get(config, "properties", "td_prop", False)
     scf_prop = [_as_lower(item) for item in _as_list(_get(config, "properties", "scf_prop", []))]
     nmr_gauge = _as_lower(_get(config, "properties", "nmr_gauge", "cgo"))
@@ -5857,6 +5865,72 @@ def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
             value=td_prop,
             action="Disable td_prop unless you have a confirmed downstream implementation.",
         )
+
+    # Checked before the grad-only early return below, so a request that no
+    # driver fulfils can never be silently dropped.
+    soc_requested = (_is_true(_get(config, "properties", "soc", False))
+                     or runtype == "soc")
+    if soc_requested:
+        # runtype=soc computes energies and couplings only: its gradients belong
+        # to runtype=grad, prop and data.
+        for key in ("grad_s", "grad_t"):
+            named = [item for item in _as_list(_get(config, "properties", key, []))
+                     if str(item).strip() != "" and runtype == "soc"]
+            if named:
+                report.add(
+                    "ERROR",
+                    f"properties.{key}",
+                    f"properties.{key} selects a gradient, and runtype=soc computes "
+                    "none: it solves both spin manifolds and couples them.",
+                    value=named,
+                    expected="runtype=grad, prop or data for gradients",
+                    action="Move the request to a runtype that takes gradients, or "
+                           "drop it and keep runtype=soc for energies plus couplings.",
+                )
+        if runtype not in ("prop", "data", "soc"):
+            report.add(
+                "ERROR",
+                "properties.soc",
+                "Only runtype=prop and runtype=data run spin-orbit coupling as a "
+                "step of the calculation; this runtype never reaches that step.",
+                value=runtype,
+                expected="prop, data, or properties.soc omitted",
+                action="Set [input] runtype=prop (or data), or drop properties.soc "
+                       "and use runtype=soc for a standalone spin-orbit run.",
+            )
+        # The run solves two ladders, so 'grad' cannot say which one it indexes;
+        # grad_s and grad_t are the only selectors in this mode.  The
+        # tight-binding SOC driver takes no per-manifold gradient at all, so
+        # there 'grad' is simply unused, as it always was.
+        if method not in ("dftb", "xtb"):
+            legacy = [int(item) for item in _as_list(_get(config, "properties", "grad", []))
+                      if str(item).strip() != ""]
+            if legacy and legacy != [0]:
+                report.add(
+                    "ERROR",
+                    "properties.grad",
+                    "A spin-orbit run reads grad_s and grad_t, not grad: the two "
+                    "manifolds have separate ladders, so one index has no spin.",
+                    value=legacy,
+                    expected="properties.grad left at its default",
+                    action="Move the request to [properties] grad_s / grad_t, one "
+                           "list per spin manifold.",
+                )
+        elif runtype in ("prop", "data"):
+            # runtype=soc already says it takes no gradient at all.
+            for key in ("grad_s", "grad_t"):
+                if [item for item in _as_list(_get(config, "properties", key, []))
+                        if str(item).strip() != ""]:
+                    report.add(
+                        "ERROR",
+                        f"properties.{key}",
+                        f"properties.{key} needs a per-manifold response solve, "
+                        "which the tight-binding spin-orbit driver does not offer.",
+                        value=_get(config, "properties", key, ""),
+                        expected="grad_s / grad_t unset with method=dftb or xtb",
+                        action="Drop the request, or run the Gaussian-basis MRSF "
+                               "response (method=tdhf) for per-manifold gradients.",
+                    )
 
     if runtype != "grad":
         return
@@ -6287,7 +6361,7 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
                     value=_get(config, "properties", "grad", []),
                     action="Use grad=0 or switch to method=tdhf.",
                 )
-        elif method == "tdhf" and 0 in [int(state) for state in _as_list(_get(config, "properties", "grad", [])) if state not in (None, "")]:
+        elif method == "tdhf" and 0 in _all_grad_requests(config):
             report.add(
                 "ERROR",
                 "properties.grad",
@@ -6337,8 +6411,8 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
     if runtype == "nacme":
         _check_nacme(config, report)
 
-    if runtype == "soc":
-        _check_soc(config, report)
+    if runtype == "soc" or _is_true(_get(config, "properties", "soc", False)):
+        _check_soc(config, report, input_dir)
 
     if runtype == "hess":
         _check_hess(config, report, input_dir)
@@ -7237,11 +7311,62 @@ def _check_neb(config: dict[str, Any], report: CheckReport,
             )
 
 
-def _check_soc(config: dict[str, Any], report: CheckReport) -> None:
+def _soc_2e_harmonic_clash(config: dict[str, Any],
+                           input_dir: str | None) -> str | None:
+    """Predict the native guard, which aborts 2e SOC over any pure shell.
+
+    Returns ``'abort'``, ``'unknown'`` or None.  The verdict follows the same
+    per-shell metadata the basis builder uses
+    (pyoqp/oqp/library/set_basis.py: ``function_type`` ends with 'spherical', or
+    ispher=true forces it), not the basis-set name, so a Pople basis that
+    resolves to Cartesian under ispher=auto is not flagged.
+    """
+    from oqp.molecule.oqpdata import ispher_mode
+
+    soc_2e = str(_get(config, "input", "soc_2e", 1)).strip().lower()
+    if soc_2e in ("0", "false", "off", "no"):
+        return None
+
+    mode = ispher_mode(_get(config, "input", "ispher", "auto"))
+    if mode == "false":
+        return None
+    if mode == "true":
+        return "abort"
+
+    atoms, why = _atom_shells(config, input_dir)
+    if atoms is None:
+        return "unknown" if why == "basis" else None
+    for _, entry in atoms:
+        for shell in entry.get("electron_shells", []):
+            if str(shell.get("function_type", "gto")).endswith("spherical"):
+                return "abort"
+    return None
+
+
+def _check_soc(config: dict[str, Any], report: CheckReport,
+               input_dir: str | None = None) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
     scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
     scf_mult = _get(config, "scf", "multiplicity", 1)
+    runtype = _as_lower(_get(config, "input", "runtype", "energy"))
+    origin = "runtype=soc" if runtype == "soc" else "properties.soc"
+
+    # Only the singlet and triplet ladders are answered together, and they are
+    # selected by nstate_s / nstate_t, so no other multiplicity means anything
+    # to a spin-orbit run.
+    if str(_get(config, "tdhf", "multiplicity", 1)) not in ("1", "3"):
+        report.add(
+            "ERROR",
+            "tdhf.multiplicity",
+            f"SOC ({origin}) answers the singlet and triplet response ladders, so "
+            "it cannot start from a target multiplicity of "
+            f"{_get(config, 'tdhf', 'multiplicity', 1)}.",
+            value=_get(config, "tdhf", "multiplicity", 1),
+            expected="1 or 3",
+            action="Set [tdhf] multiplicity=1 or 3; the run answers both ladders "
+                   "from it regardless.",
+        )
 
     if method in ("dftb", "xtb"):
         # MRSF one-center SOC: the ROKS triplet reference is implied
@@ -7251,7 +7376,7 @@ def _check_soc(config: dict[str, Any], report: CheckReport) -> None:
             report.add(
                 "ERROR",
                 "tdhf.type",
-                "SOC requires tdhf.type=mrsf.",
+                f"SOC ({origin}) requires tdhf.type=mrsf.",
                 value=td_type,
                 expected="mrsf",
                 action="Set [tdhf] type=mrsf.",
@@ -7262,7 +7387,7 @@ def _check_soc(config: dict[str, Any], report: CheckReport) -> None:
         report.add(
             "ERROR",
             "input.method",
-            "SOC requires method=tdhf.",
+            f"SOC ({origin}) requires method=tdhf.",
             value=method,
             expected="tdhf",
             action="Set [input] method=tdhf.",
@@ -7272,7 +7397,7 @@ def _check_soc(config: dict[str, Any], report: CheckReport) -> None:
         report.add(
             "ERROR",
             "tdhf.type",
-            "SOC requires tdhf.type=mrsf.",
+            f"SOC ({origin}) requires tdhf.type=mrsf.",
             value=td_type,
             expected="mrsf",
             action="Set [tdhf] type=mrsf.",
@@ -7282,7 +7407,7 @@ def _check_soc(config: dict[str, Any], report: CheckReport) -> None:
         report.add(
             "ERROR",
             "scf.type",
-            "SOC requires an ROHF reference.",
+            f"SOC ({origin}) requires an ROHF reference.",
             value=scf_type,
             expected="rohf",
             action="Set [scf] type=rohf.",
@@ -7292,10 +7417,95 @@ def _check_soc(config: dict[str, Any], report: CheckReport) -> None:
         report.add(
             "ERROR",
             "scf.multiplicity",
-            "SOC requires a triplet ROHF reference (multiplicity=3).",
+            f"SOC ({origin}) requires a triplet ROHF reference (multiplicity=3).",
             value=scf_mult,
             expected="3",
             action="Set [scf] multiplicity=3.",
+        )
+
+    # An in-place core shift is applied by the energy()/gradient() driver only,
+    # so a run that solves the second spin manifold afterwards would mix a
+    # shifted reference with an unshifted one.
+    if str(_get(config, "tdhf", "ixcore", "-1")).strip() != "-1":
+        report.add(
+            "ERROR",
+            "tdhf.ixcore",
+            f"SOC ({origin}) solves both spin manifolds from one reference, but "
+            "[tdhf] ixcore rewrites the occupied MO energies in place and is "
+            "applied only on part of that path.",
+            value=_get(config, "tdhf", "ixcore", "-1"),
+            expected="-1 (unset)",
+            action="Leave [tdhf] ixcore at its default for a spin-orbit run.",
+        )
+
+    # Each manifold publishes gradients for its own list, so each has to
+    # converge the highest root that list names.
+    per_manifold = (
+        ('s', 'singlet', 'nstate_s', int(_get(config, "tdhf", "nstate", 1) or 1)),
+        ('t', 'triplet', 'nstate_t', int(_get(config, "tdhf", "nstate", 1) or 1)),
+    )
+    for key, name, count_key, fallback in per_manifold:
+        count = int(_get(config, "tdhf", count_key, 0) or fallback)
+        requested = [int(item) for item
+                     in _as_list(_get(config, "properties", f"grad_{key}", []))
+                     if str(item).strip() != ""]
+        if requested and max(requested) > count:
+            report.add(
+                "ERROR",
+                f"tdhf.{count_key}",
+                f"SOC ({origin}) takes the gradient of state {max(requested)} of "
+                f"the {name} manifold, but that manifold converges only {count} "
+                f"response roots.",
+                value=requested,
+                expected=f"at most {count} as the highest {name} gradient state",
+                action=f"Raise [tdhf] {count_key} (or nstate, which it falls back "
+                       f"to), or drop that state from [properties] grad_{key}.",
+            )
+
+    # NAC vectors are not available per spin manifold.  The analytic engine
+    # implements the singlet fold only (oqp.library.nac_analytic raises
+    # NotImplementedError for a triplet target), and the numerical route would
+    # run the 3N displacement sweep once per manifold into scratch named by
+    # displacement index alone, so the second manifold could be handed the first
+    # one's cached couplings.  nacme covers both manifolds per step.
+    if _as_lower(_get(config, "properties", "nac", "")) == "nac":
+        report.add(
+            "ERROR",
+            "properties.nac",
+            f"SOC ({origin}) cannot take nac vectors: the analytic route "
+            "implements the singlet fold only, and the numerical route would "
+            "sweep 3N displacements once per spin manifold into scratch that has "
+            "no manifold slot.",
+            value=_get(config, "nac", "type", "numerical"),
+            expected="properties.nac=nacme",
+            action="Use nac=nacme, which publishes the coupling matrix of each "
+                   "spin manifold, or drop properties.soc to take the singlet "
+                   "vectors alone.",
+        )
+
+    clash = _soc_2e_harmonic_clash(config, input_dir)
+    if clash == "abort":
+        report.add(
+            "ERROR",
+            "input.soc_2e",
+            f"SOC ({origin}) with the two-electron term is not available with "
+            "spherical-harmonic AOs; the native kernel aborts partway through.",
+            value=f"soc_2e with {runtype}",
+            expected="input.soc_2e=0, or input.ispher=false",
+            action="Set [input] soc_2e=0 for a one-electron spin-orbit coupling, "
+                   "or [input] ispher=false to build Cartesian AOs; the "
+                   "runtype=soc examples pin ispher=false for exactly this reason.",
+        )
+    elif clash == "unknown":
+        report.add(
+            "WARNING",
+            "input.soc_2e",
+            "The two-electron spin-orbit term aborts on spherical-harmonic AOs, "
+            "and the basis of this input could not be inspected to check that.",
+            value=_get(config, "input", "basis", ""),
+            expected="a basis whose shells can be listed",
+            action="Confirm the basis is Cartesian (or set soc_2e=0 / ispher=false) "
+                   "before running the calculation.",
         )
 
 

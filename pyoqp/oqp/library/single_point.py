@@ -11,6 +11,7 @@ import platform
 import subprocess
 import numpy as np
 from multiprocessing.pool import ThreadPool
+from contextlib import contextmanager
 from numpy import linalg as la
 from oqp.molecule import Molecule
 from oqp.utils.mpi_utils import MPIManager, MPIPool
@@ -135,6 +136,18 @@ PT2_GRAD_METHODS = frozenset({
     'nevpt2', 'sc-nevpt2', 'scnevpt2',
     'mrmp2', 'mcqdpt2', 'xmcqdpt2',
 })
+
+
+def soc_requested(config):
+    """True when this run computes spin-orbit coupling as a step of the flow.
+
+    The value can still be the input-file string, because scripting callers and
+    partial configurations never pass through schema normalization.
+    """
+    value = (config.get('properties') or {}).get('soc', False)
+    if isinstance(value, str):
+        return value.strip().lower() in ('true', 't', '1', 'yes', 'on')
+    return bool(value)
 import oqp.utils.qmmm as qmmm
 
 MP2_VARIANT_SCALES = {
@@ -339,6 +352,25 @@ class Calculator:
         self.mpi_manager = MPIManager()
 
 
+@contextmanager
+def grad_request(mol, values):
+    """Install one manifold's gradient request as [properties] grad.
+
+    Gradient, its state labels and the exported file list all read that key, so
+    a run that solves two spin manifolds swaps the request in per manifold
+    instead of widening every consumer to a spin argument.  The SOC-NAMD driver
+    does exactly this between manifolds (oqp.library.namd, per-(mult, root)
+    gradient loop).
+    """
+    properties = mol.config['properties']
+    previous = properties.get('grad', [])
+    properties['grad'] = list(values)
+    try:
+        yield
+    finally:
+        properties['grad'] = previous
+
+
 class LastStep(Calculator):
     """
     OQP last step single point calculation class
@@ -390,18 +422,25 @@ class LastStep(Calculator):
     def set_param(self, param):
         self.d4_param = param
 
-    def compute(self, mol, grad_list=None):
+    def compute(self, mol, grad_list=None, spin_label=None):
+        """Add the dispersion correction and publish the totals.
+
+        ``spin_label`` ('s' or 't') publishes to the spin-labelled files; None
+        keeps the unlabelled names.  The correction is added IN PLACE, so this
+        may run only once per set of energies and gradients -- a second call on
+        the same values would add dftd4 twice.
+        """
         # do dftd4
         energy, grad = self.get_dispersion(mol, grad_list)
-        energies = self.final_energy(energy)
+        energies = self.final_energy(energy, spin_label=spin_label)
 
         if not grad_list:
             return energies
 
-        grads = self.final_grad(grad, grad_list)
+        grads = self.final_grad(grad, grad_list, spin_label=spin_label)
         return energies, grads
 
-    def final_energy(self, d4_energy):
+    def final_energy(self, d4_energy, spin_label=None):
         # add dftd4 energy
         el = self.mol.energies
         self.mol.energies = [x + d4_energy for x in el]
@@ -415,7 +454,8 @@ class LastStep(Calculator):
 
         # export data
         if self.export:
-            dump_data(self.mol, (self.mol.energies, self.export_title), title='ENERGY', fpath=self.mol.log_path)
+            dump_data(self.mol, (self.mol.energies, self.export_title),
+                      title='ENERGY', spin_label=spin_label, fpath=self.mol.log_path)
 
         # save mol
         if self.save_mol:
@@ -423,7 +463,7 @@ class LastStep(Calculator):
 
         return self.mol.energies
 
-    def final_grad(self, d4_grad, grad_list):
+    def final_grad(self, d4_grad, grad_list, spin_label=None):
         # add dftd4 grad
         el = self.mol.grads
         self.mol.grads = [x + d4_grad for x in el]
@@ -437,8 +477,8 @@ class LastStep(Calculator):
 
         # export data
         if self.export:
-            dump_data(self.mol, (self.mol.grads, self.export_title, grad_list), title='GRADIENT',
-                      fpath=self.mol.log_path)
+            dump_data(self.mol, (self.mol.grads, self.export_title, grad_list),
+                      title='GRADIENT', spin_label=spin_label, fpath=self.mol.log_path)
 
         # save mol
         if self.save_mol:
@@ -3110,6 +3150,18 @@ class BasisOverlap(Calculator):
             self.mol.data["OQP::td_energies_old"] = previous_data["OQP::td_energies"]
         except KeyError:
             pass
+
+        # A spin-orbit run publishes the amplitudes of both ladders, so keep the
+        # per-manifold history: the generic tag holds whichever manifold that
+        # step solved last, and coupling a manifold against the other one's
+        # amplitudes is not a derivative coupling.
+        for amplitude, ladder in (('OQP::td_bvec_mo_s', 'OQP::td_singlet_energies'),
+                                  ('OQP::td_bvec_mo_t', 'OQP::td_triplet_energies')):
+            try:
+                self.mol.data[f'{amplitude}_old'] = previous_data[amplitude]
+                self.mol.data[f'{ladder}_old'] = previous_data[ladder]
+            except (AttributeError, KeyError):
+                pass
         try:
             self.mol.data["OQP::state_tracking_lineage_old"] = previous_data[
                 "OQP::state_tracking_lineage"
@@ -3342,7 +3394,26 @@ class NACME(BasisOverlap):
             noca=noca, nocb=nocb, multiplicity=mult, tlf_order=tlf)
         data["OQP::td_states_overlap"] = s_st
 
-    def nacme(self, align=True, reorder_x=False, normalize_retained=False):
+    def load_state_history(self, spin_label):
+        """Pair the current amplitudes with the same manifold's previous step.
+
+        ``OQP::td_bvec_mo_old`` without a label holds whichever ladder that step
+        solved last, so a run reporting both manifolds has to take this one's own
+        record before overlapping them.  Returns False when the previous step
+        published no such record, which means there is nothing to couple against.
+        """
+        data = self.mol.data
+        ladder = 'singlet' if spin_label == 's' else 'triplet'
+        try:
+            amplitudes = np.array(data[f'OQP::td_bvec_mo_{spin_label}_old'], copy=True)
+            energies = np.array(data[f'OQP::td_{ladder}_energies_old'], copy=True)
+        except (AttributeError, KeyError):
+            return False
+        data['OQP::td_bvec_mo_old'] = amplitudes
+        data['OQP::td_energies_old'] = energies
+        return True
+
+    def nacme(self, align=True, reorder_x=False, normalize_retained=False, spin_label=None):
         """
         Calculates the non-adiabatic coupling (NAC) matrix elements
         between the two geometries.
@@ -3403,8 +3474,10 @@ class NACME(BasisOverlap):
 
         # export data
         if self.export:
-            dump_data(self.mol, (nac_matrix, self.export_title), title='NACME', fpath=self.mol.log_path)
-            dump_data(self.mol, (dc_matrix, self.export_title), title='DCME', fpath=self.mol.log_path)
+            dump_data(self.mol, (nac_matrix, self.export_title),
+                      title='NACME', spin_label=spin_label, fpath=self.mol.log_path)
+            dump_data(self.mol, (dc_matrix, self.export_title),
+                      title='DCME', spin_label=spin_label, fpath=self.mol.log_path)
 
         return dc_matrix, nac_matrix
 
@@ -3431,7 +3504,7 @@ class NAC(Calculator):
         else:
             self.nac_func = self.numerical_nac
 
-    def nac(self):
+    def nac(self, spin_label=None):
         dump_log(self.mol, title='PyOQP: Entering NAC Vector Calculation')
 
         # compute nacv
@@ -3453,7 +3526,8 @@ class NAC(Calculator):
 
             # export data
             if self.export:
-                dump_data(self.mol, (self.mol, nacv, self.export_title), title='NACV', fpath=self.mol.log_path)
+                dump_data(self.mol, (self.mol, nacv, self.export_title),
+                          title='NACV', spin_label=spin_label, fpath=self.mol.log_path)
 
         dump_log(self.mol, title='PyOQP: NAC Vector (h_ij)', section='nacv', info=nacv)
         dump_log(self.mol, title='PyOQP: DC Vector (d_ij)', section='dcv', info=dcv)
@@ -3927,6 +4001,132 @@ def nacme_wrapper(key_dict):
     end_time = time.time()
 
     return idx, dcme, status, (start_time, end_time, rank, threads, host)
+
+
+@contextmanager
+def response_manifold(sp, spin_label):
+    """Answer the response equations of one spin manifold.
+
+    This changes control fields only: which multiplicity the native driver
+    answers, how many roots it converges, and the sign record sized to them.  The
+    amplitudes it leaves in the generic ``OQP::td_energies`` /
+    ``OQP::td_bvec_mo`` tags belong to that manifold, which is what
+    ``SOC.snapshot()`` and ``NACME.load_state_history()`` then read.
+    """
+    mol = sp.mol
+    td = mol.config['tdhf']
+    if spin_label not in ('s', 't'):
+        raise ValueError(f'spin label must be "s" or "t", got {spin_label!r}')
+    multiplicity = 1 if spin_label == 's' else 3
+    nstate = int(td.get(f'nstate_{spin_label}', 0)) or int(td.get('nstate', 1))
+
+    saved = (int(td.get('multiplicity', 1)), int(td.get('nstate', 1)))
+    # Keep config and native state synchronized, so the Python and native log
+    # labels describe the manifold actually being calculated.
+    td['multiplicity'] = multiplicity
+    td['nstate'] = nstate
+    mol.data.set_tdhf_multiplicity(multiplicity)
+    mol.data.set_tdhf_nstate(nstate)
+    sp.nstate = nstate
+    mol.data['OQP::state_sign'] = np.ones(nstate)
+    try:
+        yield
+    finally:
+        td['multiplicity'], td['nstate'] = saved
+        mol.data.set_tdhf_multiplicity(saved[0])
+        mol.data.set_tdhf_nstate(saved[1])
+        sp.nstate = saved[1]
+        mol.data['OQP::state_sign'] = np.ones(saved[1])
+
+
+class SOC(Calculator):
+    """
+    Class to calculate MRSF spin-orbit coupling
+
+    The kernel reads one pair of tags: the excitation ladders and response
+    amplitudes of both spin manifolds.  ``snapshot()`` publishes the manifold
+    currently selected into that pair and ``coupling()`` runs the kernel and
+    exports the result.  Solving a manifold, taking its gradient and computing
+    its couplings stay with the drivers that own them, so a run asks for each of
+    those separately.
+    """
+
+    def __init__(self, mol, sp=None, ref_energy=None, tb_soc=None):
+        super().__init__(mol)
+        self.mol = mol
+        self.sp = sp
+        self.tb_soc = tb_soc
+        self.ref_energy = None if ref_energy is None else list(ref_energy)
+
+    def snapshot(self, spin_label):
+        """Copy the selected manifold's response into the tags the kernel reads."""
+        data = self.mol.data
+        if spin_label == 's':
+            data['OQP::td_singlet_energies'] = data['OQP::td_energies'].copy()
+            data['OQP::td_bvec_mo_s'] = data['OQP::td_bvec_mo'].copy()
+        else:
+            data['OQP::td_triplet_energies'] = data['OQP::td_energies'].copy()
+            data['OQP::td_bvec_mo_t'] = data['OQP::td_bvec_mo'].copy()
+
+    def coupling(self):
+        """Compute the spin-orbit couplings and publish them."""
+        if self.tb_soc is not None:
+            self.tb_soc(self.mol)
+        else:
+            oqp.soc_mrsf(self.mol)
+
+        self.export_socme()
+
+        if self.save_mol:
+            self.mol.save_data()
+
+    def export_socme(self):
+        # The conversion factor comes in here rather than at module scope: some
+        # harnesses stub oqp.utils as a non-package module.
+        from oqp.utils.constants import SOC_AU_TO_WAVENUM
+
+        # The kernel prints its singlet-triplet table from the H_SOC it holds;
+        # this writes the same numbers as a file, so the row order and the
+        # labels have to match the log line for line.
+        if not self.export:
+            return
+        # OQP::soc_* is allocated only on the world root (soc_mrsf writes them
+        # under pe%rank == 0) and tag arrays are per rank, so the reads that
+        # build dump_data()'s arguments must be guarded here as well: the
+        # @mpi_dump on dump_data guards only its own body, not its arguments.
+        if getattr(self.mol, 'usempi', False) and MPIManager().world_rank != 0:
+            return
+
+        ns = int(np.asarray(self.mol.data['OQP::td_singlet_energies']).size)
+        nt = int(np.asarray(self.mol.data['OQP::td_triplet_energies']).size)
+        nmat = ns + 3 * nt
+
+        hs_re = np.asarray(self.mol.data['OQP::soc_hsoc_re'], dtype=float)
+        hs_im = np.asarray(self.mol.data['OQP::soc_hsoc_im'], dtype=float)
+        if hs_re.size != nmat * nmat or hs_im.size != nmat * nmat:
+            raise ValueError(
+                f'socme: OQP::soc_hsoc_* holds {hs_re.size} entries, expected '
+                f'{nmat * nmat} for ns={ns} singlets and nt={nt} triplets')
+
+        # A two-dimensional tag view is the TRANSPOSE of the Fortran matrix
+        # (same rule canonical_state_overlap applies to the state overlap).
+        # H_SOC is Hermitian, so skipping this leaves the imaginary column
+        # sign-flipped against the log.
+        hst = (hs_re.reshape((nmat, nmat)) + 1j * hs_im.reshape((nmat, nmat))).T[:ns, ns:]
+        # The tag holds the merged 1e+2e spin-orbits in atomic units, without
+        # the alpha^2/2 prefactor the kernel applies when it prints.
+        re = hst.real * SOC_AU_TO_WAVENUM
+        im = hst.imag * SOC_AU_TO_WAVENUM
+
+        rows = [
+            (ist, jst, ms, re[ist, 3 * jst + k], im[ist, 3 * jst + k],
+             float(np.hypot(re[ist, 3 * jst + k], im[ist, 3 * jst + k])))
+            for ist in range(ns)
+            for jst in range(nt)
+            for k, ms in enumerate((-1, 0, 1))
+        ]
+        dump_data(self.mol, (np.array(rows, dtype=float), self.export_title),
+                  title='SOCME', fpath=self.mol.log_path)
 
 
 class SCFnotConverged(Exception):

@@ -338,7 +338,7 @@ GENERIC_SCHEMA_KEYS = {
         ixcore z_solver gmres_dim resp_cutoff fp32 zv_warmstart
     """),
     "ekt": frozenset(),
-    "properties": _keys("scf_prop nmr_gauge acid_spacing acid_padding td_prop nac export title back_door"),
+    "properties": _keys("scf_prop nmr_gauge acid_spacing acid_padding td_prop grad_s grad_t nac soc export title back_door"),
     "optimize": frozenset(),
     "geometric": frozenset(),
     "oqp": frozenset(),
@@ -718,8 +718,8 @@ DRIVER_OPTIONS = {
     },
     "ekt": {"ip", "ea"},
     "thermo": {"type", "dx", "nproc", "read", "restart", "temperature", "clean"},
-    "prop": {"scf_prop", "nmr_gauge", "td_prop", "export", "title"},
-    "data": {"scf_prop", "nmr_gauge", "td_prop", "export", "title"},
+    "prop": {"scf_prop", "nmr_gauge", "td_prop", "soc", "export", "title"},
+    "data": {"scf_prop", "nmr_gauge", "td_prop", "soc", "export", "title"},
 }
 
 # ``oqp(...)`` was an early concise spelling for options consumed by the native
@@ -3177,6 +3177,26 @@ def lower_to_legacy(
             put("properties", key, value)
     elif driver_options:
         raise OQPInputError("%s does not accept driver options" % name)
+
+    # A spin-orbit run solves two response ladders, so a gradient index has to
+    # say which one it belongs to.  The spin letter of the state label picks the
+    # key: prop(S1, soc=true) asks for the singlet manifold, prop(T1, soc=true)
+    # for the triplet one, and a deck naming both gets both.
+    properties = config.get("properties", {})
+    if str(properties.get("soc", "")).strip().lower() in ("true", "1", "yes", "on") \
+            and "grad" in properties:
+        properties.pop("grad")
+        by_key: Dict[str, List[int]] = {}
+        for state, root in zip(states, roots):
+            letter = (state.label or "S")[0].upper()
+            if letter not in ("S", "T"):
+                raise OQPInputError(
+                    "A spin-orbit run takes gradient selectors per spin ladder, "
+                    "so %s has no key to lower to; use an S or T state"
+                    % state.label)
+            by_key.setdefault("grad_s" if letter == "S" else "grad_t", []).append(root)
+        for key, values in by_key.items():
+            put("properties", key, ",".join(str(value) for value in values))
 
     # Defensive final pass: ConfigParser.load_dict requires strings.
     return {
