@@ -510,10 +510,11 @@ class SOCBranchTests(unittest.TestCase):
                              f'a run without properties.soc wrote {labelled}')
 
     def test_a_triplet_only_request_does_not_differentiate_the_reference(self):
-        # soc=true with grad_t alone: the singlet ladder has no request.  The
-        # [properties] grad default (root 0, the internal ROHF reference) used
-        # to fill it, so the run took a Z-vector of the reference, which does
-        # not converge, and stopped before publishing anything.
+        # grad_t alone: the singlet ladder has no request.  The [properties]
+        # grad default (root 0, the internal ROHF reference) used to fill it, so
+        # the run took a Z-vector of the reference, which does not converge, and
+        # stopped before publishing anything -- with spin-orbit coupling and
+        # without it.
         deck = (SOC_DECK.read_text(encoding='utf-8')
                 .replace('runtype=prop', 'runtype=data')
                 .replace('basis=6-31G*', 'basis=STO-3G')
@@ -521,15 +522,19 @@ class SOCBranchTests(unittest.TestCase):
                 .replace('grad_s=2\n', '')
                 .replace('grad_t=2', 'grad_t=1')
                 .replace('d4=true\n', ''))
-        with tempfile.TemporaryDirectory(prefix='soc_triplet_only_') as workdir:
-            log = _run_deck_text(deck, workdir, 'triplet_only')
-            here = Path(workdir)
-            for name in ('socme', 'energies_s', 'energies_t', 'grad_t_1'):
-                self.assertTrue((here / name).is_file(), f'{name} missing')
-            self.assertEqual(sorted(path.name for path in here.glob('grad_s_*')), [],
-                             'no singlet gradient was requested')
-            self.assertNotIn('Gradient of triplet ROHF reference',
-                             log.read_text(encoding='utf-8'))
+        for soc in (True, False):
+            text = deck if soc else deck.replace('soc=true\n', '')
+            with self.subTest(soc=soc), \
+                    tempfile.TemporaryDirectory(prefix='triplet_only_') as workdir:
+                log = _run_deck_text(text, workdir, 'triplet_only')
+                here = Path(workdir)
+                for name in ('energies_s', 'energies_t', 'grad_t_1'):
+                    self.assertTrue((here / name).is_file(), f'{name} missing')
+                self.assertEqual((here / 'socme').is_file(), soc)
+                self.assertEqual(sorted(path.name for path in here.glob('grad_s_*')),
+                                 [], 'no singlet gradient was requested')
+                self.assertNotIn('Gradient of triplet ROHF reference',
+                                 log.read_text(encoding='utf-8'))
 
     def test_gradient_run_sizes_the_configured_ladder_from_its_own_count(self):
         # runtype=grad answered its configured ladder on [tdhf] nstate even when
@@ -553,6 +558,56 @@ class SOCBranchTests(unittest.TestCase):
             self.assertEqual(np.loadtxt(here / 'energies_t').shape, (1 + 1,))
             for name in ('grad_s_2', 'grad_t_1'):
                 self.assertTrue((here / name).is_file(), f'{name} missing')
+            # The saved checkpoint carries each ladder under its own label, so
+            # a later step can take its history from it.
+            import json
+            saved = json.loads((here / 'counts.json').read_text(encoding='utf-8'))
+            self.assertEqual(np.size(saved['OQP::td_singlet_energies']), 2)
+            self.assertEqual(np.size(saved['OQP::td_triplet_energies']), 1)
+            self.assertEqual(np.size(saved['OQP::td_bvec_mo_s']),
+                             2 * np.size(saved['OQP::td_bvec_mo_t']))
+
+    def test_umrsf_answers_its_second_ladder(self):
+        # The UMRSF response switches ladders through [tdhf] multiplicity like
+        # MRSF does: the two-ladder triplet gradient must be the one a
+        # triplet-only run takes, and must not be the singlet one again.
+        deck = (EXAMPLES / 'UMRSF-TDDFT' / 'H2_HF_UMRSFTDDFT_GRAD.inp').read_text(
+            encoding='utf-8')
+        both = deck.replace('grad=1', 'grad=1\ngrad_t=1\nexport=true')
+        triplet = (deck.replace('multiplicity=1', 'multiplicity=3')
+                   .replace('grad=1', 'grad=1\nexport=true'))
+        with tempfile.TemporaryDirectory(prefix='umrsf_ladders_') as workdir:
+            here = Path(workdir)
+            for name, text in (('both', both), ('triplet', triplet)):
+                (here / name).mkdir()
+                _run_deck_text(text, here / name, name)
+            produced = np.loadtxt(here / 'both' / 'grad_t_1')
+            oracle = np.loadtxt(here / 'triplet' / 'grad_1')
+            singlet = np.loadtxt(here / 'both' / 'grad_s_1')
+            self.assertLess(np.abs(produced - oracle).max(), 1e-8)
+            self.assertGreater(np.abs(produced - singlet).max(), 1e-3)
+            self.assertLess(np.abs(np.loadtxt(here / 'both' / 'energies_t')
+                                   - np.loadtxt(here / 'triplet' / 'energies')).max(),
+                            1e-8)
+
+    def test_a_single_ladder_run_keeps_nstate(self):
+        # nstate_s / nstate_t size the ladders of a two-ladder run only; a run
+        # that solves one ladder keeps [tdhf] nstate, as before the keys meant
+        # anything outside runtype=soc.
+        deck = (SOC_DECK.read_text(encoding='utf-8')
+                .replace('runtype=prop', 'runtype=grad')
+                .replace('basis=6-31G*', 'basis=STO-3G')
+                .replace('soc=true\n', '')
+                .replace('nac=nacme\n', '')
+                .replace('back_door=true\n', '')
+                .replace('nstate=2', 'nstate=2\nnstate_s=1')
+                .replace('grad_s=2\ngrad_t=2', 'grad=2')
+                .replace('d4=true\n', ''))
+        with tempfile.TemporaryDirectory(prefix='single_ladder_') as workdir:
+            _run_deck_text(deck, workdir, 'single')
+            here = Path(workdir)
+            self.assertEqual(np.loadtxt(here / 'energies').shape, (1 + 2,))
+            self.assertTrue((here / 'grad_2').is_file())
 
     def test_data_runtype_publishes_the_second_manifold_and_socme(self):
         # The same request on runtype=data, one basis smaller and without a NAC
@@ -806,9 +861,41 @@ class SOCGateTests(unittest.TestCase):
         self.assertEqual(self._paths(config), set(),
                          self._report(config).to_text())
         # Without spin-orbit coupling the shared selector keeps describing the
-        # configured ladder, as every existing deck relies on.
+        # configured ladder, as every existing deck relies on -- but its
+        # default does not, next to a selector naming the other ladder.
         config['properties'] = {'grad': [2], 'grad_t': [1]}
         self.assertEqual(grad_requests(config), {'s': [2], 't': [1]})
+        config['properties'] = {'grad': [0], 'grad_t': [1]}
+        self.assertEqual(grad_requests(config), {'s': [], 't': [1]})
+        config['input']['runtype'] = 'grad'
+        self.assertEqual(self._paths(config), set(),
+                         self._report(config).to_text())
+
+    def test_checker_and_drivers_read_the_soc_flag_alike(self):
+        # A scripting value the drivers read as true must be judged as a
+        # spin-orbit run by the checker too, or its grad request is dropped
+        # without a word.
+        from oqp.utils.spin_states import soc_requested
+
+        config = self._config('data')
+        config['properties'] = {'soc': 't', 'grad': [2]}
+        self.assertTrue(soc_requested(config))
+        self.assertIn('properties.grad', self._paths(config))
+
+    def test_root_counts_follow_the_ladders_the_run_solves(self):
+        # Two ladders: each against nstate_s / nstate_t, an inherited grad
+        # included.  One ladder: against nstate, whatever nstate_s says.
+        config = self._config('grad')
+        config['tdhf'] = {'type': 'mrsf', 'nstate': 1, 'nstate_s': 2}
+        config['properties'] = {'grad': [2], 'grad_t': [1]}
+        self.assertEqual(self._paths(config), set(),
+                         self._report(config).to_text())
+        config['tdhf']['nstate_s'] = 1
+        self.assertIn('tdhf.nstate_s', self._paths(config))
+        config['tdhf'] = {'type': 'mrsf', 'nstate': 2, 'nstate_s': 1}
+        config['properties'] = {'grad_s': [2]}
+        self.assertEqual(self._paths(config), set(),
+                         self._report(config).to_text())
 
     def test_tight_binding_spin_orbit_is_only_offered_standalone(self):
         # The properties/data flow switches ladders through [tdhf]
@@ -825,9 +912,10 @@ class SOCGateTests(unittest.TestCase):
             config['properties'] = {}
             self.assertNotIn('properties.soc', self._paths(config), method)
 
-    def test_per_manifold_selectors_need_the_mrsf_ladders(self):
+    def test_per_manifold_selectors_need_an_mrsf_or_umrsf_ladder(self):
         # Without spin-orbit coupling as well: the second ladder is reached by
-        # switching [tdhf] multiplicity, which only the MRSF response answers.
+        # switching [tdhf] multiplicity, which the MRSF and UMRSF responses
+        # answer and the tight-binding adapters do not read.
         for method, td_type in (('dftb', 'mrsf'), ('xtb', 'mrsf'), ('tdhf', 'rpa'),
                                 ('hf', 'mrsf')):
             config = self._config('prop')
@@ -836,6 +924,26 @@ class SOCGateTests(unittest.TestCase):
             config['properties'] = {'grad_t': [1]}
             self.assertIn('properties.grad_t', self._paths(config),
                           f'{method}/{td_type}')
+        # UMRSF answers both ladders (two-ladder grad_t matched a standalone
+        # multiplicity=3 run to 5e-14 on H2CO/BHHLYP/6-31G*).
+        config = self._config('grad')
+        config['scf']['type'] = 'uhf'
+        config['tdhf']['type'] = 'umrsf'
+        config['properties'] = {'grad_s': [1], 'grad_t': [1]}
+        self.assertNotIn('properties.grad_t', self._paths(config),
+                         self._report(config).to_text())
+        # Only the singlet and triplet ladders have selectors.
+        config = self._config('grad')
+        config['tdhf']['multiplicity'] = 5
+        config['properties'] = {'grad': [2], 'grad_t': [1]}
+        self.assertIn('tdhf.multiplicity', self._paths(config))
+        # Selectors parse like the drivers read them, and a bad one is a
+        # diagnostic rather than a crash.
+        config = self._config()
+        config['properties']['grad_s'] = '1 2'
+        self.assertNotIn('properties.grad_s', self._paths(config))
+        config['properties']['grad_s'] = 'bogus'
+        self.assertIn('properties.grad_s', self._paths(config))
         # A runtype that never reads the selectors must not drop them quietly.
         config = self._config('energy')
         config['properties'] = {'grad_t': [1]}

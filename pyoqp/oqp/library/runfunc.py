@@ -94,17 +94,19 @@ def _spin_setup(mol):
     return label, other_spin(label), grad_requests(mol.config)
 
 
-def _configured_manifold(sp, label):
-    """Enter the configured ladder when nstate_s / nstate_t sizes it.
+def _configured_manifold(sp, label, per_manifold):
+    """Enter the configured ladder when a two-ladder run sizes it.
 
     response_manifold sizes the ladder it answers from nstate_s / nstate_t.
-    Without one of those, the run keeps [tdhf] nstate and answers whatever
-    multiplicity it configured, so nothing is entered and nothing changes.
+    A run that solves one ladder, or names neither count, keeps [tdhf] nstate
+    and answers whatever multiplicity it configured, so nothing is entered and
+    nothing changes -- as before nstate_s / nstate_t meant anything outside
+    runtype=soc.
     """
     from oqp.library.single_point import response_manifold
 
     td = sp.mol.config['tdhf']
-    named = (int(td.get('multiplicity', 1)) in (1, 3)
+    named = (per_manifold and int(td.get('multiplicity', 1)) in (1, 3)
              and int(td.get(f'nstate_{label}', 0)))
     return response_manifold(sp, label) if named else nullcontext()
 
@@ -252,7 +254,7 @@ def compute_grad(mol):
     spin_label = label if per_manifold else None
 
     sp = SinglePoint(mol)
-    with _configured_manifold(sp, label):
+    with _configured_manifold(sp, label, per_manifold):
         # compute energy
         # Set the requested response state while converging the full reported
         # spectrum.  grad_request first: _single_gradient_target reads
@@ -260,8 +262,9 @@ def compute_grad(mol):
         with grad_request(mol, requests[label]), _single_gradient_target(mol):
             sp.energy()
 
-            # compute gradient
-            Gradient(mol).gradient()
+            # compute gradient, unless only the other ladder asked for one
+            if requests[label] or not per_manifold:
+                Gradient(mol).gradient()
 
         # compute properties
         compute_scf_prop(mol)
@@ -272,9 +275,16 @@ def compute_grad(mol):
         LastStep(mol).compute(mol, grad_list=requests[label], spin_label=spin_label)
 
     if per_manifold:
+        # Record each ladder under its own label, as the properties and data
+        # flows do, so a checkpoint of this run can seed a later step's history.
+        record = _soc_driver(mol, sp=sp)
+        record.snapshot(label)
+
         # compute the gradient of the other spin manifold
         with response_manifold(sp, other):
             sp.excitation([mol.mol_energy.energy])
+            # before LastStep saves the molecule
+            record.snapshot(other)
             with grad_request(mol, requests[other]):
                 Gradient(mol).gradient()
             LastStep(mol).compute(mol, grad_list=requests[other], spin_label=other)
@@ -392,7 +402,7 @@ def compute_properties(mol):
     sp = SinglePoint(mol)
     ref_energy = sp.reference()
 
-    with _configured_manifold(sp, label):
+    with _configured_manifold(sp, label, per_manifold):
         # compute mo overlap and apply alignment
         BasisOverlap(mol).overlap()
 
@@ -413,7 +423,7 @@ def compute_properties(mol):
         nacme.align_x()
 
         # compute gradient, unless only the other ladder asked for one
-        if grad_list or not soc_on:
+        if grad_list or not per_manifold:
             with grad_request(mol, grad_list):
                 Gradient(mol).gradient()
 
@@ -477,13 +487,13 @@ def compute_data(mol):
     # compute energy
     sp = SinglePoint(mol)
 
-    with _configured_manifold(sp, label):
+    with _configured_manifold(sp, label, per_manifold):
         # _single_gradient_target reads this ladder's request, so install it first
         with grad_request(mol, grad_list), _single_gradient_target(mol):
             sp.energy()
 
         # compute gradient, unless only the other ladder asked for one
-        if grad_list or not soc_on:
+        if grad_list or not per_manifold:
             with grad_request(mol, grad_list):
                 Gradient(mol).gradient()
 

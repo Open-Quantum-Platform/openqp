@@ -12,7 +12,7 @@ from typing import Any
 from oqp.utils.mpi_utils import MPIManager
 
 try:
-    from oqp.utils.spin_states import grad_requests
+    import oqp.utils.spin_states as _spin_states
 except ModuleNotFoundError as exc:
     # Many source-only tests load this file directly with oqp.utils stubbed as
     # a plain module.  Load the pure config sibling in that narrow case, as
@@ -30,7 +30,6 @@ except ModuleNotFoundError as exc:
         raise
     _spin_states = importlib.util.module_from_spec(_spin_states_spec)
     _spin_states_spec.loader.exec_module(_spin_states)
-    grad_requests = _spin_states.grad_requests
 
 
 SUPPORTED_RUNTYPES = {
@@ -5732,58 +5731,107 @@ def _check_planned_wavefunction_methods(config: dict[str, Any], report: CheckRep
     )
 
 def _all_grad_requests(config: dict[str, Any]) -> list[int]:
-    """Every response state this run asks a gradient for, across spin ladders."""
-    requests = grad_requests(config)
+    """Every response state this run asks a gradient for, across spin ladders.
+
+    A selector that does not parse counts as no request here; the per-ladder
+    check reports it.
+    """
+    try:
+        requests = _spin_states.grad_requests(config)
+    except ValueError:
+        return []
     return sorted(set(requests['s']) | set(requests['t']))
+
+
+def _two_ladders(config: dict[str, Any]) -> bool:
+    """True when this run solves both spin ladders (oqp.utils.spin_states)."""
+    try:
+        return _spin_states.two_ladders(config)
+    except ValueError:
+        return False
 
 
 def _check_per_manifold_gradients(config: dict[str, Any], report: CheckReport,
                                   requested: dict[str, list]) -> None:
-    """grad_s / grad_t: one gradient list per spin ladder of the MRSF response.
+    """grad_s / grad_t: one gradient list per spin ladder of the response.
 
     The drivers reach the second ladder by switching [tdhf] multiplicity
-    (oqp.library.single_point.response_manifold).  Only the Gaussian-basis MRSF
-    response has both ladders behind that switch: the tight-binding adapters
-    select theirs through [dftb] / [xtb] target_multiplicity, so the "other"
-    ladder would silently be the configured one again, and no other method has
-    a spin ladder at all.  Only runtype=grad, prop and data read the keys.
+    (oqp.library.single_point.response_manifold).  The MRSF and UMRSF
+    responses answer both ladders behind that switch; the tight-binding
+    adapters select theirs through [dftb] / [xtb] target_multiplicity, so the
+    "other" ladder would silently be the configured one again, and the
+    conventional RPA/TDA/SF responses are not wired for a second ladder.  Only
+    runtype=grad, prop and data read the keys.
     """
     method = _as_lower(_get(config, "input", "method", "hf"))
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
     runtype = _as_lower(_get(config, "input", "runtype", "energy"))
     nstate = int(_get(config, "tdhf", "nstate", 1) or 1)
-    for key, states in requested.items():
+    valid = True
+    # The configured ladder is the singlet or the triplet one; any other target
+    # multiplicity is neither, and response_manifold would not size it.
+    multiplicity = str(_get(config, "tdhf", "multiplicity", 1)).strip()
+    if multiplicity not in ("1", "3"):
+        report.add(
+            "ERROR",
+            "tdhf.multiplicity",
+            "grad_s / grad_t select gradients on the singlet and triplet "
+            f"ladders, so the run cannot target multiplicity {multiplicity}.",
+            value=multiplicity,
+            expected="1 or 3",
+            action="Set [tdhf] multiplicity=1 or 3, or drop [properties] "
+                   "grad_s / grad_t.",
+        )
+        return
+    for key, raw in requested.items():
         if runtype not in ("grad", "prop", "data"):
+            valid = False
             report.add(
                 "ERROR",
                 f"properties.{key}",
                 f"properties.{key} is read by runtype=grad, prop and data only; "
                 f"runtype={runtype} would drop the request.",
-                value=states,
+                value=raw,
                 expected="runtype=grad, prop or data",
                 action=f"Set [input] runtype=grad, prop or data, or drop "
                        f"[properties] {key}.",
             )
             continue
-        if method != "tdhf" or td_type != "mrsf":
+        if method != "tdhf" or td_type not in ("mrsf", "umrsf"):
+            valid = False
             report.add(
                 "ERROR",
                 f"properties.{key}",
                 f"properties.{key} selects a gradient on one spin ladder of the "
-                "MRSF response, which the drivers reach by switching [tdhf] "
-                f"multiplicity; method={method} with tdhf.type={td_type} has no "
-                "ladder behind that switch (the tight-binding backends select "
-                "theirs through their own target_multiplicity).",
-                value=states,
-                expected="method=tdhf with tdhf.type=mrsf",
+                "MRSF/UMRSF response, which the drivers reach by switching "
+                f"[tdhf] multiplicity; method={method} with tdhf.type={td_type} "
+                "has no second ladder behind that switch (the tight-binding "
+                "backends select theirs through their own target_multiplicity).",
+                value=raw,
+                expected="method=tdhf with tdhf.type=mrsf or umrsf",
                 action="Use [properties] grad for the configured ladder, or run "
-                       "the Gaussian-basis MRSF response for per-manifold gradients.",
+                       "the Gaussian-basis MRSF/UMRSF response for per-ladder "
+                       "gradients.",
+            )
+            continue
+        try:
+            states = _spin_states.parse_states(raw)
+        except (TypeError, ValueError):
+            valid = False
+            report.add(
+                "ERROR",
+                f"properties.{key}",
+                f"properties.{key} must list integer response roots.",
+                value=raw,
+                expected="e.g. 2 or 1,3",
+                action=f"Write [properties] {key} as comma-separated integers.",
             )
             continue
         # Response roots count from 1: root 0 of an MRSF ladder is the internal
         # reference, and the gradient driver hands each index to the native
         # Z-vector as a target.
-        if min(int(item) for item in states) < 1:
+        if min(states) < 1:
+            valid = False
             report.add(
                 "ERROR",
                 f"properties.{key}",
@@ -5793,25 +5841,33 @@ def _check_per_manifold_gradients(config: dict[str, Any], report: CheckReport,
                 expected="positive response roots (S0 is root 1, T0 is root 1)",
                 action=f"Renumber [properties] {key} from 1.",
             )
+    if not valid:
+        return
+
+    # Judge each ladder's effective request -- including a [properties] grad it
+    # inherits -- against the roots that ladder converges.  A two-ladder run
+    # sizes each from nstate_s / nstate_t (falling back to nstate); a run that
+    # solves one ladder keeps [tdhf] nstate.
+    two = _two_ladders(config)
+    requests = _spin_states.grad_requests(config)
+    for label, name in (("s", "singlet"), ("t", "triplet")):
+        states = requests[label]
+        if not states:
             continue
-        # Each ladder publishes gradients for its own list, so each has to
-        # converge the highest root that list names.
-        label = key[-1]
-        name = "singlet" if label == "s" else "triplet"
-        count_key = f"nstate_{label}"
+        count_key = f"nstate_{label}" if two else "nstate"
         count = int(_get(config, "tdhf", count_key, 0) or nstate)
-        highest = max(int(item) for item in states)
+        highest = max(states)
         if highest > count:
             report.add(
                 "ERROR",
                 f"tdhf.{count_key}",
-                f"properties.{key} takes the gradient of state {highest} of the "
-                f"{name} manifold, but that manifold converges only {count} "
-                "response roots.",
+                f"The {name} ladder is asked for the gradient of state {highest}, "
+                f"but it converges only {count} response roots.",
                 value=states,
                 expected=f"at most {count} as the highest {name} gradient state",
-                action=f"Raise [tdhf] {count_key} (or nstate, which it falls back "
-                       f"to), or drop that state from [properties] {key}.",
+                action=f"Raise [tdhf] {count_key}"
+                       + (" (or nstate, which it falls back to)" if two else "")
+                       + f", or drop that state from the {name} gradient request.",
             )
 
 
@@ -5965,14 +6021,13 @@ def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
 
     # Checked before the grad-only early return below, so a request that no
     # driver fulfils can never be silently dropped.
-    soc_requested = (_is_true(_get(config, "properties", "soc", False))
-                     or runtype == "soc")
+    soc_requested = (_spin_states.soc_requested(config) or runtype == "soc")
     per_manifold = {
-        key: [item for item in _as_list(_get(config, "properties", key, []))
-              if str(item).strip() != ""]
+        key: _get(config, "properties", key, [])
         for key in ("grad_s", "grad_t")
+        if [item for item in _as_list(_get(config, "properties", key, []))
+            if str(item).strip() != ""]
     }
-    per_manifold = {key: states for key, states in per_manifold.items() if states}
     # runtype=soc refuses both selectors outright, below.
     if per_manifold and runtype != "soc":
         _check_per_manifold_gradients(config, report, per_manifold)
@@ -6065,7 +6120,9 @@ def _check_requested_states(config: dict[str, Any], report: CheckReport) -> None
         return
 
     requested = []
-    if runtype == "grad":
+    # A two-ladder run judges each ladder against its own count
+    # (_check_per_manifold_gradients).
+    if runtype == "grad" and not _two_ladders(config):
         requested.extend(_as_list(_get(config, "properties", "grad", [])))
     if runtype in {"optimize", "mep", "ts", "irc", "neb"}:
         requested.append(_get(config, "optimize", "istate", 0))
@@ -6502,7 +6559,7 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
     if runtype == "nacme":
         _check_nacme(config, report)
 
-    if runtype == "soc" or _is_true(_get(config, "properties", "soc", False)):
+    if runtype == "soc" or _spin_states.soc_requested(config):
         _check_soc(config, report, input_dir)
 
     if runtype == "hess":

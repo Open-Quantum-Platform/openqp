@@ -10,8 +10,11 @@ can all use it.
 """
 
 
-def _states(value) -> list[int]:
-    """A gradient selector as written in an input file, or an already parsed list."""
+def parse_states(value) -> list[int]:
+    """A gradient selector as written in an input file, or an already parsed list.
+
+    Raises ValueError on an entry that is not an integer.
+    """
     if value is None or value == '':
         return []
     if isinstance(value, str):
@@ -57,12 +60,28 @@ def grad_requests(config) -> dict:
     A spin-orbit run never reads it: the input checker refuses anything but its
     schema default there, and that default (root 0, the internal reference of an
     MRSF ladder) is not a request -- falling back to it would differentiate the
-    reference through the response Z-vector.
+    reference through the response Z-vector.  For the same reason the default
+    is not inherited next to a selector that names the other ladder: such a run
+    asked for that ladder only.
     """
     properties = config.get('properties') or {}
-    requests = {label: _states(properties.get(f'grad_{label}', []))
+    requests = {label: parse_states(properties.get(f'grad_{label}', []))
                 for label in ('s', 't')}
     configured = configured_spin(config)
     if not requests[configured] and not soc_requested(config):
-        requests[configured] = _states(properties.get('grad', []))
+        shared = parse_states(properties.get('grad', []))
+        if shared == [0] and requests[other_spin(configured)]:
+            shared = []
+        requests[configured] = shared
     return requests
+
+
+def two_ladders(config) -> bool:
+    """True when this run solves and publishes both spin ladders.
+
+    Spin-orbit coupling needs both; otherwise a second ladder is solved only
+    when its own selector asks for a gradient on it.  Only such a run sizes its
+    ladders from nstate_s / nstate_t; a single-ladder run keeps [tdhf] nstate.
+    """
+    other = other_spin(configured_spin(config))
+    return soc_requested(config) or bool(grad_requests(config)[other])
