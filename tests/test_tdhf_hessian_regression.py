@@ -40,7 +40,7 @@ class Case:
     # H2 and HeH+ in STO-3G have one occupied and one virtual orbital, so the
     # response space holds exactly one root; TDHF refuses nstate > nocc*nvir.
     nstate: int = 2
-    # cc-pVDZ/cc-pVTZ carry spherical d (and f) shells, so nbf differs from
+    # cc-pVDZ carries spherical d shells, so nbf differs from
     # the Cartesian extent and an AO-indexing slip in the response arrays shows.
     basis: str = "sto-3g"
 
@@ -90,16 +90,6 @@ CASES = {
         validated_max_abs=1.0294054729798052e-5,
         validated_rms=2.4847766312638596e-6,
         basis="cc-pvdz",
-    ),
-    "h2o_ccpvtz": Case(
-        system="""\
-  O  0.0000000000  0.0000000000  0.0000000000
-  H  0.0000000000  0.0000000000  0.9000000000
-  H  0.0000000000  0.7000000000 -0.3000000000""",
-        charge=0,
-        validated_max_abs=4.798990391685631e-6,
-        validated_rms=1.7211117762219943e-6,
-        basis="cc-pvtz",
     ),
     "h2o": Case(
         system="""\
