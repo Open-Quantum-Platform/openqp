@@ -1,0 +1,5 @@
+mrsf/bhhlyp/6-31g* ispher=false d4=true prop(S1) guess(save_mol=true)
+scf(maxit=200,converger_type=soscf,conv=1e-08) dftgrid(pruned=none)
+tdhf(maxit=100,maxit_zv=100,nvdav=100,zvconv=1e-10)
+properties(export=true,soc=true,nac=nacme,back_door=true,grad_t=2)
+geom="../geometries/H2O-0381125c86f2.xyz"

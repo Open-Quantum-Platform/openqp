@@ -236,7 +236,9 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
     # 368 with the ACID cube grid controls [properties] acid_spacing and
     # acid_padding.
     # 369 with the DKH decoupling-basis control [scf] scal_rel_decontract.
-    assert len(checked) == 369
+    # 372 with the spin-orbit step of a properties/data run: [properties] soc
+    # and the per-manifold gradient selectors grad_s and grad_t.
+    assert len(checked) == 372
 
 
 def test_concise_geometry_drivers_reject_legacy_backend_selectors():
