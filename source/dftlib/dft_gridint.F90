@@ -2196,9 +2196,9 @@ contains
                 + xc%d3rt2(ids%ratatb, i) * dt(1)*dt(2) &
                 + xc%d3rt2(ids%ratbtb, i) * dt(2)*dt(2)
 
-          cr(2) = xc%d3rt2(ids%ratatb, i) * dt(1)*dt(1) &
+          cr(2) = xc%d3rt2(ids%rbtata, i) * dt(1)*dt(1) &
                 + xc%d3rt2(ids%rbtatb, i) * dt(2)*dt(1) &
-                + xc%d3rt2(ids%ratbtb, i) * dt(1)*dt(2) &
+                + xc%d3rt2(ids%rbtatb, i) * dt(1)*dt(2) &
                 + xc%d3rt2(ids%rbtbtb, i) * dt(2)*dt(2)
 
           g_r = g_r + cr
@@ -2598,9 +2598,21 @@ contains
          tenv(1:1) == 'y' .or. tenv(1:1) == 'Y' .or. &
          tenv(1:1) == 'o' .or. tenv(1:1) == 'O'))
 
+    ! The slice chunks are dealt to the ranks by chunk index, so every rank
+    ! must use the same chunkSize. It used to be computed inside the parallel
+    ! region from each rank's own thread count; ranks with different
+    ! OMP_NUM_THREADS then cut the grid differently and some slices were
+    ! integrated twice or not at all (ROKS CH2O, mpiexec with 1 and 3 threads:
+    ! 16.76 instead of 16 electrons). Rank 0's value is used everywhere.
+    chunkSize = max(1, xc_opts%molGrid%nSlices/(xc_dat%pe%size*4))
+    if (chunkSize/nOmpThreads > 40) then
+      chunkSize = 40*nOmpThreads
+    end if
+    call xc_dat%pe%bcast(chunkSize, 1)
+
 !$omp parallel &
 !$omp   num_threads(nOmpThreads) &
-!$omp   private(iChunk, chunkSize, numThreads, done) &
+!$omp   private(iChunk, numThreads, done) &
 !$omp   private(iSlice, numNzPts, xce) &
 !$omp   private(myThread), &
 !$omp   private(i), &
@@ -2613,10 +2625,6 @@ contains
     myThread = 1
 !$  numThreads = omp_get_num_threads()
 !$  myThread = omp_get_thread_num()+1
-    chunkSize = max(1, xc_opts%molGrid%nSlices/(xc_dat%pe%size*4))
-    if (chunkSize/numThreads > 40) then
-      chunkSize = 40*numThreads
-    end if
     allocate (xce)
     call xce%init(xc_opts)
 
@@ -2856,9 +2864,21 @@ contains
     wcutoff = 1.0d-15
     if (dftthr > 1.1d-15) wcutoff = 1.0d-08/npt
 
+    ! The slice chunks are dealt to the ranks by chunk index, so every rank
+    ! must use the same chunkSize. It used to be computed inside the parallel
+    ! region from each rank's own thread count; ranks with different
+    ! OMP_NUM_THREADS then cut the grid differently and some slices were
+    ! integrated twice or not at all (ROKS CH2O, mpiexec with 1 and 3 threads:
+    ! 16.76 instead of 16 electrons). Rank 0's value is used everywhere.
+    chunkSize = max(1, xc_opts%molGrid%nSlices/(xc_dat%pe%size*4))
+    if (chunkSize/nOmpThreads > 40) then
+      chunkSize = 40*nOmpThreads
+    end if
+    call xc_dat%pe%bcast(chunkSize, 1)
+
 !$omp parallel &
 !$omp   num_threads(nOmpThreads) &
-!$omp   private(iChunk, chunkSize, numThreads) &
+!$omp   private(iChunk, numThreads) &
 !$omp   private(iSlice, numNzPts, xce) &
 !$omp   private(myThread), &
 !$omp   private(i), &
@@ -2869,10 +2889,6 @@ contains
     myThread = 1
 !$  numThreads = omp_get_num_threads()
 !$  myThread = omp_get_thread_num()+1
-    chunkSize = max(1, xc_opts%molGrid%nSlices/(xc_dat%pe%size*4))
-    if (chunkSize/numThreads > 40) then
-      chunkSize = 40*numThreads
-    end if
     allocate (xce)
     call xce%init(xc_opts)
 

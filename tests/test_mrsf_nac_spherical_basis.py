@@ -23,12 +23,34 @@ digest scrambles AO orientation and breaks that immediately.
 
 Both AO conventions are checked: 6-31G* is Cartesian and is the control that
 passed even when the spherical path was broken; cc-pVDZ is spherical.
+
+This is the AGENTS.md rule-6 detector for every grd2 two-electron gradient
+digest, so a change to any file that defines one must run it.
+GUARDED_NATIVE_SOURCES names them; CI's pull-request test selection
+(.github/scripts/select_pr_tests.py) selects this file by those names, and
+tests/test_select_pr_tests.py fails if a digest file is missing here.
 """
 import os
 import tempfile
 import unittest
 from unittest.mock import patch
 from pathlib import Path
+
+GUARDED_NATIVE_SOURCES = (
+    "grd2",
+    "caspt2_gradient",
+    "casscf_ao_gradient",
+    "casscf_gradient",
+    "fock_deriv",
+    "hf_gradient",
+    "mp2_gradient",
+    "nevpt2_gradient",
+    "tdhf_gradient",
+    "tdhf_hessian_z_rhs",
+    "tdhf_mrsf_gradient",
+    "tdhf_sf_gradient",
+    "tdhf_umrsf_gradient",
+)
 
 try:
     import oqp                      # noqa: F401  (must precede numpy: ILP64)

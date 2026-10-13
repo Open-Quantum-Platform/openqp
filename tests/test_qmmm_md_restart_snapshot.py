@@ -186,7 +186,6 @@ restart_file = {name}.restart.npz
 
 def _runtime_available():
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         import oqp  # noqa: F401
         import openmm  # noqa: F401

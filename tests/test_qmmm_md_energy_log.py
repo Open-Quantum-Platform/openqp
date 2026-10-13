@@ -194,7 +194,6 @@ class TestReportRow(unittest.TestCase):
 
 def _runtime_available():
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         import oqp  # noqa: F401
         from oqp.library.qmmm_md import QMMM_MD  # noqa: F401

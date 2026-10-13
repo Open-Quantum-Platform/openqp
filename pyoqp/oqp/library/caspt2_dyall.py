@@ -268,11 +268,17 @@ def _caspt2_options(config: dict) -> CASPT2Options:
         engine = "direct"       # alias: NumPy streaming engine
     if engine not in {"auto", "direct", "fortran", "dense"}:
         raise ValueError("pt2.engine must be auto, fortran, direct (python), or dense")
-    if engine in {"direct", "fortran"} and family != "qdpt":
+    caspt2_direct = (
+        family == "caspt2" and variant == "caspt2" and h0 == "fock"
+        and contraction == "none"
+        and float(raw.get("ipea_shift", 0.0)) == 0.0
+        and str(config.get("input", {}).get("runtype", "energy")).lower() == "energy"
+    )
+    if engine in {"direct", "fortran"} and family != "qdpt" and not caspt2_direct:
         raise ValueError(
             "pt2.engine=direct/fortran requires the diagonal-Fock QDPT family "
-            "(mrmp2/mcqdpt2/xmcqdpt2); the CASPT2/NEVPT2 H0 is not diagonal "
-            "in the determinant basis."
+            "or single-state CASPT2 energy with h0=fock, contraction=none "
+            "and ipea_shift=0. Use engine=dense for other CASPT2/NEVPT2 requests."
         )
     return CASPT2Options(
         reference=reference,
@@ -937,13 +943,13 @@ def _minor_transform(R, occ):
 
 def _rotate_det_vector(vec, R, norb, nelec):
     """Transform a determinant-space vector built in MO set ``src`` into MO set
-    ``dst`` where ``C_src = C_dst @ R`` (R unitary).  ``vec`` is indexed over
+    ``dst`` where ``C_dst = C_src @ R`` (R orthogonal).  ``vec`` is indexed over
     :func:`_determinants` (alpha-major); the transform factorizes into the alpha
-    and beta single-spin minor matrices of ``R``.  Determinant-only; reproduces
+    and beta single-spin minor matrices of ``R.T``.  Determinant-only; reproduces
     pyscf.fci.addons.transform_ci_for_orbital_rotation to machine precision."""
     occ_a = _occ_tuples(norb, nelec[0])
     occ_b = _occ_tuples(norb, nelec[1])
-    Ta = _minor_transform(R.T, occ_a)         # R.T: matches the C_src=C_dst@R convention
+    Ta = _minor_transform(R.T, occ_a)         # C_dst=C_src@R -> coefficients use R.T
     Tb = _minor_transform(R.T, occ_b)
     na, nb = len(occ_a), len(occ_b)
     return (Ta @ vec.reshape(na, nb) @ Tb.T).reshape(-1)
@@ -1167,11 +1173,13 @@ def _multistate_multiset(mol, hcore_ao, eri_ao, coeff_ref, settings, ncore, nact
         for j in range(nstate):
             if i == j:
                 continue
-            Rij = per[i]["U"].T @ per[j]["U"]
-            vecj_in_i = _rotate_det_vector(per[j]["ref_full"], Rij, nbf, full_nelec_un)
-            cij = float(per[i]["psi1_full"] @ (per[i]["Hf_full"] @ vecj_in_i))
+            # The helper takes C_dst = C_src @ R.  For J -> I this is
+            # C_I = C_J @ (U_J.T @ U_I), not the I -> J orbital rotation.
             Rji = per[j]["U"].T @ per[i]["U"]
-            veci_in_j = _rotate_det_vector(per[i]["ref_full"], Rji, nbf, full_nelec_un)
+            vecj_in_i = _rotate_det_vector(per[j]["ref_full"], Rji, nbf, full_nelec_un)
+            cij = float(per[i]["psi1_full"] @ (per[i]["Hf_full"] @ vecj_in_i))
+            Rij = per[i]["U"].T @ per[j]["U"]
+            veci_in_j = _rotate_det_vector(per[i]["ref_full"], Rij, nbf, full_nelec_un)
             cji = float(per[j]["psi1_full"] @ (per[j]["Hf_full"] @ veci_in_j))
             heff[i, j] = 0.5 * (cij + cji)
     heff = 0.5 * (heff + heff.T)
@@ -1429,14 +1437,24 @@ def native_caspt2_energy(mol, ref_energy=None):
     coeff = setup.coeff
     enuc = setup.enuc
 
-    # Publish the PT2 REFERENCE orbitals (RHF canonical, or the (SA-)CASSCF
-    # solution) before the semicanonicalization overwrites OQP::VEC_MO_A with a
+    defer_orbitals = (
+        options.family == "caspt2" and options.variant == "caspt2"
+        and options.h0 == "fock" and options.contraction == "none"
+        and options.ipea_shift == 0.0 and options.engine in {"direct", "fortran"}
+    )
+
+    # Retain the PT2 REFERENCE orbitals (RHF canonical, or the (SA-)CASSCF
+    # solution) before publishing OQP::VEC_MO_A with a
     # within-block rotation of them.  The analytic gradient
     # (oqp.library.caspt2_gradient) needs them: its orbital constraint --
     # RHF canonicality or CASSCF stationarity -- holds for THESE orbitals, not
     # for the semicanonical set, and there is no way to recover them afterwards.
-    mol.data["OQP::CASPT2_REFERENCE_MO"] = np.ascontiguousarray(
-        np.asarray(coeff, dtype=np.float64))
+    # Own this copy: coeff may borrow the native orbital record that a later
+    # publication replaces. Explicit direct requests publish only after the
+    # contraction succeeds, preserving the reference on recoverable failures.
+    reference_mo = np.array(coeff, dtype=np.float64, order="C", copy=True)
+    if not defer_orbitals:
+        mol.data["OQP::CASPT2_REFERENCE_MO"] = reference_mo
 
     # MS-CASPT2 with the Fock H0 uses the MULTI-SET construction (per-state
     # orbitals = the OpenMolcas state-specific Fock): each root's first-order
@@ -1465,9 +1483,11 @@ def native_caspt2_energy(mol, ref_energy=None):
     )
     s2, mult = fci_spin_diagnostics(coeffs, dets, nact, active_nelec)
 
-    # commit semicanonical orbitals (the rotation leaves the reference energy invariant)
-    target = np.asarray(mol.data["OQP::VEC_MO_A"], dtype=float)
-    mol.data["OQP::VEC_MO_A"][...] = np.ascontiguousarray(coeff_sc.T.reshape(target.shape))
+    # Stage semicanonical orbitals (the rotation leaves the reference energy invariant).
+    target_shape = np.asarray(mol.data["OQP::VEC_MO_A"], dtype=float).shape
+    semicanonical_mo = np.ascontiguousarray(coeff_sc.T.reshape(target_shape))
+    if not defer_orbitals:
+        mol.data["OQP::VEC_MO_A"][...] = semicanonical_mo
 
     # PT2 frozen core: fold the deepest atomic cores out of the first-order space.
     # Default (frozen<0) = the standard deep cores, matching OpenMolcas and removing the
@@ -1483,7 +1503,13 @@ def native_caspt2_energy(mol, ref_energy=None):
     # singles/doubles interacting space streamed from the reference support.
     # auto = the NumPy streaming path (measured fastest at scale); the liboqp
     # hash kernel is the explicit engine=fortran opt-in (see qdpt2_direct.py).
-    use_direct = options.family == "qdpt" and options.engine in {"auto", "direct", "fortran"}
+    # CASPT2 uses this existing diagonal-Fock contraction only by explicit
+    # request. Its auto engine retains the dense path, including the full
+    # external-space denominator diagnostics. Strong contraction must never
+    # enter this uncontracted calculation.
+    use_direct = (
+        options.family == "qdpt" and options.engine in {"auto", "direct", "fortran"}
+    ) or defer_orbitals
 
     if options.variant == "caspt2":
         # `roots` came from _reference_roots, which honours [pt2] target_roots;
@@ -1501,6 +1527,10 @@ def native_caspt2_energy(mol, ref_energy=None):
             e_casci = float(res["ref_energies"][0])
             e2 = float(res["e2"][0])
             e_caspt2 = e_casci + e2
+            if defer_orbitals:
+                mol.data["OQP::CASPT2_REFERENCE_MO"] = reference_mo
+                # Reacquire the native view after adding/replacing the record.
+                mol.data["OQP::VEC_MO_A"][...] = semicanonical_mo
             mol.energies = [e_caspt2]
             mol.mol_energy.energy = e_caspt2
             mol.data["OQP::CASPT2_ENERGIES"] = np.ascontiguousarray([e_caspt2], dtype=np.float64)
@@ -1509,7 +1539,8 @@ def native_caspt2_energy(mol, ref_energy=None):
             _write_log(mol, ref_energy, options, settings, ncore, nact, active_nelec,
                        e_casci, e2, e_caspt2, res["n_external"], e_casci,
                        float(res["min_denoms"][0]), float(s2[_root]),
-                       int(mult[_root]), time.time() - t0, root=_root)
+                       int(mult[_root]), time.time() - t0, root=_root,
+                       direct_engine=options.engine if options.family == "caspt2" else None)
         else:
             _single_state_finish(mol, ref_energy, options, settings, ncore, nact, active_nelec,
                                  nbf, enuc, h1e, eri, coeffs, energies, dets, eps, D_sa,
@@ -1704,7 +1735,7 @@ def _header(mol, options, ref_energy, settings, ncore, nact, active_nelec, ref_l
 
 def _write_log(mol, ref_energy, options, settings, ncore, nact, active_nelec,
                e_casci, e2, e_caspt2, n_external, e_ref_check, min_denom, s2, mult, wall,
-               sc_components=None, root=None):
+               sc_components=None, root=None, direct_engine=None):
     ref_label = "CASSCF" if options.reference == "casscf" else "CASCI"
     if options.contraction == "strong":
         method_name, title = "SC-NEVPT2", "SC-NEVPT2 (strongly contracted, Dyall zeroth order)"
@@ -1727,7 +1758,13 @@ def _write_log(mol, ref_energy, options, settings, ncore, nact, active_nelec,
         for key in ("Sr", "Si", "Sijrs", "Sijr", "Srsi", "Srs", "Sij", "Sir"):
             _log(mol, f"      {key:7s} {sc_components[key]:18.10f}")
     else:
-        _log(mol, f"   PyOQP external (first-order) space:  {n_external}")
+        if direct_engine is not None:
+            implementation = "NumPy" if direct_engine == "direct" else "Fortran"
+            _log(mol, f"   PyOQP PT2 engine:                  {direct_engine} ({implementation})")
+            _log(mol, "   PyOQP denominator scope:           generated external singles/doubles")
+            _log(mol, f"   PyOQP generated external space:     {n_external}")
+        else:
+            _log(mol, f"   PyOQP external (first-order) space:  {n_external}")
         _log(mol, f"   PyOQP smallest denominator:         {min_denom:12.4e}{_intruder_note(min_denom, options)}")
     _log(mol, f"   PyOQP reference <S^2> / mult:        {s2:8.6f} / {mult}")
     ref_drift = abs(e_ref_check - e_casci)

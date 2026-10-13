@@ -2179,11 +2179,22 @@ def _validate_semantics(spec: CalculationSpec) -> None:
         if model in {
             "tddft", "tda", "tda-hf", "tdhf", "tddftb", "tda-dftb"
         } and state.label and not state.label.startswith("S"):
-            # The closed-shell RPA/TDA response has no triplet path.
-            raise OQPInputError(
-                "Conventional TD calculations support singlet labels only; "
-                "use mrsf or sf for triplet-state calculations"
+            # The closed-shell RPA/TDA response has a triplet path (no
+            # Coulomb term, f_aa - f_ab kernel) for energies, gradients and
+            # geometry optimizations: energy(T0), grad(Tn), opt(Tn).  Triplet
+            # Hessians, NACs and dynamics do not exist and stay rejected.
+            triplet_ok = (
+                model in {"tddft", "tda", "tda-hf", "tdhf"}
+                and state.label.startswith("T")
+                and driver.name in {"energy", "grad", "optimize"}
             )
+            if not triplet_ok:
+                raise OQPInputError(
+                    "Conventional TD calculations support singlet labels only, "
+                    "apart from closed-shell triplet energies, gradients and "
+                    "optimizations (energy(T0), grad(Tn), opt(Tn)); "
+                    "use mrsf or sf for other triplet-state workflows"
+                )
         if model == "mrsf-dftb" and state.label and state.label.startswith("Q"):
             raise OQPInputError("MRSF-TDDFTB supports singlet or triplet labels, not quintet")
 

@@ -12,6 +12,15 @@ void oqp_simplex_qp_solve_avoid(int64_t n, const double *h, const double *g,
 /* Internal ECP-integral self-test: err[0..9] (see tests/fortran/ecp_selftest.F90). */
 void oqp_ecp_selftest(double *err);
 
+/* Internal TDHF Davidson residual self-test (tests/fortran/rpa_residual_selftest.F90).
+   Arrays are column-major: w_l, w_r, v_l, v_r (n, ndsr); q (n, ndsr, 2). */
+void oqp_rpa_residual_selftest(int64_t n, int64_t ndsr, int64_t imax,
+                               bool tamm_dancoff, double tol,
+                               double *w_l, double *w_r, double *v_l, double *v_r,
+                               const double *ee, const double *abd,
+                               double *errors, double *q, double *mxerr,
+                               int *converged);
+
 typedef double xyz_t[3];
 
 typedef struct oqp_handle_t {
@@ -29,6 +38,12 @@ typedef struct oqp_handle_t {
     struct electron_shell *elshell;
     struct trah_control *trah;
 } oqp_handle_t;
+
+/* Internal LibXC owner/setup regression; compares signed XC Fock matrices. */
+void functional_owner_cache_compare(oqp_handle_t *a, oqp_handle_t *b,
+                                    double *error, int *failed);
+int64_t functional_owner_cache_revision(oqp_handle_t *owner);
+void functional_owner_cache_clean(oqp_handle_t *owner);
 
 struct Cstring{
   int64_t length;

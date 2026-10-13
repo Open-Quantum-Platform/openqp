@@ -24,6 +24,7 @@ add_subdirectory(dftlib)
 # be compiled into the library.
 list(APPEND SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/response_cache_selftest.F90"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/functional_owner_cache_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/response_workspace_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/fock_deriv_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/hess1_selftest.F90"
@@ -33,6 +34,7 @@ list(APPEND SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/int2_shell_block_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/simplex_qp_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/ecp_selftest.F90"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/rpa_residual_selftest.F90"
 )
 
 # Keep module data accesses inside liboqp. Windows DLL import libraries expose

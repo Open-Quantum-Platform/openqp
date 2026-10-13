@@ -6,6 +6,8 @@ from pathlib import Path
 import numpy as np
 import unittest
 
+from oqp_module_isolation import isolate_modules
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -164,6 +166,9 @@ class TestSymmetryAdaptedTransform(unittest.TestCase):
 
 
 class TestMoleculeDetectionWiring(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(isolate_modules())
+
     def test_initialize_symmetry_metadata_detects_water(self):
         detect = load_module(
             "oqp_symmetry_detect_wiring_under_test",

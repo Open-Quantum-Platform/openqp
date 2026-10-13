@@ -19,12 +19,11 @@ Skipped unless the compiled OpenQP runtime is importable.
 
 import os
 import re
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
-ROOT = Path(__file__).resolve().parents[1]
-RHF_OUT = Path("/tmp/cphf_polar.out")
-ROHF_OUT = Path("/tmp/cphf_rohf_polar.out")
 
 INPUT_TMPL = """[input]
 system=
@@ -45,7 +44,6 @@ type={scftype}
 
 def _runtime_available():
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         import oqp  # noqa: F401
         from oqp.pyoqp import Runner  # noqa: F401
@@ -62,26 +60,35 @@ def _isotropic(text):
 
 @unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime not available")
 class CphfRohfPolarizability(unittest.TestCase):
-    def _run(self, scftype, selftest_name, out_path):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="oqp_cphf_rohf_polar_")
+        self.addCleanup(tmp.cleanup)
+        self.tmpdir = Path(tmp.name)
+        # The native self-test writes its report to $OQP_SELFTEST_DIR
+        # (source/io/selftest_output.F90); keep it private to this test.
+        env = mock.patch.dict(os.environ, {"OQP_SELFTEST_DIR": str(self.tmpdir)})
+        env.start()
+        self.addCleanup(env.stop)
+
+    def _run(self, scftype, selftest_name, report_name):
         import oqp
         from oqp.pyoqp import Runner
 
-        workdir = Path(f"/tmp/oqp_cphf_rohf_polar_{scftype}")
-        workdir.mkdir(exist_ok=True)
+        workdir = self.tmpdir / scftype
+        workdir.mkdir()
         inp = workdir / "h2o.inp"
         inp.write_text(INPUT_TMPL.format(scftype=scftype))
-        if out_path.exists():
-            out_path.unlink()
         runner = Runner(project=f"h2o_{scftype}", input_file=str(inp),
                         log=str(workdir / "h2o.log"))
         runner.run()
         getattr(oqp, selftest_name)(runner.mol)
+        out_path = self.tmpdir / report_name
         self.assertTrue(out_path.exists(), f"{selftest_name} produced no output")
         return out_path.read_text()
 
     def test_rohf_matches_rhf_on_closed_shell(self):
-        rhf_text = self._run("rhf", "cphf_polarizability_selftest", RHF_OUT)
-        rohf_text = self._run("rohf", "cphf_rohf_polarizability_selftest", ROHF_OUT)
+        rhf_text = self._run("rhf", "cphf_polarizability_selftest", "cphf_polar.out")
+        rohf_text = self._run("rohf", "cphf_rohf_polarizability_selftest", "cphf_rohf_polar.out")
         self.assertAlmostEqual(
             _isotropic(rohf_text), _isotropic(rhf_text), places=4,
             msg=f"ROHF:\n{rohf_text}\nRHF:\n{rhf_text}",

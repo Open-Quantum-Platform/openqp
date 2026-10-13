@@ -17,16 +17,14 @@ Skipped unless a built OpenQP is importable, like the other selftest drivers.
 """
 
 import os
+import tempfile
 import unittest
 from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-SELFTEST_OUT = Path("/tmp/fci_symmetry_selftest.out")
+from unittest import mock
 
 
 def _runtime_available():
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
         import oqp  # noqa: F401
         return True
     except Exception:
@@ -35,11 +33,18 @@ def _runtime_available():
 
 @unittest.skipUnless(_runtime_available(), "built OpenQP runtime not importable")
 class FciSymmetrySelfTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="oqp_fci_symmetry_")
+        self.addCleanup(tmp.cleanup)
+        self.tmpdir = Path(tmp.name)
+        # The native self-test writes its report to $OQP_SELFTEST_DIR
+        # (source/io/selftest_output.F90); keep it private to this test.
+        env = mock.patch.dict(os.environ, {"OQP_SELFTEST_DIR": str(self.tmpdir)})
+        env.start()
+        self.addCleanup(env.stop)
+
     def test_determinant_and_root_irreps(self):
         import oqp
-
-        if SELFTEST_OUT.exists():
-            SELFTEST_OUT.unlink()
 
         try:
             oqp.ffi.cdef("void fci_symmetry_selftest(void);")
@@ -48,10 +53,11 @@ class FciSymmetrySelfTest(unittest.TestCase):
             pass
         lib = oqp.ffi.dlopen(str(_library_path()))
         lib.fci_symmetry_selftest()
+        report = self.tmpdir / "fci_symmetry_selftest.out"
 
-        self.assertTrue(SELFTEST_OUT.exists(), "selftest produced no output")
+        self.assertTrue(report.exists(), "selftest produced no output")
         results = {}
-        for line in SELFTEST_OUT.read_text().splitlines():
+        for line in report.read_text().splitlines():
             if "=" not in line:
                 continue
             key, value = line.split("=", 1)
@@ -69,15 +75,16 @@ class FciSymmetrySelfTest(unittest.TestCase):
 
 
 def _library_path():
-    root = Path(os.environ["OPENQP_ROOT"])
-    for pattern in ("lib/liboqp.dylib", "lib/liboqp.so", "lib64/liboqp.so"):
-        candidate = root / pattern
-        if candidate.exists():
-            return candidate
-    matches = sorted(root.glob("lib*/liboqp.*"))
-    if not matches:
-        raise unittest.SkipTest("liboqp not found under OPENQP_ROOT")
-    return matches[0]
+    # The liboqp that `import oqp` resolved, not $OPENQP_ROOT: the variable is
+    # only a fallback in oqp.runtime, and reading it here tested whatever tree
+    # it happened to name (usually the unbuilt source tree, so the test skipped).
+    from oqp.runtime import library_path, resolve_oqp_root
+
+    root, suffix = resolve_oqp_root()
+    path = library_path(root, suffix)
+    if path is None:
+        raise AssertionError(f"oqp resolved runtime root {root} but it has no liboqp.{suffix}")
+    return path
 
 
 if __name__ == "__main__":
