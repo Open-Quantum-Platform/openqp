@@ -9,6 +9,7 @@ module guess
     private
     public get_ab_initio_density
     public get_ab_initio_orbital
+    public density_space_orbitals
     public corresponding_orbital_projection
     public mksphar
 
@@ -114,6 +115,76 @@ end subroutine get_ab_initio_density
    call canonicalize_orbital_phases(orbitals)
 
  end subroutine get_ab_initio_orbital
+
+!> @brief Canonical orbitals that keep the occupied space of a density.
+!>
+!> Within the S-orthonormal orbitals lo..hi, the nocc orbitals that carry
+!> the density come first (largest c^T S D S c; the occupied space of D is
+!> exactly representable because the orbitals span the whole block), then
+!> the Fock is diagonalised separately in the occupied and in the remaining
+!> orbitals.  At a converged SCF the Fock has no occupied-virtual coupling
+!> and this equals a full diagonalisation; before convergence (a loose
+!> tolerance) or for a non-aufbau occupation (MOM, rstctmo) a full
+!> diagonalisation would change the occupied space and publish orbitals that
+!> no longer build the density and the energy they are stored with.
+!>
+!> @param[in]    fock_m     Fock matrix (packed)
+!> @param[in]    dens_m     density whose occupied space is kept (packed; any
+!>                          positive scale, e.g. the RHF total density)
+!> @param[in]    s_m        AO overlap (full)
+!> @param[inout] orbitals   MO coefficients (columns), lo..hi replaced
+!> @param[inout] orbital_e  orbital energies, lo..hi replaced
+ subroutine density_space_orbitals(fock_m, dens_m, s_m, orbitals, orbital_e, lo, hi, nocc)
+   use mathlib, only: unpack_matrix
+   use eigen, only: diag_symm_full
+   use messages, only: show_message, WITH_ABORT
+
+   real(dp), intent(in) :: fock_m(:), dens_m(:), s_m(:,:)
+   real(dp), intent(inout) :: orbitals(:,:), orbital_e(:)
+   integer, intent(in) :: lo, hi, nocc
+
+   real(dp), allocatable :: a(:,:), c(:,:), sc(:,:), t(:,:), w(:,:), r(:,:), ev(:)
+   integer :: nbf, m, ok, info, b, b0, nb
+
+   nbf = ubound(orbitals, 1)
+   m = hi - lo + 1
+   if (m <= 0) return
+   allocate(a(nbf,nbf), c(nbf,m), sc(nbf,m), t(nbf,m), w(m,m), r(m,m), ev(m), stat=ok)
+   if (ok/=0) call show_message('Cannot allocate memory', WITH_ABORT)
+   c = orbitals(:,lo:hi)
+
+   ! Occupied space of the density: the nocc largest eigenvectors of C^T S D S C
+   call unpack_matrix(dens_m, a)
+   call dgemm('n', 'n', nbf, m, nbf, 1.0_dp, s_m, nbf, c, nbf, 0.0_dp, sc, nbf)
+   call dgemm('n', 'n', nbf, m, nbf, 1.0_dp, a, nbf, sc, nbf, 0.0_dp, t, nbf)
+   call dgemm('t', 'n', m, m, nbf, 1.0_dp, sc, nbf, t, nbf, 0.0_dp, w, m)
+   call diag_symm_full(1, m, w, m, ev, info)
+   r(:,1:nocc) = w(:,m-nocc+1:m)
+   r(:,nocc+1:m) = w(:,1:m-nocc)
+   call dgemm('n', 'n', nbf, m, m, 1.0_dp, c, nbf, r, m, 0.0_dp, sc, nbf)
+   c = sc
+
+   ! Fock in these orbitals, diagonalised within each block
+   call unpack_matrix(fock_m, a)
+   call dgemm('n', 'n', nbf, m, nbf, 1.0_dp, a, nbf, c, nbf, 0.0_dp, t, nbf)
+   call dgemm('t', 'n', m, m, nbf, 1.0_dp, c, nbf, t, nbf, 0.0_dp, w, m)
+   do b = 1, 2
+     if (b == 1) then
+       b0 = 1
+       nb = nocc
+     else
+       b0 = nocc + 1
+       nb = m - nocc
+     end if
+     if (nb == 0) cycle
+     r(1:nb,1:nb) = w(b0:b0+nb-1, b0:b0+nb-1)
+     call diag_symm_full(1, nb, r, m, ev(b0:b0+nb-1), info)
+     call dgemm('n', 'n', nbf, nb, nb, 1.0_dp, c(:,b0:b0+nb-1), nbf, r, m, &
+                0.0_dp, orbitals(:,lo+b0-1:lo+b0+nb-2), nbf)
+   end do
+   orbital_e(lo:hi) = ev
+   call canonicalize_orbital_phases(orbitals(:,lo:hi))
+ end subroutine density_space_orbitals
 
 !> @brief Choose a deterministic sign for each real molecular orbital.
 !>

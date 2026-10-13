@@ -229,6 +229,59 @@ def _no_integral_symmetry_in_child(config):
     return config
 
 
+def _finite_difference_response_tolerances(config):
+    """Tighten the response convergence of a finite-difference gradient child.
+
+    ``[tdhf] zvconv`` and ``[tdhf] conv`` bound the SQUARED residual norm of
+    the Z-vector and Davidson solvers (tdhf_z_vector passes sqrt(zvconv) to
+    the PCG solver), so the default 1e-10 leaves residuals up to 1e-5, and the
+    excited-state gradient, which is linear in the Z and amplitude errors,
+    carries errors of ~1e-6 that change discontinuously with the iteration
+    count.  A central difference over +-dx divides them by 2 dx: linear
+    H3+/STO-3G TDHF, dx = 1e-3 bohr, numerical zz 0.26306 against 0.26447
+    Eh/bohr^2 from the state energies and the analytic Hessian, while every
+    single gradient met its tolerance.  Converge each child so that both
+    residuals are below max(1e-5 dx, 1e-8) (Hessian error ~1e-6); a looser
+    user value is tightened, a tighter one kept.  Below ~1e-9 the MRSF
+    Davidson stalls (squared residual 2.5e-18 after its auto-restart, H2O
+    BHHLYP/6-31G*) and an unreachable tolerance aborts the child.
+
+    ``[scf] conv`` is left to the user: tightening it in every child made
+    open-shell DFT numerical Hessians up to 5x slower (ROKS OH, dx = 5e-3),
+    while the response tolerances cost +28 % on benzene B3LYP RPA.
+    """
+    def as_float(value):
+        return float(str(value).strip().lower().replace('d', 'e'))
+
+    dx = abs(as_float(config.get('hess', {}).get('dx', 1.0e-3)))
+    target = max(1.0e-5 * dx, 1.0e-8) ** 2
+    tdhf = config.setdefault('tdhf', {})
+    for key in ('zvconv', 'conv'):
+        try:
+            current = as_float(tdhf.get(key, 1.0))
+        except ValueError:
+            current = 1.0
+        if current > target:
+            tdhf[key] = f'{target:.3e}'
+    return config
+
+
+def _with_child_response_tolerances(model_signature, config):
+    """Add the response tolerances the displaced children actually run at.
+
+    The scratch gradients of a numerical Hessian are reused on restart by
+    name, and the name signs on the parent configuration.  The children run
+    at the tolerances _finite_difference_response_tolerances sets, so sign on
+    those too: gradients written before that tightening existed (or at another
+    dx, which changes the tolerance) are then recomputed instead of reused.
+    """
+    child_tdhf = _finite_difference_response_tolerances(
+        copy.deepcopy(config)).get('tdhf', {})
+    signature = dict(model_signature)
+    signature['fd_child_tdhf'] = {key: str(child_tdhf.get(key)) for key in ('zvconv', 'conv')}
+    return signature
+
+
 def _displacement_run_signature(origin_coord, atoms, dx, model_signature):
     """Short provenance hash naming WHICH run a scratch gradient belongs to.
 
@@ -2606,9 +2659,14 @@ class Hessian(Calculator):
         atoms = self.mol.get_atoms()
         guess_file = self.mol.log.replace('.log', '.json')
         # Provenance for the scratch tag -- see _displacement_run_signature.
+        # The children run at the response tolerances that
+        # _finite_difference_response_tolerances sets, not at the parent's;
+        # sign on those, so scratch gradients written at looser tolerances
+        # (before that tightening existed) are recomputed, not reused.
+        model_signature = _with_child_response_tolerances(
+            self.mol._hessian_request_signature(self.state), self.mol.config)
         run_signature = _displacement_run_signature(
-            origin_coord, atoms, dx,
-            self.mol._hessian_request_signature(self.state))
+            origin_coord, atoms, dx, model_signature)
         variables_wrapper = [
             {
                 'idx': idx,
@@ -2836,6 +2894,7 @@ def grad_wrapper(key_dict):
         # modify config
         config['input']['runtype'] = 'grad'
         _no_integral_symmetry_in_child(config)
+        _finite_difference_response_tolerances(config)
         config['input']['system'] = xyz
         config['guess']['type'] = 'json'
         config['guess']['file'] = guess_file

@@ -937,13 +937,13 @@ def _minor_transform(R, occ):
 
 def _rotate_det_vector(vec, R, norb, nelec):
     """Transform a determinant-space vector built in MO set ``src`` into MO set
-    ``dst`` where ``C_src = C_dst @ R`` (R unitary).  ``vec`` is indexed over
+    ``dst`` where ``C_dst = C_src @ R`` (R orthogonal).  ``vec`` is indexed over
     :func:`_determinants` (alpha-major); the transform factorizes into the alpha
-    and beta single-spin minor matrices of ``R``.  Determinant-only; reproduces
+    and beta single-spin minor matrices of ``R.T``.  Determinant-only; reproduces
     pyscf.fci.addons.transform_ci_for_orbital_rotation to machine precision."""
     occ_a = _occ_tuples(norb, nelec[0])
     occ_b = _occ_tuples(norb, nelec[1])
-    Ta = _minor_transform(R.T, occ_a)         # R.T: matches the C_src=C_dst@R convention
+    Ta = _minor_transform(R.T, occ_a)         # C_dst=C_src@R -> coefficients use R.T
     Tb = _minor_transform(R.T, occ_b)
     na, nb = len(occ_a), len(occ_b)
     return (Ta @ vec.reshape(na, nb) @ Tb.T).reshape(-1)
@@ -1180,11 +1180,13 @@ def _multistate_multiset(mol, hcore_ao, eri_ao, coeff_ref, settings, ncore, nact
         for j in range(nstate):
             if i == j:
                 continue
-            Rij = per[i]["U"].T @ per[j]["U"]
-            vecj_in_i = _rotate_det_vector(per[j]["ref_full"], Rij, nbf, full_nelec_un)
-            cij = float(per[i]["hpsi1_full"] @ vecj_in_i)
+            # The helper takes C_dst = C_src @ R.  For J -> I this is
+            # C_I = C_J @ (U_J.T @ U_I), not the I -> J orbital rotation.
             Rji = per[j]["U"].T @ per[i]["U"]
-            veci_in_j = _rotate_det_vector(per[i]["ref_full"], Rji, nbf, full_nelec_un)
+            vecj_in_i = _rotate_det_vector(per[j]["ref_full"], Rji, nbf, full_nelec_un)
+            cij = float(per[i]["hpsi1_full"] @ vecj_in_i)
+            Rij = per[i]["U"].T @ per[j]["U"]
+            veci_in_j = _rotate_det_vector(per[i]["ref_full"], Rij, nbf, full_nelec_un)
             cji = float(per[j]["hpsi1_full"] @ veci_in_j)
             heff[i, j] = 0.5 * (cij + cji)
     heff = 0.5 * (heff + heff.T)
