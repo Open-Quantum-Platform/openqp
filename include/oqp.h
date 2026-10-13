@@ -486,6 +486,22 @@ void casscf_hess_bmat(int32_t nbf, int32_t ncore, int32_t nact, int32_t npar,
  * determinant encoding, in which case the caller falls back to Python. */
 int64_t casscf_excitation_stack(int32_t nact, int64_t ndet, const int64_t *dets,
     double *stack);
+/* W[t,u,a] = sum_b <a|E_tu|b> civec[b], C-order [nact,nact,ndet].
+ * Requires 1 <= nact <= 31, positive ndet, and sorted keys with their
+ * zero-based permutation to CI order. Returns 0 on success, -1 for invalid
+ * dimensions/encoding or out-of-range permutation (output untouched).
+ * Successful calls initialize W. */
+int64_t casscf_exc_stack_apply_wmat(int32_t nact, int64_t ndet,
+    const int64_t *dets, const int64_t *skeys, const int64_t *sperm,
+    const double *civec, double *wmat);
+/* Matrix-free counterpart of casscf_hess_amp. Same C-order operands, but
+ * determinant keys replace the dense excitation stack. Returns 0 on success,
+ * -1 for invalid dimensions/encoding/permutation or allocation failure
+ * (amp untouched). */
+int64_t casscf_hess_amp_mf(int32_t nact, int64_t ndet, int32_t npar,
+    const int64_t *dets, const int64_t *skeys, const int64_t *sperm,
+    const double *fder, const double *gder, const double *wmat,
+    const double *vecs, double *amp);
 /* Determinant-space bookkeeping and mean-field Fock of the PT2 path
  * (pt2_kernel.F90).  Determinant keys are the fci.py integers, so these need
  * 2*norb <= 62.  pt2_external_indices returns the number of external
