@@ -7,6 +7,9 @@ OpenQP runtime.
 """
 
 import os
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -79,6 +82,47 @@ class XiGridIngredientsTest(unittest.TestCase):
         self.assertGreaterEqual(float(np.min(g["xi"])), -1e-14)
         self.assertGreater(np.max(np.abs(g["xi"][:, 2] - g["tau"][:, 0])), 1e-3)
         self.assertEqual(list(g["p"]), [1, 1, 0, 0])
+
+
+@unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime not available")
+class XiGridIngredientsValidationTest(unittest.TestCase):
+    """Invalid alpha/p must raise ValueError before the native call (mol unused)."""
+
+    def _call(self, alphas, p=None):
+        from oqp.library.xi_ingredients import grid_ingredients
+        return grid_ingredients(None, alphas=alphas, p=p)
+
+    def test_non_finite_alpha_rejected(self):
+        for bad in (float("nan"), float("-inf"), float("inf")):
+            with self.assertRaisesRegex(ValueError, "alpha"):
+                self._call([0.5, bad], p=[1, 0])
+            with self.assertRaisesRegex(ValueError, "alpha"):
+                self._call([bad])
+
+    def test_explicit_p_must_be_auto_0_or_1(self):
+        for bad in ([2], [-2], [0.5]):
+            with self.assertRaisesRegex(ValueError, "p entries"):
+                self._call([0.5], p=bad)
+
+
+@unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime not available")
+class XiNeedsMetaGGATest(unittest.TestCase):
+    """xi_mode=1 with a tau-free functional must fail, not run as plain PBE."""
+
+    def test_pbe_with_xi_mode_fails(self):
+        text = INPUT.replace("functional=m06-2x", "functional=pbe") + "xi_mode=1\nxi_alpha=0.5\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            inp = Path(tmp) / "h2o_pbe_xi.inp"
+            inp.write_text(text)
+            proc = subprocess.run(
+                [sys.executable, "-m", "oqp.pyoqp", inp.name, "--nompi", "--silent"],
+                cwd=tmp, capture_output=True, text=True, timeout=600,
+                env={**os.environ, "OMP_NUM_THREADS": "1"},
+            )
+        detail = (f"returncode={proc.returncode}\n--- stdout ---\n{proc.stdout[-3000:]}"
+                  f"\n--- stderr ---\n{proc.stderr[-3000:]}")
+        self.assertNotEqual(proc.returncode, 0, detail)
+        self.assertIn("needs a meta-GGA", proc.stdout + proc.stderr, detail)
 
 
 if __name__ == "__main__":

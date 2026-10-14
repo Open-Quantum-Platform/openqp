@@ -1839,6 +1839,10 @@ contains
     ! xi^alpha in the tau slot: make the libxc derivatives consistent with its
     ! Fermi-hole-curvature input clamp (see functionals::fhc_clamp_chain_rule)
     infos%functional%fhc_chain_rule = (infos%dft%xi_mode /= 0)
+    ! xi^alpha replaces tau; without a tau-dependent functional the grid engine
+    ! never activates it and the run would silently be the plain functional.
+    if (infos%dft%xi_mode /= 0 .and. .not. infos%functional%needTau) &
+      error stop 'xi^alpha ingredient: xi_mode=1 needs a meta-GGA (tau-dependent) functional'
 
     ! Calculate exchange-correlation based on SCF type
     if (sym_active) then
@@ -1917,6 +1921,10 @@ contains
     ! xi^alpha in the tau slot: make the libxc derivatives consistent with its
     ! Fermi-hole-curvature input clamp (see functionals::fhc_clamp_chain_rule)
     infos%functional%fhc_chain_rule = (infos%dft%xi_mode /= 0)
+    ! xi^alpha replaces tau; without a tau-dependent functional the grid engine
+    ! never activates it and the run would silently be the plain functional.
+    if (infos%dft%xi_mode /= 0 .and. .not. infos%functional%needTau) &
+      error stop 'xi^alpha ingredient: xi_mode=1 needs a meta-GGA (tau-dependent) functional'
     allocate(da(nbf,nbf), source=0.0_dp)
     call unpack_matrix(dmat(:,1), da, nbf, "U")
     allocate(db(nbf,nbf), source=0.0_dp)

@@ -23,14 +23,21 @@ def grid_ingredients(mol, alphas, p=None, scale=0, cutoff=0.0):
     n = alphas.size
     if n == 0:
         raise ValueError("grid_ingredients: at least one alpha is required")
+    if not np.all(np.isfinite(alphas)):
+        raise ValueError("grid_ingredients: alpha must be finite")
     if np.any(alphas > 1.0):
         raise ValueError("grid_ingredients: alpha must be <= 1")
     if p is None:
         ps = np.full(n, -1, dtype=np.int64)
     else:
-        ps = np.ascontiguousarray(np.asarray(p, dtype=np.int64).ravel())
+        p_raw = np.asarray(p).ravel()
+        if p_raw.dtype.kind not in "iu" and not np.all(np.equal(np.mod(p_raw, 1), 0)):
+            raise ValueError("grid_ingredients: p entries must be integers")
+        ps = np.ascontiguousarray(p_raw.astype(np.int64))
         if ps.size != n:
             raise ValueError("grid_ingredients: p must have one entry per alpha")
+        if not np.all(np.isin(ps, (-1, 0, 1))):
+            raise ValueError("grid_ingredients: p entries must be -1 (auto), 0 or 1")
         if np.any((ps == 0) & (alphas > 0.0)):
             raise ValueError("grid_ingredients: p=0 requires alpha <= 0")
     ps = np.where(ps < 0, np.where(alphas > 0.0, 1, 0), ps).astype(np.int64)
