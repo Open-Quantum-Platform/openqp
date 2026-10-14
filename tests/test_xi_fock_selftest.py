@@ -47,7 +47,7 @@ def _runtime_available():
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         import oqp  # noqa: F401
         from oqp.pyoqp import Runner  # noqa: F401
-        return hasattr(oqp, "xi_fock_selftest")
+        return True
     except Exception:
         return False
 
