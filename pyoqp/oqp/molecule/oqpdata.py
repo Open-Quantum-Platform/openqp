@@ -219,6 +219,7 @@ OQP_CONFIG_SCHEMA = {
     },
     'mp2': {
         'variant': {'type': string, 'default': 'mp2'},
+        'transform': {'type': string, 'default': 'auto'},
         'same_spin_scale': {'type': float, 'default': '1.0'},
         'opposite_spin_scale': {'type': float, 'default': '1.0'},
     },
@@ -992,6 +993,7 @@ class OQPData:
             "epsilon": "set_pcm_epsilon",
         },
         "mp2": {
+            "transform": "set_mp2_transform",
             "same_spin_scale": "set_mp2_same_spin_scale",
             "opposite_spin_scale": "set_mp2_opposite_spin_scale",
         },
@@ -1724,6 +1726,14 @@ class OQPData:
     def set_mp2_same_spin_scale(self, scale):
         """Set standalone MP2 same-spin scale."""
         self._data.dft.MP2SS_Scale = scale
+
+    def set_mp2_transform(self, transform):
+        """Select automatic, direct-J or packed MP2 energy transformations."""
+        modes = {"auto": 0, "direct": 1, "n5": 2}
+        key = str(transform).strip().lower()
+        if key not in modes:
+            raise ValueError("mp2.transform must be auto, direct, or n5")
+        self._data.control.mp2_transform = modes[key]
 
     def set_mp2_opposite_spin_scale(self, scale):
         """Set standalone MP2 opposite-spin scale."""
