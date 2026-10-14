@@ -56,13 +56,13 @@ class XiGridIngredientsTest(unittest.TestCase):
         from oqp.pyoqp import Runner
         from oqp.library.xi_ingredients import grid_ingredients
 
-        workdir = Path("/tmp/oqp_xi_grid_test")
-        workdir.mkdir(exist_ok=True)
-        inp = workdir / "h2o.inp"
-        inp.write_text(INPUT)
-        runner = Runner(project="h2o_xi_grid", input_file=str(inp), log=str(workdir / "h2o.log"))
-        runner.run()
-        g = grid_ingredients(runner.mol, alphas=[1.0, 0.5, 0.0, -0.5], p=[1, 1, 0, 0])
+        with tempfile.TemporaryDirectory(prefix="oqp_xi_grid_") as tmp:
+            workdir = Path(tmp)
+            inp = workdir / "h2o.inp"
+            inp.write_text(INPUT)
+            runner = Runner(project="h2o_xi_grid", input_file=str(inp), log=str(workdir / "h2o.log"))
+            runner.run()
+            g = grid_ingredients(runner.mol, alphas=[1.0, 0.5, 0.0, -0.5], p=[1, 1, 0, 0])
         npts = g["xyzw"].shape[0]
         self.assertGreater(npts, 1000)
         for key, ncol in (("rho", 2), ("sigma", 3), ("tau", 2), ("xi", 8)):
