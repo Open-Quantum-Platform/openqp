@@ -2793,6 +2793,7 @@ contains
     integer :: nAODer_c, numAOVecs_c, naop_c
     logical :: skip_p_c
     integer(i8b) :: ghash
+    real(fp) :: xi_key(5)
     ! Env-gated phase timing (OQP_XC_TIMING): geometry/Phi vs density-driven XC
     logical :: do_timing
     character(len=8) :: tenv
@@ -2858,17 +2859,19 @@ contains
     cache_on = xc_opts%use_phi_cache
     ghash = 0_i8b
     if (cache_on) ghash = phi_cache_geom_hash(basis%atoms%xyz)
+    xi_key = 0.0_fp
     if (xc_opts%xi_mode /= 0 .and. xc_opts%needTau) then
       ! xi^alpha: D^alpha chi is cached together with the AO block (extra
       ! vectors); fold the ingredient parameters into the cache key.
       numAOVecs_c = numAOVecs_c + merge(3, 1, max(0, merge(xc_opts%xi_p, ceiling(xc_opts%xi_alpha), xc_opts%xi_p >= 0)) == 1)
-      ghash = ieor(ghash, int(transfer(xc_opts%xi_alpha, 0_i8b), i8b))
-      ghash = ieor(ghash, int(1000003*(xc_opts%xi_p + 7) + 7919*xc_opts%xi_scale + 104729*xc_opts%xi_mode, i8b))
-      ghash = ieor(ghash, int(transfer(xc_opts%xi_cutoff, 0_i8b), i8b))
+      ! exact key, not folded into ghash: XORing the fields lost their
+      ! identities, e.g. (alpha=0.5, cutoff=1.0) and (alpha=1.0, cutoff=0.5) collided
+      xi_key = [real(xc_opts%xi_mode, fp), xc_opts%xi_alpha, real(xc_opts%xi_p, fp), &
+                real(xc_opts%xi_scale, fp), xc_opts%xi_cutoff]
     end if
     call g_phi_cache%begin_run(cache_on, xc_opts%molGrid%nSlices, &
              xc_opts%molGrid%nMolPts, xc_opts%numAOs, &
-             numAOVecs_c, xc_opts%numAtoms, ghash, dftthr)
+             numAOVecs_c, xc_opts%numAtoms, ghash, dftthr, xi_key)
     cache_replay = g_phi_cache%active .and. g_phi_cache%replay
 
     response_on=.false.
