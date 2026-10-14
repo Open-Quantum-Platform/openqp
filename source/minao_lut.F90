@@ -6,6 +6,9 @@
 !> tools/minao/generate_minao_data.py from PySCF's atomic HF densities). These
 !> are superposed block-diagonally and projected onto the target basis to form
 !> the MINAO initial guess.
+!> The densities are stored in OpenQP's Cartesian AO convention (components
+!> normalized to one, d order xx, yy, zz, xy, xz, yz), so that each holds Z
+!> electrons with the bfnrm-scaled overlap of the minimal basis.
 module minao_lut
 
   use precision, only: dp

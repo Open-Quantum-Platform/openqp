@@ -1,0 +1,2 @@
+rhf/def2-svp ispher=true guess(type=minao) symmetry(enabled=false) scf(conv=1e-10,maxit=200)
+geom="../geometries/FI-4f3831edff97.xyz"

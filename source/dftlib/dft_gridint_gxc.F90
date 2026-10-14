@@ -23,6 +23,7 @@ module mod_dft_gridint_gxc
 
   private
   public tddft_gxc
+  public utddft_gxc
 
 !-------------------------------------------------------------------------------
 
@@ -457,5 +458,113 @@ contains
   end subroutine
 
 !-------------------------------------------------------------------------------
+
+!-------------------------------------------------------------------------------
+
+!> @brief Spin-resolved XC third-derivative contraction for the TD-DFT gradient,
+!>  (G_xc)_{s,s',s''} (dx_s') (dx_s''), for separate alpha and beta densities
+!> @details Same contraction as tddft_gxc on the spin-polarized path (GxcUUpdate),
+!>  so a spin-antisymmetric transition density (dxb = -dxa, closed-shell triplet)
+!>  can be used.  With dxb = dxa it reproduces tddft_gxc.
+!> @param[inout] fxa, fxb  alpha / beta Fock-like matrices (accumulated)
+!> @param[inout] dxa, dxb  alpha / beta densities
+  subroutine utddft_gxc(basis, molGrid, isVecs, wfa, wfb, fxa, fxb, dxa, dxb, &
+                        nMtx, threshold, infos)
+    use basis_tools, only: basis_set
+    use mod_dft_gridint, only: xc_options_t, run_xc
+    use types, only: information
+    use mod_dft_molgrid, only: dft_grid_t
+    use mathlib, only: triangular_to_full
+
+    implicit none
+
+    type(information), target, intent(in) :: infos
+    type(dft_grid_t), target, intent(in) :: molGrid
+
+    type(basis_set) :: basis
+    logical, intent(in) :: isVecs
+    integer, intent(in) :: nMtx
+    real(kind=fp), intent(in) :: wfa(:,:), wfb(:,:)
+    real(kind=fp), intent(inout), target :: dxa(:,:,:), dxb(:,:,:)
+    real(kind=fp), intent(inout) :: fxa(:,:,:), fxb(:,:,:)
+    real(kind=fp), intent(in) :: threshold
+
+    type(xc_consumer_gxc_t) :: dat
+    type(xc_options_t) :: xc_opts
+
+    integer :: i, j, nbf
+
+    real(kind=fp), allocatable, target :: d2a(:,:), d2b(:,:)
+
+    nbf = ubound(wfa,1)
+
+    allocate(d2a(nbf,nbf), d2b(nbf,nbf))
+    if (isVecs) then
+      do i = 1, nbf
+        d2a(:,i) = wfa(:,i) * basis%bfnrm(:)
+        d2b(:,i) = wfb(:,i) * basis%bfnrm(:)
+      end do
+    else
+      do i = 1, nbf
+        d2a(:,i) = wfa(:,i) * basis%bfnrm(i) * basis%bfnrm(:)
+        d2b(:,i) = wfb(:,i) * basis%bfnrm(i) * basis%bfnrm(:)
+      end do
+    end if
+
+    do j = 1, nMtx
+      do i = 1, nbf
+        dxa(:,i,j) = dxa(:,i,j) * basis%bfnrm(i) * basis%bfnrm(:)
+        dxb(:,i,j) = dxb(:,i,j) * basis%bfnrm(i) * basis%bfnrm(:)
+      end do
+    end do
+
+    xc_opts%isGGA = infos%functional%needGrd
+    xc_opts%needTau = infos%functional%needTau
+    xc_opts%functional => infos%functional
+    xc_opts%hasBeta = .true.
+    xc_opts%isWFVecs = isVecs
+    xc_opts%numAOs = nbf
+    xc_opts%maxPts = molGrid%maxSlicePts
+    xc_opts%limPts = molGrid%maxNRadTimesNAng
+    xc_opts%numAtoms = infos%mol_prop%natom
+    xc_opts%maxAngMom = basis%mxam
+    xc_opts%nDer = 0
+    xc_opts%nXCDer = 3
+    xc_opts%numOccAlpha = infos%mol_prop%nelec_A
+    xc_opts%numOccBeta = infos%mol_prop%nelec_B
+    xc_opts%wfAlpha => d2a
+    xc_opts%wfBeta  => d2b
+    xc_opts%dft_threshold = threshold
+    xc_opts%molGrid => molGrid
+
+    dat%da => dxa
+    dat%db => dxb
+    dat%nMtx = nMtx
+
+    call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+
+    call run_xc(xc_opts, dat, basis)
+
+    deallocate (d2a, d2b)
+
+    do j = 1, nMtx
+      call triangular_to_full(dat%focks(:,:,j,1,1), nbf, 'u')
+      call triangular_to_full(dat%focks(:,:,j,2,1), nbf, 'u')
+      do i = 1, nbf
+        fxa(:,i,j) = fxa(:,i,j) + dat%focks(:,i,j,1,1) * basis%bfnrm(i) * basis%bfnrm(:)
+        fxb(:,i,j) = fxb(:,i,j) + dat%focks(:,i,j,2,1) * basis%bfnrm(i) * basis%bfnrm(:)
+      end do
+    end do
+
+    do j = 1, nMtx
+      do i = 1, nbf
+        dxa(:,i,j) = dxa(:,i,j) / basis%bfnrm(i) / basis%bfnrm(:)
+        dxb(:,i,j) = dxb(:,i,j) / basis%bfnrm(i) / basis%bfnrm(:)
+      end do
+    end do
+
+    call dat%clean()
+
+  end subroutine utddft_gxc
 
 end module mod_dft_gridint_gxc

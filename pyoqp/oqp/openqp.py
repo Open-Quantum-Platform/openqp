@@ -1207,8 +1207,12 @@ class OpenQP:
 
     def mp2(self, reference="rhf", runtype=None, multiplicity=None,
             basis=None, variant=None, same_spin_scale=None,
-            opposite_spin_scale=None, **scf_keywords):
+            opposite_spin_scale=None, transform=None, **scf_keywords):
         """Use a compact OpenQP MP2 setup for energy or analytic-gradient jobs."""
+        if transform is not None:
+            transform = str(transform).strip().lower()
+            if transform not in {"auto", "direct", "n5"}:
+                raise ValueError("mp2.transform must be auto, direct, or n5")
         if runtype is None:
             runtype = "energy"
         elif str(runtype).lower() not in {"energy", "grad", "optimize", "ts", "mep", "irc"}:
@@ -1253,6 +1257,8 @@ class OpenQP:
             self._set_optimize_options(istate=0)
 
         mp2_updates = {}
+        if transform is not None:
+            mp2_updates["transform"] = transform
         if variant is not None:
             mp2_updates["variant"] = variant
         if same_spin_scale is not None:
@@ -1713,8 +1719,14 @@ class OpenQP:
 
     def _response_theory(self, functional="", basis=None, runtype=None,
                          nstate=3, reference="rhf", multiplicity=1,
-                         response_type=None, **tdhf_keywords):
-        """Use a compact OpenQP TDHF/TDDFT response setup."""
+                         response_type=None, state_multiplicity=None,
+                         **tdhf_keywords):
+        """Use a compact OpenQP TDHF/TDDFT response setup.
+
+        ``multiplicity`` is the SCF reference multiplicity ([scf]);
+        ``state_multiplicity`` is the excited-state multiplicity ([tdhf]), e.g.
+        3 for closed-shell triplet RPA/TDA on an RHF/RKS reference.
+        """
         input_updates = {"method": "tdhf", "functional": functional or ""}
         if runtype is not None:
             input_updates["runtype"] = runtype
@@ -1731,6 +1743,8 @@ class OpenQP:
             self.scf(**scf_updates)
 
         updates = {"nstate": nstate}
+        if state_multiplicity is not None:
+            updates["multiplicity"] = state_multiplicity
         if response_type is not None:
             requested_type = tdhf_keywords.pop("type", response_type)
             if str(requested_type).lower() != str(response_type).lower():

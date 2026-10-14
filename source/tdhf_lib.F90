@@ -43,6 +43,9 @@ module tdhf_lib
       integer :: nspin = 0
       integer :: nbf = 0
       logical :: tamm_dancoff = .false. !< Tamm-Dancoff approximation
+      !> .false. for the closed-shell triplet: H+[X+Y] has no Coulomb term
+      !> (spin-antisymmetric transition density); H+[T] keeps it
+      logical :: xpy_coulomb = .true.
     contains
         procedure :: parallel_start => int2_rpagrd_data_t_parallel_start
         procedure :: parallel_stop  => int2_rpagrd_data_t_parallel_stop
@@ -169,7 +172,7 @@ contains
     integer :: i, j, k, l, n
     real(kind=dp) :: xval1, cval2, val2c, cval4, &
                      val, val1, val4c
-    integer :: ifock, mythread
+    integer :: ifock, mythread, iapb, iamb
 
     xval1 = this%scale_exchange
     cval2 = 2 * this%scale_coulomb
@@ -177,9 +180,15 @@ contains
 
     mythread = buf%thread_id
 
+    ! Image slots are taken into locals first: GCC 14/15 with -fcheck=bounds
+    ! miscompile the check for a this%apb(..., size(this%apb, 4)) section in
+    ! an associate and abort with a garbage index (GCC 12/13 are unaffected).
+    iapb = min(mythread, size(this%apb, 4))
+    iamb = min(mythread, size(this%amb, 4))
+
     associate (&
-                apb => this%apb(:,:,:,min(mythread,size(this%apb,4))), &
-                amb => this%amb(:,:,:,min(mythread,size(this%amb,4))), &
+                apb => this%apb(:,:,:,iapb), &
+                amb => this%amb(:,:,:,iamb), &
                 d2 => this%d2 &
                 )
 
@@ -257,15 +266,19 @@ contains
     integer :: i, j, k, l, n
     real(kind=dp) :: xval1, xval2, &
                      val, val1, val2
-    integer :: mythread
+    integer :: mythread, iapb, iamb
 
     xval1 = 1 * this%scale_exchange
     xval2 = 2 * this%scale_coulomb
     mythread = buf%thread_id
 
+    ! Slots in locals: see the GCC 14/15 note in int2_td_data_t_update.
+    iapb = min(mythread, size(this%apb, 4))
+    iamb = min(mythread, size(this%amb, 4))
+
     associate (&
-                apb => this%apb(:,:,:,min(mythread,size(this%apb,4))), &
-                amb => this%amb(:,:,:,min(mythread,size(this%amb,4))), &
+                apb => this%apb(:,:,:,iapb), &
+                amb => this%amb(:,:,:,iamb), &
                 d2 => this%d2 &
                 )
 
@@ -605,8 +618,10 @@ contains
     if (tamm_dancoff) then
 
   !   Diagonailze A: VR
+  !   A 1x1 reduced matrix is its own eigenvalue. The Ritz value is A(1,1),
+  !   held in apb; vr is only the output eigenvector.
       if (nvec==1) then
-        ee(1) = vr(1,1)
+        ee(1) = apb(1,1)
         vr(1,1) = 1.0_dp
       else
         call dtrttp('u', nvec, apb, nvec, scr, ierr)
@@ -822,7 +837,10 @@ contains
       end do
     end if
 
-!   Norms of W
+!   Norms of W.
+!   errors(ivec) is the true squared residual norm. A large residual keeps
+!   the root unconverged and still yields a preconditioned correction; it is
+!   never reset, because the caller decides convergence from these values.
     errors = 0.0_dp
 
     if (tamm_dancoff) then
@@ -838,7 +856,6 @@ contains
           write(*,'(4X,"Large error detected")')
           write(*,'(4X,"State#=",I4)') ivec
           write(*,'(4X,"Error right =",1X,1P,E10.3)') errors(ivec)
-          errors(ivec) = 0.0_dp
         end if
 
 !       Get new vectors Q
@@ -864,7 +881,6 @@ contains
           write(*,'(4X,"Large error detected")')
           write(*,'(4X,"State#=",I4)') ivec
           write(*,'(4X,"Error left/right =",1X,1P,E10.3,"/",1X,1P,E10.3)') er_l, er_r
-          errors(ivec) = 0.0_dp
         end if
 
 !       Get new vectors Q
@@ -880,6 +896,22 @@ contains
     end if
 
   end subroutine rparesvec
+
+!> @brief Largest squared residual norm among the roots Davidson converges
+!> @details Roots 1..imax have negative eigenvalues and are excluded, as in
+!>  rparesvec. Returns zero when no root remains.
+  pure function rpa_max_residual(errors, imax, ndsr) result(mxerr)
+    use precision, only: dp
+
+    implicit none
+
+    real(kind=dp), intent(in) :: errors(:)
+    integer, intent(in) :: imax, ndsr
+    real(kind=dp) :: mxerr
+
+    mxerr = 0.0_dp
+    if (imax < ndsr) mxerr = maxval(errors(imax+1:ndsr))
+  end function rpa_max_residual
 
   subroutine apply_davidson_preconditioner(qout, residual, energy, abd)
     use precision, only: dp
@@ -1049,10 +1081,12 @@ contains
 
     if (tda) then
       ! vir->vib block
+      if (nvir > 0) then
       call dgemm('t', 'n', nvir, nvir, nocc, &
                   1.0d0, xpy, nocc, &
                          xpy, nocc, &
-                  0.0d0, t_mo(nocc+1:,nocc+1), nbf)
+                  0.0d0, t_mo(nocc+1,nocc+1), nbf)
+      end if
 
       ! occ->occ block
       call dgemm('n', 't', nocc, nocc, nvir,  &
@@ -1061,14 +1095,18 @@ contains
                   0.0d0, t_mo,  nbf)
     else
       ! vir->vib block
+      if (nvir > 0) then
       call dgemm('t', 'n', nvir, nvir, nocc, &
                  0.5d0, xpy, nocc, &
                         xpy, nocc,  &
-                 0.0d0, t_mo(nocc+1:, nocc+1), nbf)
+                 0.0d0, t_mo(nocc+1,nocc+1), nbf)
+      end if
+      if (nvir > 0) then
       call dgemm('t', 'n', nvir, nvir, nocc,  &
                  0.5d0, xmy, nocc, &
                         xmy, nocc,  &
-                 1.0d0, t_mo(nocc+1:, nocc+1), nbf)
+                 1.0d0, t_mo(nocc+1,nocc+1), nbf)
+      end if
 
       ! occ->occ block
       call dgemm('n', 't', nocc, nocc, nvir,  &
@@ -1210,7 +1248,8 @@ contains
 
     ! H+[X+Y]
     do i = 1, this%np
-      call this%hplus(buf, this%hpp(:,:,:,i, mythread), this%xpy(:,:,:,i))
+      call this%hplus(buf, this%hpp(:,:,:,i, mythread), this%xpy(:,:,:,i), &
+                      merge(1.0_dp, 0.0_dp, this%xpy_coulomb))
     end do
 
     ! H+[T]
@@ -1230,12 +1269,15 @@ contains
 !###############################################################################
 
 !> @brief Compute H^+[V] over a set of integrals
-  subroutine int2_rpagrd_data_t_update_hplus(this, buf, hp, v)
+  subroutine int2_rpagrd_data_t_update_hplus(this, buf, hp, v, coulomb_factor)
     implicit none
     class(int2_rpagrd_data_t), intent(inout) :: this
     type(int2_storage_t), intent(inout) :: buf
     real(kind=dp), intent(inout) :: hp(:,:,:)
     real(kind=dp), intent(in) :: v(:,:,:)
+    !> extra factor on the Coulomb term for this density (thread-safe; the
+    !> pass-level scale_coulomb is set by int2_run / int2_run_cam)
+    real(kind=dp), intent(in), optional :: coulomb_factor
     integer :: i, j, k, l, n
     real(kind=dp) :: xfact, cfact, &
                      val, xval, cval
@@ -1247,6 +1289,7 @@ contains
 
       xfact = 2 * this%scale_exchange
       cfact = 8 * this%scale_coulomb
+      if (present(coulomb_factor)) cfact = cfact*coulomb_factor
 
       do n = 1, buf%ncur
         i  = buf%ids(1,n)
@@ -1272,6 +1315,7 @@ contains
 
       xfact = 1 * this%scale_exchange
       cfact = 2 * this%scale_coulomb
+      if (present(coulomb_factor)) cfact = cfact*coulomb_factor
 
       do n = 1, buf%ncur
         i  = buf%ids(1,n)
@@ -1461,7 +1505,7 @@ contains
     integer :: i, j, k, l, n
     real(kind=dp) :: xval1, cval2, val2c, cval4, &
                      val, val1, val4c
-    integer :: ifock, mythread
+    integer :: ifock, mythread, iapb, iamb
 
     xval1 = this%scale_exchange
     cval2 = 2 * this%scale_coulomb
@@ -1472,11 +1516,15 @@ contains
     bsame=all(shell_block%shells(1:2)==shell_block%shells(3:4))
     mythread = thread_id
 
+    ! Slots in locals: see the GCC 14/15 note in int2_td_data_t_update.
+    iapb = min(mythread, size(this%apb, 4))
+    iamb = min(mythread, size(this%amb, 4))
+
     ! Inactive response images may have only one copy; the guarded branches
     ! below never write those images. Keep their borrowed views in bounds.
     associate (&
-                apb => this%apb(:,:,:,min(mythread,size(this%apb,4))), &
-                amb => this%amb(:,:,:,min(mythread,size(this%amb,4))), &
+                apb => this%apb(:,:,:,iapb), &
+                amb => this%amb(:,:,:,iamb), &
                 d2 => this%d2 &
                 )
 

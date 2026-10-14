@@ -1,10 +1,11 @@
-import shutil
 import subprocess
 import tempfile
 import textwrap
 import unittest
 from pathlib import Path
 
+
+from build_tools import find_cmake
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -145,8 +146,7 @@ class LinalgAndExternalProjectConfigTests(unittest.TestCase):
         self.assertIn("oqp_external_cmake_list_arg(_ddx_lapack_arg LAPACK_LIBRARIES ${LAPACK_LIBRARIES})", external_cmake)
 
     def test_openblas_config_fallback_uses_imported_library_before_transitive_deps(self):
-        cmake = shutil.which("cmake")
-        self.assertIsNotNone(cmake)
+        cmake = find_cmake()
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

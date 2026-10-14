@@ -11,7 +11,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
 
 DECK = """[input]
 system=
@@ -62,7 +61,6 @@ SUMMARY = re.compile(r"converged +\d+ of +\d+ right-hand sides in +\d+ - +\d+ it
 
 def _runtime_available():
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         import oqp  # noqa: F401
         from oqp.pyoqp import Runner  # noqa: F401
@@ -113,9 +111,12 @@ class CphfLogLevel(unittest.TestCase):
     def test_open_shell_solvers_report_their_summary(self):
         """The UHF and ROHF solvers write through the captured fort.6 unit, so
         the summary is lost unless it is flushed before the capture is read."""
-        for reference in ("uhf", "rohf"):
+        # The open-shell analytic Hessians solve twice -- the 3N nuclear
+        # right-hand sides and the three field right-hand sides of the analytic
+        # Raman polarizability derivatives -- and each solve reports one summary.
+        for reference, nsolve in (("uhf", 2), ("rohf", 2)):
             text = self._run(OPEN_SHELL_DECK.format(reference=reference))
-            self.assertEqual(len(SUMMARY.findall(text)), 1, reference)
+            self.assertEqual(len(SUMMARY.findall(text)), nsolve, reference)
             self.assertIsNone(re.search(r"(UHF|ROHF) CPHF RHS +\d+ completed", text), reference)
 
 

@@ -10,6 +10,7 @@ runtype=hess
 method=tdhf
 
 [scf]
+conv=1.0e-9
 type=rohf
 multiplicity=3
 
@@ -18,5 +19,6 @@ type=mrsf
 nstate=2
 
 [hess]
+type=numerical
 state=1
 clean=True

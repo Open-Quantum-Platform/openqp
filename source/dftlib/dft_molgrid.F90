@@ -1018,7 +1018,7 @@ contains
     real(KIND=fp), intent(IN) :: test(:), vecs(:, :)
     logical :: inside
 
-    integer :: i
+    integer :: i, ilo, ihi
     real(KIND=fp) :: sgn, sgnold, vectmp(3)
 
 !     Test vector must at least has same direction, as average vector
@@ -1029,10 +1029,15 @@ contains
 !     end if
 
     inside = .true.
-    vectmp = cross_product(vecs(:, ubound(vecs, 2)), vecs(:, lbound(vecs, 2)))
+    ! Bounds are taken into locals first: GCC 14/15 with -fcheck=bounds
+    ! miscompile the check for a vecs(:, ubound(vecs, 2)) section argument
+    ! and abort with a garbage index (GCC 12/13 are unaffected).
+    ilo = lbound(vecs, 2)
+    ihi = ubound(vecs, 2)
+    vectmp = cross_product(vecs(:, ihi), vecs(:, ilo))
     sgnold = sign(1.0_fp, sum(test(1:3)*vectmp(1:3)))
 
-    do i = lbound(vecs, 2), ubound(vecs, 2)-1
+    do i = ilo, ihi-1
       vectmp = cross_product(vecs(:, i), vecs(:, i+1))
       sgn = sign(1.0_fp, sum(test(1:3)*vectmp(1:3)))
       if (sgn * sgnold < 0.0d0) then ! different signs

@@ -1,0 +1,35 @@
+# Analytic ROHF Hessian with analytic IR intensities and Raman activities of the
+# CH2Br radical (2B1-like, non-degenerate doublet) with the LANL2DZ effective
+# core potential on bromine (28 core electrons removed). Exercises the
+# open-shell dipole and polarizability derivatives (hf_polder_rohf) with the
+# ECP first-derivative integrals in the property right-hand sides; the
+# analytic tensors agree with central finite differences of the ROHF dipole
+# and polarizability (tests/test_analytic_ir_raman.py).
+[input]
+system=
+    6  0.000  0.000  0.000
+   35  0.050  0.030  1.880
+    1  0.930  0.000 -0.520
+    1 -0.930  0.060 -0.540
+charge=0
+runtype=hess
+method=hf
+basis=lanl2dz
+ispher=true
+
+[guess]
+type=huckel
+
+[scf]
+type=rohf
+multiplicity=2
+conv=1e-10
+maxit=200
+
+[symmetry]
+enabled=false
+
+[hess]
+type=analytical
+state=0
+clean=True

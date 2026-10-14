@@ -86,10 +86,16 @@ def test_explicit_xc_kernel_derivative_differentiates_the_moving_grid():
     """
     body = Z_RHS.split("subroutine explicit_channel_derivative_matrix", 1)[1].split(
         "end subroutine explicit_channel_derivative_matrix", 1)[0]
+    # The +q and -q probes of a batch of MO pairs share one grid traversal;
+    # each probe density is its own matrix and its gradient comes back
+    # separately through dedft_mtx.
     calls = body.split("call tddft_xc_gradient(")[1:]
-    assert len(calls) == 2
-    for c in calls:
-        # Each statement ends at the next executable line of the probe loop.
-        stmt = "".join(c.split("\n        x", 1)[0].split())
-        assert "include_weight_derivative=.true." in stmt
-        assert "include_ground_state=.false." in stmt
+    assert len(calls) == 1
+    stmt = "".join(calls[0].split("dedft_mtx=", 1)[0].split()) + "dedft_mtx="
+    assert "include_weight_derivative=.true." in stmt
+    assert "include_ground_state=.false." in stmt
+    assert "dedft_mtx=" in stmt
+    flat = "".join(body.split())
+    assert "xbat(:,:,2*kk-1)=buse+quse" in flat
+    assert "xbat(:,:,2*kk)=buse-quse" in flat
+    assert "0.25_dp*(gmtx(:,:,2*kk-1)-gmtx(:,:,2*kk))" in flat

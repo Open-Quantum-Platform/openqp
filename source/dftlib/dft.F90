@@ -1,7 +1,7 @@
 module mod_dft
 ! A Module for grid based DFT
   use messages,  only: show_message, WITH_ABORT
-  use precision, only: dp
+  use precision, only: dp, i8b
   use io_constants, only: iw
   use basis_tools, only: basis_set
   use mod_dft_molgrid, only: dft_grid_t
@@ -19,6 +19,20 @@ module mod_dft
   !> capped at max_described_setups entries, so a long-lived process does not accumulate them.
   character(len=1600), allocatable, save :: described_setups(:)
   integer, parameter :: max_described_setups = 256
+  !> LibXC functional caching: last functional name initialized.
+  !> dft_set_options skips the destroy/re-init cycle when the same
+  !> functional is requested again.
+  character(len=512), save :: lxc_last_functional = ""
+  real(dp), save :: lxc_last_cam_alpha = -1.0_dp
+  real(dp), save :: lxc_last_cam_beta  = -1.0_dp
+  real(dp), save :: lxc_last_cam_mu    = -1.0_dp
+  real(dp), save :: lxc_last_hfscale   = -1.0_dp
+  logical,  save :: lxc_last_cam_flag  = .false.
+  logical,  save :: lxc_last_dh_flag   = .false.
+  real(dp), save :: lxc_last_setup(8) = -1.0_dp
+  !> cache_revision of the functional_t object when the cache was last populated,
+  !> to detect interleaved use of multiple functional owners.
+  integer(i8b), save :: lxc_last_cache_revision = -1_i8b
 
   private
   public dft_initialize
@@ -340,6 +354,16 @@ module mod_dft
 
 contains
 
+!> Settings that libxc_input writes in addition to the DFT exchange mix.
+  function libxc_setup_values(infos) result(values)
+    use types, only: information
+    type(information), intent(in) :: infos
+    real(dp) :: values(8)
+    values = [infos%dft%MP2SS_Scale, infos%dft%MP2OS_Scale, &
+              infos%tddft%cam_alpha, infos%tddft%cam_beta, infos%tddft%cam_mu, &
+              infos%tddft%spc_coco, infos%tddft%spc_coov, infos%tddft%spc_ovov]
+  end function libxc_setup_values
+
 !> @brief Signature of a DFT set-up for the log: functional, grid and exchange mix.
 !> @detail dft_set_options describes a set-up only when no earlier set-up in the
 !>         same log started or ended with its starting signature, so a repeat is
@@ -392,6 +416,15 @@ contains
 !> @brief Forget every set-up description recorded so far (a run starts a new log).
   subroutine dft_forget_setups()
     if (allocated(described_setups)) deallocate(described_setups)
+    lxc_last_functional = ""
+    lxc_last_cam_alpha = -1.0_dp
+    lxc_last_cam_beta  = -1.0_dp
+    lxc_last_cam_mu    = -1.0_dp
+    lxc_last_hfscale   = -1.0_dp
+    lxc_last_cam_flag  = .false.
+    lxc_last_dh_flag   = .false.
+    lxc_last_setup = -1.0_dp
+    lxc_last_cache_revision = -1_i8b
   end subroutine dft_forget_setups
 
 
@@ -769,6 +802,15 @@ contains
     use libxc, only: libxc_destroy
     type(information), intent(inout) :: infos
     call libxc_destroy(infos%functional)
+    lxc_last_functional = ""
+    lxc_last_cam_alpha = -1.0_dp
+    lxc_last_cam_beta  = -1.0_dp
+    lxc_last_cam_mu    = -1.0_dp
+    lxc_last_hfscale   = -1.0_dp
+    lxc_last_cam_flag  = .false.
+    lxc_last_dh_flag   = .false.
+    lxc_last_setup = -1.0_dp
+    lxc_last_cache_revision = -1_i8b
   end subroutine
 
   subroutine dft_set_options(infos, pruned, need_functional, internal)
@@ -777,7 +819,7 @@ contains
     use messages, only: show_message, WITH_ABORT
     use strings, only: c_f_char
     use types, only: information
-    use libxc, only: libxc_input
+    use libxc, only: libxc_input, libxc_destroy
     use functionals, only: set_announcement_log
 
     implicit none
@@ -1068,15 +1110,43 @@ contains
     if (trim(xc_func_name) /= "") then
       ! save HFscale, or cam_alpha,beta,mu from input
       call saved_HF%save_HF(infos)
-
-      call libxc_input(functional_name=trim(xc_func_name), &
-                       dft_params=infos%dft, &
-                       tddft_params=infos%tddft, &
-                       functional=infos%functional, &
-                       announce=announce)
+      ! Guard: skip LibXC re-init when the same functional was already set up
+      if (infos%functional%can_calculate() .and. &
+          lxc_last_functional /= "" .and. &
+          lxc_last_functional == trim(xc_func_name) .and. &
+          (lxc_last_cam_flag .eqv. infos%dft%cam_flag) .and. &
+          (lxc_last_dh_flag .eqv. infos%dft%dh_flag) .and. &
+          all(lxc_last_setup == libxc_setup_values(infos)) .and. &
+          lxc_last_cam_alpha == infos%dft%cam_alpha .and. &
+          lxc_last_cam_beta  == infos%dft%cam_beta .and. &
+          lxc_last_cam_mu    == infos%dft%cam_mu .and. &
+          lxc_last_hfscale   == infos%dft%hfscale .and. &
+          lxc_last_cache_revision == infos%functional%cache_revision) then
+        ! Same functional; LibXC objects are ready, skip destroy/re-init
+      else
+        if (infos%functional%can_calculate()) then
+          ! Different functional: destroy old objects first
+          call libxc_destroy(infos%functional)
+        end if
+        call libxc_input(functional_name=trim(xc_func_name), &
+                         dft_params=infos%dft, &
+                         tddft_params=infos%tddft, &
+                         functional=infos%functional, &
+                         announce=announce)
+      end if
 
       ! update HFscale, or cam_alpha,beta,mu from input
       if(saved_HF%do) call saved_HF%update_HF(infos, announce)
+      ! Record the effective settings, including the restored input exchange mix.
+      lxc_last_functional = trim(xc_func_name)
+      lxc_last_cam_alpha  = infos%dft%cam_alpha
+      lxc_last_cam_beta   = infos%dft%cam_beta
+      lxc_last_cam_mu     = infos%dft%cam_mu
+      lxc_last_hfscale    = infos%dft%hfscale
+      lxc_last_cam_flag   = infos%dft%cam_flag
+      lxc_last_dh_flag    = infos%dft%dh_flag
+      lxc_last_setup = libxc_setup_values(infos)
+      lxc_last_cache_revision = infos%functional%cache_revision
     else if (need_func) then
       call show_message('Please, specify functional in the input file', WITH_ABORT)
     end if
@@ -1583,6 +1653,10 @@ contains
       iok=0
       if(.not.allocated(tdb)) allocate(tdb(nbf,nbf), stat=iok)
       if(iok/=0) call show_message('Cannot allocate memory',WITH_ABORT)
+    else
+      ! derexc_blk reads db only for urohf, but an unallocated allocatable
+      ! is not a valid actual argument for its explicit db dummy
+      allocate(tdb(0,0))
     end if
 
 !   RHF

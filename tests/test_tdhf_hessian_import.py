@@ -89,8 +89,16 @@ class TdhfHessianImportTests(unittest.TestCase):
         routine = z_rhs.split(
             "subroutine explicit_channel_derivative_matrix", 1
         )[1].split("end subroutine explicit_channel_derivative_matrix", 1)[0]
-        self.assertEqual(routine.count("call grd2_operator_driver"), 1)
+        # The ERI part lives in eri_derivative_operator_mo (also used by the
+        # ground-state Hessian); the channel routine calls it exactly once and
+        # it performs exactly one blocked traversal.
+        self.assertEqual(routine.count("call eri_derivative_operator_mo"), 1)
         self.assertNotIn("call grd2_driver", routine)
+        helper = z_rhs.split(
+            "subroutine eri_derivative_operator_mo", 1
+        )[1].split("end subroutine eri_derivative_operator_mo", 1)[0]
+        self.assertEqual(helper.count("call grd2_operator_driver"), 1)
+        self.assertNotIn("call grd2_driver", helper)
         self.assertIn("subroutine grd2_operator_driver", GRD2.read_text().lower())
         rys = GRD2_RYS.read_text().lower()
         self.assertIn("subroutine grd2_rys_compute_operator", rys)

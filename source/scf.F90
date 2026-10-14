@@ -53,7 +53,7 @@ contains
     use mod_dft, only: dftexcor
     use mod_dft_molgrid, only: dft_grid_t
     use messages, only: show_message, WITH_ABORT
-    use guess, only: get_ab_initio_density, get_ab_initio_orbital
+    use guess, only: get_ab_initio_density, get_ab_initio_orbital, density_space_orbitals
     use util, only: measure_time, e_charge_repulsion
     use printing, only: print_mo_range
     use mathlib, only: traceprod_sym_packed
@@ -102,6 +102,7 @@ contains
     real(kind=dp) :: scalefactor        ! Scaling factor for HF exchange
     logical :: do_check = .false.
     logical :: keep_supplied            ! retain supplied orbitals on iteration one
+    logical :: supplied_valid           ! supplied orbitals are orthonormal in this geometry's metric
 
     !==============================================================================
     ! Electron Counting Parameters
@@ -160,6 +161,10 @@ contains
     logical       :: ps_grid_on       ! coarse->fine XC grid ramp active
     type(dft_grid_t), pointer :: ps_cur_grid ! grid selected for this iteration's XC build
     logical       :: ps_force_iter    ! force one pinned full-accuracy iteration before converging
+    logical       :: cold_first_iter  ! convergence on the first Fock build of a model-Hamiltonian guess
+    logical       :: cold_held        ! cold_first_iter withheld a convergence this iteration
+    logical       :: shift_applied    ! a level shift was added to this iteration's Fock
+    real(kind=dp), allocatable :: fock_noshift(:,:) ! iteration-1 Fock without the level shift
 
     !==============================================================================
     ! SOSCF Convergence Acceleration Parameters
@@ -169,7 +174,6 @@ contains
     real(kind=dp) :: rms_dp         ! RMS of density different
     real(kind=dp) :: delta_dens_a   ! for ROHFFIX
     real(kind=dp) :: delta_dens_b   ! for ROHFFIX
-    real(kind=dp), allocatable :: dens_prev(:,:) ! Previous density
 
     !==============================================================================
     ! TRAH Convergence Acceleration Parameters
@@ -181,12 +185,19 @@ contains
     real(kind=dp) :: vshift        ! Virtual orbital energy shift
     real(kind=dp) :: H_U_gap       ! HOMO-LUMO gap
     logical :: vshift_last_iter    ! Flag for last iteration with vshift
+    logical :: probe_failed        ! The zero-VSHIFT build missed conv; DIIS restarts next build
+    logical :: aufbau_lost         ! The zero-VSHIFT build converged on a non-aufbau occupation
+    logical :: pfon_hot            ! pFON is still annealing (pfon%temp above ~1 K)
+    logical :: release_occ         ! Next orbitals: aufbau eigenvectors of fock_release
+    integer :: lost_flag(1)
+    real(kind=dp), allocatable :: fock_release(:,:)
+    logical :: soscf_dummy, trah_dummy
+    real(kind=dp) :: vshift_dummy
 
     !==============================================================================
     ! MOM (Maximum Overlap Method) Parameters
     !==============================================================================
     logical :: do_mom            ! Flag to enable MOM method
-    logical :: initial_mom_iter  ! Flag for first MOM iteration
     logical :: mom_active        ! Flag indicating MOM is currently active
     real(kind=dp), allocatable :: mo_a_prev(:,:)  ! Previous alpha MO coefficients
     real(kind=dp), allocatable :: mo_e_a_prev(:)  ! Previous alpha orbital energies
@@ -331,7 +342,9 @@ contains
     call tagarray_get_data(infos%dat, OQP_E_MO_A, mo_energy_a)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
 
-    ! Get beta-spin tag arrays if needed
+    ! Get beta-spin tag arrays if needed.  For RHF they stay disassociated,
+    ! so passing them to an optional dummy argument means "absent".
+    nullify(fock_b, dmat_b, mo_energy_b, mo_b)
     if (nfocks > 1) then
       call data_has_tags(infos%dat, tags_beta, module_name, subroutine_name, WITH_ABORT)
       call tagarray_get_data(infos%dat, OQP_FOCK_B, fock_b)
@@ -343,7 +356,6 @@ contains
     ! Allocate main work arrays
     ok = 0
     allocate(smat_full(nbf, nbf), &
-             dens_prev(nbf_tri, nfocks), &
              pdmat(nbf_tri, nfocks), &
              pfock(nbf_tri, nfocks), &
              rohf_bak(nbf_tri, nfocks), &
@@ -428,17 +440,20 @@ contains
     do_mom = infos%control%mom
 
     if (do_mom) then
-      initial_mom_iter = .true.
       mom_active = .false.
 
-      ! Allocate storage for previous iteration's orbitals
-      allocate(mo_a_prev(nbf,nbf), source=0.0_dp)
-      allocate(mo_e_a_prev(nbf), source=0.0_dp)
+      ! The reference of the first MOM step is the guess: its orbitals built
+      ! the density of the first Fock. Without it the first step had nothing
+      ! to compare with and kept the aufbau fill of iteration 1, which loses
+      ! a non-aufbau guess (swapmo, a supplied excited-state solution) before
+      ! MOM can act on it.
+      allocate(mo_a_prev, source=mo_a)
+      allocate(mo_e_a_prev, source=mo_energy_a)
 
       ! For UHF, we need separate storage for beta orbitals
       if (scf_type == scf_uhf) then
-        allocate(mo_b_prev(nbf,nbf), source=0.0_dp)
-        allocate(mo_e_b_prev(nbf), source=0.0_dp)
+        allocate(mo_b_prev, source=mo_b)
+        allocate(mo_e_b_prev, source=mo_energy_b)
       end if
     end if
     !==============================================================================
@@ -457,6 +472,9 @@ contains
     !==============================================================================
     vshift = infos%control%vshift
     vshift_last_iter = .false.
+    probe_failed = .false.
+    aufbau_lost = .false.
+    release_occ = .false.
 
     !==============================================================================
     ! Initialize SCF Calculation
@@ -688,9 +706,26 @@ contains
     call flush(IW)
 
     !==============================================================================
+    ! A supplied guess counts as a solution of this geometry only when its
+    ! orbitals are orthonormal in the current overlap metric. Orbitals carried
+    ! over from another geometry (numerical Hessian/gradient displacements,
+    ! MD/NAMD steps) are not, and their density is not an SCF density here. For
+    ! H2 in a minimal basis every matrix of the gerade/ungerade form commutes,
+    ! so FDS - SDF vanished on the first build anyway and the carried-over
+    ! density was accepted: the displaced TDHF gradients and the numerical
+    ! Hessian built from them were wrong (H2/STO-3G zz 0.339 instead of 1.159
+    ! Eh/bohr^2 from the energies). Such a guess is treated like a cold one.
+    !==============================================================================
+    supplied_valid = infos%control%guess == GUESS_SUPPLIED
+    if (supplied_valid) supplied_valid = orthonormal_orbitals(mo_a, smat_full, nbf)
+    if (supplied_valid .and. scf_type == scf_uhf .and. nelec_b /= 0) &
+      supplied_valid = orthonormal_orbitals(mo_b, smat_full, nbf)
+
+    !==============================================================================
     ! Begin Main SCF Iteration Loop
     !==============================================================================
     do iter = 1, maxit
+      shift_applied = .false.
       if (do_rstctmo) then
         mo_energy_a_for_rstctmo = mo_energy_a
         mo_a_for_rstctmo = mo_a
@@ -814,6 +849,13 @@ contains
         ! Apply the Guest-Saunders ROHF Fock transformation
         call form_rohf_fock(pfock(:,1),pfock(:,2), mo_a, smat_full, &
                                 nelec_a, nelec_b, nbf, vshift, work1, work2)
+        shift_applied = (vshift /= 0.0_dp)
+        ! Unshifted effective Fock of the first build (see cold_first_iter).
+        if (iter == 1 .and. shift_applied) then
+          fock_noshift = rohf_bak
+          call form_rohf_fock(fock_noshift(:,1), fock_noshift(:,2), mo_a, smat_full, &
+                              nelec_a, nelec_b, nbf, 0.0_dp, work1, work2)
+        end if
         ! Combine alpha and beta densities for ROHF
         pdmat(:,1) = pdmat(:,1) + pdmat(:,2)
       end if
@@ -824,6 +866,9 @@ contains
       if (vshift > 0.0_dp .and. scf_type /= scf_rohf) then
         ! Turn off level shifting for the final iteration if requested
         if (vshift_last_iter) vshift = 0.0_dp
+        shift_applied = (vshift > 0.0_dp)
+        ! Keep the unshifted first build (see cold_first_iter).
+        if (iter == 1 .and. shift_applied) fock_noshift = pfock
 
         ! Apply level shifting based on SCF type
         select case (scf_type)
@@ -903,6 +948,19 @@ contains
                      mo_e_b=mo_energy_b)
           end select
       else
+        ! After a failed zero-VSHIFT build (see below) the subspace holds that
+        ! unshifted Fock next to shifted ones; restart it on this shifted build.
+        if (probe_failed) then
+          call conv%init(ldim=nbf, &
+                         maxvec=maxdiis, &
+                         subconvergers=[conv_cdiis], &
+                         thresholds   =[ethr_cdiis_big], &
+                         overlap=smat_full, &
+                         overlap_sqrt=qmat, &
+                         num_focks=diis_nfocks, &
+                         verbose=int(infos%control%verbose))
+          probe_failed = .false.
+        end if
         ! DIIS: Only pass Fock and density matrices
         call conv%add_data( &
                  f=pfock(:,1:diis_nfocks), &
@@ -929,7 +987,7 @@ contains
           mo_b = mo_a
           mo_energy_b = mo_energy_a
         end if
-        call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
+        call build_scf_density(pdmat, mo_a, mo_b, infos, basis)
         ! TRAH returns rotated (non-canonical) orbitals/energies. Diagonalize
         ! the converged Fock so post-SCF properties and analytic gradients receive
         ! canonical MOs and orbital energies (same density/energy at the stationary
@@ -939,29 +997,10 @@ contains
         ! run_trah now always runs the native solver, so a caller setting the C
         ! control field to anything but 1 would otherwise skip canonicalization.
         if (scf_type /= scf_rohf) then
-          if (do_mom) then
-            ! MOM: the aufbau fill in get_ab_initio_orbital can drop the
-            ! state-specific occupation TRAH converged to (TRAH itself preserves
-            ! the occupied space by rotation, so the energy/density built above are
-            ! already on the target). Use the TRAH-converged MOs as the MOM
-            ! reference so the canonical MOs -- and the density rebuilt from them --
-            ! keep the targeted occupied space.
-            mo_a_prev = mo_a; mo_e_a_prev = mo_energy_a
-            call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
-            call apply_mom(infos, mo_a_prev, mo_e_a_prev, mo_a, mo_energy_a, &
-                           smat_full, nelec_a, "Alpha", work1, work2)
-            if (scf_type == scf_uhf .and. nelec_b /= 0) then
-              mo_b_prev = mo_b; mo_e_b_prev = mo_energy_b
-              call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
-              call apply_mom(infos, mo_b_prev, mo_e_b_prev, mo_b, mo_energy_b, &
-                             smat_full, nelec_b, "Beta", work1, work2)
-            end if
-            call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
-          else
-            call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
-            if (scf_type == scf_uhf .and. nelec_b /= 0) &
-              call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
-          end if
+          ! MOM/rstctmo never reach TRAH (init_scf_converger refuses them).
+          call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
+          if (scf_type == scf_uhf .and. nelec_b /= 0) &
+            call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
         end if
       end if
 
@@ -1064,38 +1103,194 @@ contains
       end if
 
       !----------------------------------------------------------------------------
+      ! Never accept convergence on the first Fock build of a model-Hamiltonian
+      ! guess (Huckel, Hcore, SAP, MINAO, ...). The DIIS loop diagonalises a Fock
+      ! only after the convergence test, so such an exit would publish the guess
+      ! eigenpairs: when the guess density is already exact (e.g. by symmetry in
+      ! H2/STO-3G) every consumer of the orbital energies (TDHF A-matrix
+      ! diagonal, MP2, Koopmans) used guess eigenvalues. Diagonalising F(1) at
+      ! the exit instead would leave the orbitals out of step with the density
+      ! and energy when the guess only meets the tolerance. One more ordinary
+      ! iteration keeps orbitals, density and energy from the same SCF state.
+      ! With maxit = 1 there is no iteration to add; the guess is still not
+      ! accepted, and iteration exhaustion reports non-convergence.
+      ! A level shift (vshift, or V-DIIS before it switches the shift off) is
+      ! already inside pfock here; the orbitals of the extra iteration, and the
+      ! energies refreshed for supplied orbitals, are taken from the unshifted
+      ! first build (fock_noshift) so no shifted virtual energy is published.
+      !----------------------------------------------------------------------------
+      ! SOSCF and TRAH are held as DIIS is: their first conv%run returns the
+      ! SD result, so the iteration-1 test only rates the model guess.
+      cold_first_iter = (iter == 1) .and. (.not. supplied_valid)
+      cold_held = cold_first_iter .and. (abs(diis_error) < infos%control%conv) &
+          .and. (vshift == 0.0_dp) .and. (.not. ps_force_iter) .and. (.not. xc_reuse_now)
+
+      !----------------------------------------------------------------------------
       ! Check for SCF Convergence
       !----------------------------------------------------------------------------
-      ! Convergence guards (both .false. on the default path, so a no-op there):
+      ! Convergence guards (all .false. on the default path, so a no-op there):
       !  - ps_force_iter (progressive screening): never converge on a loose/coarse build.
       !  - xc_reuse_now (IncDFT): never converge on an iteration whose XC was reused
       !    (stale); the next iteration forces a full XC build so the fixed point is exact.
+      !  - cold_first_iter: see above.
+      !  - shift_applied after iteration 1: V-DIIS zeroes vshift only after the
+      !    build, so this Fock can still carry the shift; only the iteration-1
+      !    exit keeps an unshifted copy (fock_noshift). Build once more.
+      !  - aufbau_lost: the level shift raises the virtuals of the orbitals in
+      !    hand, so it holds whatever occupation the guess started from, and
+      !    FDS - SDF is small at any stationary point, aufbau or not. The
+      !    zero-VSHIFT build is accepted only when the occupied space is that
+      !    of its own Fock (UHF triplet H2O/6-31G PBE, vshift 0.3: alpha b2
+      !    held above an empty a1, -75.9351 Eh instead of -76.0144 Eh).
+      !    MOM/rstctmo choose a non-aufbau occupation on purpose; TRAH applies
+      !    no shift. pFON has no integer occupation while it anneals, but at
+      !    ~1 K (where it may exit) its occupation is the aufbau one of the
+      !    orbital energies it was given, so a shift-held occupation survives
+      !    it too (UHF triplet H2O/6-31G PBE, pfon + vshift 0.3: -75.9351 Eh):
+      !    check it once annealed.
+      ! pfon is a null pointer unless pFON is on, and Fortran does not
+      ! short-circuit .and.: read its temperature only under do_pfon (an
+      ! unoptimised build dereferenced it at every converged exit).
+      pfon_hot = .false.
+      if (do_pfon) pfon_hot = pfon%temp > 1.0_dp + 1.0e-6_dp
+      aufbau_lost = .false.
+      if (vshift_last_iter .and. (abs(diis_error) < infos%control%conv) .and. &
+          .not. (do_mom .or. do_rstctmo .or. use_trah) .and. .not. pfon_hot) then
+        if (.not. allocated(fock_release)) allocate(fock_release(nbf_tri, nfocks))
+        fock_release = pfock(:,1:nfocks)
+        ! ROHF: only the DIIS path forms the effective Fock on every build.
+        if (scf_type == scf_rohf .and. .not. do_check) &
+          call form_rohf_fock(fock_release(:,1), fock_release(:,2), mo_a, smat_full, &
+                              nelec_a, nelec_b, nbf, 0.0_dp, work1, work2)
+        lost_flag = 0
+        if (int2_driver%pe%rank == 0) then
+          select case (scf_type)
+          case (scf_rhf)
+            aufbau_lost = occupied_space_lost(fock_release(:,1), mo_a, nelec/2, &
+                                              qmat, smat_full, nbf)
+          case (scf_uhf)
+            aufbau_lost = occupied_space_lost(fock_release(:,1), mo_a, nelec_a, &
+                                              qmat, smat_full, nbf) .or. &
+                          occupied_space_lost(fock_release(:,2), mo_b, nelec_b, &
+                                              qmat, smat_full, nbf)
+          case (scf_rohf)
+            ! Not the effective Fock: its ordering of open-shell and virtual
+            ! orbitals depends on the canonicalisation, and a SOMO with an
+            ! empty degenerate partner (NO pi*) would flip at every probe. The
+            ! alpha and beta electrons must fill the lowest orbitals of their
+            ! own spin Fock (rohf_bak holds them on the DIIS path).
+            if (do_check) then
+              aufbau_lost = occupied_space_lost(rohf_bak(:,1), mo_a, nelec_a, &
+                                                qmat, smat_full, nbf) .or. &
+                            occupied_space_lost(rohf_bak(:,2), mo_a, nelec_b, &
+                                                qmat, smat_full, nbf)
+            else
+              aufbau_lost = occupied_space_lost(pfock(:,1), mo_a, nelec_a, &
+                                                qmat, smat_full, nbf) .or. &
+                            occupied_space_lost(pfock(:,2), mo_a, nelec_b, &
+                                                qmat, smat_full, nbf)
+            end if
+          end select
+          if (aufbau_lost) lost_flag = 1
+        end if
+        call int2_driver%pe%bcast(lost_flag, 1)
+        aufbau_lost = lost_flag(1) == 1
+      end if
       if ((abs(diis_error) < infos%control%conv) .and. (vshift == 0.0_dp) &
-          .and. (.not. ps_force_iter) .and. (.not. xc_reuse_now)) then
-        ! Fully converged - exit loop
-        if (do_pfon) then
-          if (pfon%temp > 1.0_dp + 1.0e-6_dp) then
-            do_pfon_final = .true.
-          else
-            exit
-          end if
+          .and. (.not. ps_force_iter) .and. (.not. xc_reuse_now) &
+          .and. (.not. cold_first_iter) .and. (.not. aufbau_lost) &
+          .and. .not. (shift_applied .and. iter > 1 .and. .not. (use_soscf .or. use_trah))) then
+        ! Fully converged - exit loop (pFON: only once annealed to ~1 K).
+        ! The pFON exit goes through the same orbital-energy steps below as
+        ! every other DIIS exit: it used to leave directly and published the
+        ! shifted virtual energies of a vshift run (RHF/ROHF +vshift).
+        if (pfon_hot) then
+          do_pfon_final = .true.
         else
           if (vshift_last_iter) vshift = 0.0_dp
-          call handle_soscf_trah_rohf(use_soscf, use_trah, scf_type, pfock, rohf_bak, &
-                                      mo_a, mo_b, mo_energy_a, mo_energy_b, &
-                                      qmat, smat_full, nelec_a, nelec_b, nbf, nbf_tri, vshift, &
-                                      work1, work2, infos, basis, &
-                                      dens_prev, pdmat)
+          ! A first-iteration exit (supplied orbitals; cold guesses are held
+          ! above) may carry the V-DIIS level shift in pfock. Restore the
+          ! unshifted build so every consumer -- the energy refresh below, the
+          ! UHF rediagonalisation after the loop and the saved final Fock --
+          ! sees the SCF Fock, not the shifted one.
+          if (iter == 1 .and. shift_applied .and. .not. (use_soscf .or. use_trah)) &
+            pfock = fock_noshift
+          ! Supplied orbitals (restarts, MD/NAMD steps) may converge on the
+          ! first build. They define the density, so they are kept with their
+          ! coefficients, occupations and phases -- restart and NAMD phase
+          ! tracking rely on that -- and only their energies, which may be
+          ! stale or from another geometry, are refreshed against this Fock.
+          ! UHF is rediagonalised after the loop.
+          if (iter == 1 .and. supplied_valid .and. &
+              .not. (use_soscf .or. use_trah) .and. &
+              scf_type /= scf_uhf .and. int2_driver%pe%rank == 0) then
+            call fock_diagonal_energies(pfock(:,1), mo_a, mo_energy_a, nbf)
+            if (scf_type == scf_rohf) then
+              mo_b = mo_a
+              mo_energy_b = mo_energy_a
+            end if
+          end if
+          ! The loop leaves before it diagonalises the Fock it has just tested,
+          ! so the orbitals in hand diagonalise the previous DIIS Fock, and
+          ! their eigenvalues belong to that Fock. After a level shift (the
+          ! build before "a last SCF with zero VSHIFT", or shifted Focks still
+          ! in the V-DIIS subspace) it carried the shift, and every virtual
+          ! energy kept +vshift (ROHF: open shells +vshift/2). It can also come
+          ! from a density that was not an SCF density at all: orbitals carried
+          ! over from another geometry (numerical Hessian displacements) built
+          ! F(1), and for H2 in a minimal basis FDS - SDF of F(2) vanishes by
+          ! symmetry, so the run left at iteration 2 with the eigenvalues of
+          ! F(1) -- the TDHF excitation 2.7 meV off and the numerical Hessian
+          ! wrong. The orbitals built the converged density and energy, so
+          ! they are kept; their energies are always taken from the Fock just
+          ! tested (ROHF: the effective Fock of this build, vshift = 0).
+          ! UHF is rediagonalised after the loop.
+          if (iter > 1 .and. .not. (use_soscf .or. use_trah) .and. &
+              scf_type /= scf_uhf .and. int2_driver%pe%rank == 0) then
+            call fock_diagonal_energies(pfock(:,1), mo_a, mo_energy_a, nbf)
+            if (scf_type == scf_rohf) then
+              mo_b = mo_a
+              mo_energy_b = mo_energy_a
+            end if
+          end if
+          if (.not. do_pfon) &
+            call handle_soscf_trah_rohf(use_soscf, use_trah, scf_type, pfock, rohf_bak, &
+                                        mo_a, mo_b, mo_energy_a, mo_energy_b, &
+                                        qmat, smat_full, nelec_a, nelec_b, nbf, nbf_tri, vshift, &
+                                        work1, work2, infos, basis, pdmat)
           exit
         end if
       elseif ((abs(diis_error) < infos%control%conv) .and. (vshift /= 0.0_dp)) then
-        ! Converged but need one more iteration with vshift=0
+        ! Converged but need one more iteration with vshift=0. Switch the
+        ! shift off here: under SOSCF/TRAH the ROHF Fock (and with it the
+        ! vshift_last_iter reset) is formed only on iteration 1, so the shift
+        ! would otherwise stay on and convergence could never be accepted.
         write(IW,"(3x,64('-')/10x,'Performing a last SCF with zero VSHIFT.')")
         vshift_last_iter = .true.
-      elseif (vshift_last_iter) then
-        ! Only for ROHF case the final iteration with vshift=0 complete - exit loop
-        call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
-        exit
+        vshift = 0.0_dp
+      elseif (vshift_last_iter .and. aufbau_lost) then
+        ! The zero-shift build is stationary, but its occupied orbitals are not
+        ! the lowest of its own Fock: the shift had held the guess occupation.
+        ! Take the next orbitals from this Fock by aufbau and converge again
+        ! with the shift from there (DIIS restarts as below; SOSCF restarts).
+        write(IW,"(3x,64('-')/10x,'Zero-VSHIFT build is not aufbau; occupation released, level shift restored.')")
+        vshift_last_iter = .false.
+        vshift = infos%control%vshift
+        release_occ = .true.
+        if (.not. (use_soscf .or. use_trah)) probe_failed = .true.
+      elseif (vshift_last_iter .and. (abs(diis_error) >= infos%control%conv)) then
+        ! The zero-shift build missed the tolerance: the shifted run had only
+        ! dipped below it. Restore the shift and keep iterating; leaving the
+        ! loop here reported convergence for an unconverged state. DIIS must
+        ! not extrapolate across this unshifted Fock and the shifted ones: the
+        ! coefficients can turn the shift negative and swap occupied and
+        ! virtual orbitals (NO ROHF, vshift 2.6: -129.70 -> -114.7 Eh). The
+        ! next orbitals therefore come from this Fock itself, and DIIS
+        ! restarts on the next (shifted) build.
+        write(IW,"(3x,64('-')/10x,'Zero-VSHIFT build not converged; level shift restored.')")
+        vshift_last_iter = .false.
+        vshift = infos%control%vshift
+        if (.not. (use_soscf .or. use_trah)) probe_failed = .true.
       end if
 
       !----------------------------------------------------------------------------
@@ -1131,7 +1326,27 @@ contains
       !----------------------------------------------------------------------------
       ! Update Fock or Orbitals and Eigenvalues Based on Active Converger
       !----------------------------------------------------------------------------
-      if (use_soscf .and. trim(conv_res%active_converger_name) == 'SOSCF') then
+      if (release_occ) then
+        ! Aufbau orbitals of the unshifted zero-VSHIFT build (see aufbau_lost).
+        if (int2_driver%pe%rank == 0) then
+          call get_ab_initio_orbital(fock_release(:,1), mo_a, mo_energy_a, qmat)
+          if (scf_type == scf_uhf .and. nelec_b /= 0) then
+            call get_ab_initio_orbital(fock_release(:,2), mo_b, mo_energy_b, qmat)
+          elseif (scf_type == scf_rohf) then
+            mo_b = mo_a
+            mo_energy_b = mo_energy_a
+          end if
+        end if
+        ! SOSCF holds a quasi-Newton history of the released state; start over.
+        if (use_soscf) then
+          vshift_dummy = vshift
+          call conv%clean()
+          call init_scf_converger(infos, molGrid, conv, nbf, nelec_a, nelec_b, &
+                                  maxdiis, diis_nfocks, soscf_nfocks, &
+                                  smat_full, qmat, vshift_dummy, soscf_dummy, trah_dummy)
+        end if
+        release_occ = .false.
+      else if (use_soscf .and. trim(conv_res%active_converger_name) == 'SOSCF') then
         ! SOSCF: Retrieve updated MOs and energies directly
         ! Note: Fock matrix is fixed in SOSCF;
         !       rebuilt in next iteration,
@@ -1156,7 +1371,8 @@ contains
       else
         ! DIIS: Retrieve updated Fock directly
         ! Form the interpolated the Fock/Density matrix
-        call conv_res%get_fock(matrix=pfock(:,1:diis_nfocks), istat=stat)
+        if (.not. probe_failed) &
+          call conv_res%get_fock(matrix=pfock(:,1:diis_nfocks), istat=stat)
         ! A first-iteration SD result normally diagonalises this Fock. For a
         ! second-order solver that would refill supplied orbitals by energy and
         ! can change the occupation of a converged non-Aufbau ROHF solution.
@@ -1178,6 +1394,12 @@ contains
             call fock_diagonal_energies(pfock(:,2), mo_b, mo_energy_b, nbf)
           if (int2_driver%pe%rank == 0) &
             write(IW,"(10x,'Second-order converger starts from the supplied orbitals.')")
+        else if (int2_driver%pe%rank == 0 .and. cold_held .and. shift_applied) then
+           ! Withheld cold first-iteration convergence: diagonalise the
+           ! unshifted first build (see cold_first_iter).
+           call get_ab_initio_orbital(fock_noshift(:,1), mo_a, mo_energy_a, qmat)
+           if (scf_type == scf_uhf .and. nelec_b /= 0) &
+              call get_ab_initio_orbital(fock_noshift(:,2), mo_b, mo_energy_b, qmat)
         else if (int2_driver%pe%rank == 0) then
            ! Compute New Alpha Orbitals
            call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
@@ -1209,7 +1431,7 @@ contains
                       mo_b, mo_energy_b, mo_a_prev, mo_e_a_prev, &
                       mo_b_prev, mo_e_b_prev,&
                       smat_full, work1, work2,&
-                      mom_active, initial_mom_iter, &
+                      mom_active, &
                       .false., IW)
       !----------------------------------------------------------------------------
       ! Apply XAS if enabled
@@ -1222,9 +1444,16 @@ contains
       ! Build New Density Matrix from Updated Orbitals
       !----------------------------------------------------------------------------
       if (int2_driver%pe%rank == 0) then
-        if (do_pfon) call pfon%build_density(pdmat(:,1), mo_a, work1, work2, do_pfon, pdmat(:,2), mo_b)
-        if (.not. do_pfon) &
-        call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
+        if (do_pfon) then
+          ! pdmat has a beta column only for UHF/ROHF.
+          if (nfocks > 1) then
+            call pfon%build_density(pdmat(:,1), mo_a, work1, work2, do_pfon, pdmat(:,2), mo_b)
+          else
+            call pfon%build_density(pdmat(:,1), mo_a, work1, work2, do_pfon)
+          end if
+        else
+          call build_scf_density(pdmat, mo_a, mo_b, infos, basis)
+        end if
       end if
       call int2_driver%pe%bcast(pdmat, size(pdmat))
 
@@ -1310,8 +1539,18 @@ contains
         call int2_driver%pe%bcast(mo_energy_b, size(mo_energy_b))
     end if
     if (scf_type == scf_uhf) then
-        call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
-        call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
+      ! Publish canonical orbitals of the final Fock that span the converged
+      ! density pdmat. An aufbau diagonalisation would lose a MOM or
+      ! restricted-MO (rstctmo) occupation (a core hole: the 1s came back
+      ! occupied and the excited electron's orbital was published as a
+      ! virtual) and, before tight convergence, change the occupied space.
+      ! The density, not the orbitals in hand, is the reference: after a
+      ! first-iteration exit from a supplied guess those orbitals need not be
+      ! the ones that built it.
+      call density_space_orbitals(pfock(:,1), pdmat(:,1), smat_full, mo_a, mo_energy_a, &
+                                  1, nbf, nelec_a)
+      call density_space_orbitals(pfock(:,2), pdmat(:,2), smat_full, mo_b, mo_energy_b, &
+                                  1, nbf, nelec_b)
     endif
 
     !----------------------------------------------------------------------------
@@ -1423,35 +1662,40 @@ contains
                                     qmat, smat_full,                                &
                                     nelec_a, nelec_b, nbf, nbf_tri, vshift,        &
                                     work1, work2,                                   &
-                                    infos, basis,                                   &
-                                    dens_prev, pdmat)
+                                    infos, basis, pdmat)
     use precision,   only : dp
     use types,       only : information 
     use scf_addons,  only : scf_rhf, scf_uhf, scf_rohf
     use basis_tools, only : basis_set
-    use guess, only: get_ab_initio_density, get_ab_initio_orbital
+    use guess, only: density_space_orbitals
     implicit none
     ! Inputs / inouts mirroring your code
     logical,          intent(in)            :: use_soscf, use_trah
     integer,          intent(in)            :: scf_type, nelec_a, nelec_b, nbf, nbf_tri
     real(dp),         intent(inout)         :: pfock(:,:)        ! (nbf, 2)
     real(dp),         intent(inout)         :: rohf_bak(:,:)     ! (nbf, 2)
-    real(dp),         intent(inout)         :: mo_a(:,:), mo_b(:,:)
-    real(dp),         intent(inout)         :: mo_energy_a(:), mo_energy_b(:)
+    real(dp),         intent(inout)         :: mo_a(:,:)
+    real(dp),         intent(inout)         :: mo_energy_a(:)
+    ! Beta MOs exist only for UHF/ROHF; for RHF the caller's pointers are
+    ! unassociated and therefore arrive here as absent.
+    real(dp),         intent(inout), optional :: mo_b(:,:)
+    real(dp),         intent(inout), optional :: mo_energy_b(:)
     real(dp),         intent(inout)         :: qmat(:,:), smat_full(:,:)
     real(dp),         intent(inout)         :: vshift
     real(dp),         intent(inout)         :: work1(:,:), work2(:,:)
     type(information),intent(inout)         :: infos
     type(basis_set),  intent(in)            :: basis
-    real(dp),         intent(inout)         :: dens_prev(:,:)    ! (nbf_tri, 2)
     real(dp),         intent(inout)         :: pdmat(:,:)        ! (nbf_tri, 2)
-
-    ! locals
-    integer :: i
-    real(dp) :: delta_dens_a, delta_dens_b
 
     if (.not.(use_soscf .or. use_trah)) return
 
+    ! SOSCF and TRAH converge by rotations and leave non-canonical orbitals.
+    ! A full diagonalisation of the Fock used to replace them, while pdmat and
+    ! the energy stayed those of the orbitals in hand: before convergence (a
+    ! loose tolerance) the published orbitals then built another density, and
+    ! a non-aufbau occupation (MOM, rstctmo) came back as the aufbau one.
+    ! Canonicalise within the occupied space of pdmat and its complement
+    ! instead; at convergence that is the same as the full diagonalisation.
     if (scf_type == scf_rohf) then
       rohf_bak(:,1) = pfock(:,1)
       rohf_bak(:,2) = pfock(:,2)
@@ -1459,47 +1703,47 @@ contains
       ! Build ROHF effective Fock(s)
       call form_rohf_fock(pfock(:,1), pfock(:,2), mo_a, smat_full,                 &
                           nelec_a, nelec_b, nbf, vshift, work1, work2)
-    end if
-
-    ! Diagonalize alpha Fock
-    call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
-
-    ! Spin treatment
-    if (scf_type == scf_rohf) then
+      ! Doubly, singly and unoccupied blocks of the effective Fock.
+      call density_space_orbitals(pfock(:,1), pdmat(:,1), smat_full, mo_a, mo_energy_a, &
+                                  1, nbf, nelec_a)
+      call density_space_orbitals(pfock(:,1), pdmat(:,2), smat_full, mo_a, mo_energy_a, &
+                                  1, nelec_a, nelec_b)
       mo_b = mo_a
       mo_energy_b = mo_energy_a
-    else if (scf_type == scf_uhf) then
-      call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
-    end if
-
-    ! Build densities from MOs (both spins)
-    call get_ab_initio_density(dens_prev(:,1), mo_a,                               &
-                               dens_prev(:,2), mo_b, infos, basis)
-
-    ! ROHF post-fix based on density delta
-    if (scf_type == scf_rohf) then
-      delta_dens_a = 0.0_dp
-      delta_dens_b = 0.0_dp
-      do i = 1, nbf_tri
-        delta_dens_a = delta_dens_a + abs(dens_prev(i,1) - pdmat(i,1))
-        delta_dens_b = delta_dens_b + abs(dens_prev(i,2) - pdmat(i,2))
-      end do
-
-      if (delta_dens_a > 0.1_dp) then
-        call rohf_fix(mo_a, mo_energy_a, pdmat(:,1), smat_full, nelec_a, nbf, nbf)
-        mo_b=mo_a
-        mo_energy_b=mo_energy_a
-      end if
-      if (delta_dens_b > 0.1_dp) then
-        call rohf_fix(mo_b, mo_energy_b, pdmat(:,2), smat_full, nelec_b, nelec_a, nbf)
-        mo_a=mo_b
-        mo_energy_a=mo_energy_b
-      end if
-
       ! Combine spin densities
       pdmat(:,1) = pdmat(:,1) + pdmat(:,2)
+    else
+      ! RHF: pdmat(:,1) is the total density; its scale does not matter.
+      call density_space_orbitals(pfock(:,1), pdmat(:,1), smat_full, mo_a, mo_energy_a, &
+                                  1, nbf, nelec_a)
+      if (scf_type == scf_uhf) &
+        call density_space_orbitals(pfock(:,2), pdmat(:,2), smat_full, mo_b, mo_energy_b, &
+                                    1, nbf, nelec_b)
     end if
   end subroutine handle_soscf_trah_rohf
+
+  !> @brief Build the SCF density matrices from the current MOs.
+  !> @details The density array has a beta column only for UHF/ROHF
+  !>          (nfocks = 2); for RHF it has one column and no beta MOs exist,
+  !>          so the beta arguments must not be referenced.
+  subroutine build_scf_density(dens, mo_a, mo_b, infos, basis)
+    use precision,   only : dp
+    use types,       only : information
+    use basis_tools, only : basis_set
+    use guess,       only : get_ab_initio_density
+    implicit none
+    real(dp),          intent(inout)           :: dens(:,:)
+    real(dp),          intent(inout)           :: mo_a(:,:)
+    real(dp),          intent(inout), optional :: mo_b(:,:)
+    type(information), intent(in)              :: infos
+    type(basis_set),   intent(in)              :: basis
+
+    if (size(dens, 2) > 1) then
+      call get_ab_initio_density(dens(:,1), mo_a, dens(:,2), mo_b, infos, basis)
+    else
+      call get_ab_initio_density(dens(:,1), mo_a, infos=infos, basis=basis)
+    end if
+  end subroutine build_scf_density
 
   subroutine handle_mom(infos, do_mom, diis_error, scf_type,          &
                         nelec_a, nelec_b,                                          &
@@ -1508,7 +1752,7 @@ contains
                         mo_a_prev, mo_e_a_prev,                                    &
                         mo_b_prev, mo_e_b_prev,                                    &
                         smat_full, work1, work2,                                   &
-                        mom_active, initial_mom_iter,                              &
+                        mom_active,                                                &
                         do_print, IW)
     use precision, only : dp
     use types,     only : information
@@ -1522,7 +1766,7 @@ contains
     real(dp),         intent(inout), optional :: mo_b(:,:), mo_energy_b(:)
     real(dp),         intent(in)            :: smat_full(:,:)
     real(dp),         intent(inout)         :: work1(:,:), work2(:,:)
-    logical,          intent(inout)         :: mom_active, initial_mom_iter
+    logical,          intent(inout)         :: mom_active
     logical,          intent(in)            :: do_print
     integer,          intent(in)            :: IW
     real(dp),         intent(inout)         :: mo_a_prev(:,:), mo_e_a_prev(:)
@@ -1537,7 +1781,7 @@ contains
       mom_active = .true.
     end if
 
-    if (mom_active .and. .not. initial_mom_iter) then
+    if (mom_active) then
       ! Alpha
       call apply_mom(infos, mo_a_prev, mo_e_a_prev, &
                      mo_a, mo_energy_a, smat_full, nelec_a, &
@@ -1559,7 +1803,6 @@ contains
       mo_e_b_prev = mo_energy_b
     end if
 
-    initial_mom_iter = .false.
   end subroutine handle_mom
 
 
@@ -1650,6 +1893,7 @@ contains
     use mod_dft_molgrid, only: dft_grid_t
     use scf_converger, only: scf_conv, conv_cdiis, conv_ediis, conv_soscf, conv_trah
     use scf_addons, only: scf_diis, scf_bfgs, scf_trah
+    use messages, only: show_message, WITH_ABORT
 
     implicit none
 
@@ -1730,6 +1974,13 @@ contains
       call set_soscf_parametres(infos, conv)
 
     case (scf_trah) ! TRAH
+      ! TRAH minimises the energy over orbital rotations. A MOM or rstctmo
+      ! target is a non-aufbau stationary point with negative curvature, and
+      ! TRAH (which never re-diagonalises, so neither occupation rule can act)
+      ! descends from it to a lower state while reporting convergence.
+      if (infos%control%mom .or. infos%control%rstctmo) &
+        call show_message('* Error: TRAH cannot keep a MOM/RSTCTMO occupation; '// &
+                          'use converger_type=diis or soscf', WITH_ABORT)
       use_trah = .true.
       call conv%init(ldim=nbf, nelec_a=nelec_a, nelec_b=nelec_b, &
                      maxvec=control_maxit, &
@@ -2023,6 +2274,33 @@ contains
   end function orthonormal_orbitals
 
   !> Evaluate diag(C^T F C) for supplied orbitals and the current AO Fock.
+  !> @brief True when the aufbau occupied orbitals of a Fock matrix do not
+  !>        span the first nocc orbitals in hand (at least one orbital lost).
+  !> @detail captured = || C_F(:,1:nocc)^T S C(:,1:nocc) ||_F^2 equals nocc for
+  !>         the same occupied space and drops by one per exchanged orbital;
+  !>         half an orbital separates the two.
+  function occupied_space_lost(fock, mo, nocc, qmat, smat_full, nbf) result(lost)
+    use precision, only: dp
+    use guess, only: get_ab_initio_orbital
+    use oqp_linalg
+
+    implicit none
+
+    real(kind=dp), intent(in) :: fock(:), mo(:,:), qmat(:,:), smat_full(:,:)
+    integer, intent(in) :: nocc, nbf
+    logical :: lost
+    real(kind=dp), allocatable :: c(:,:), e(:), f(:), sc(:,:), ov(:,:)
+
+    lost = .false.
+    if (nocc <= 0) return
+    allocate(c(nbf,nbf), e(nbf), sc(nbf,nocc), ov(nocc,nocc))
+    f = fock
+    call get_ab_initio_orbital(f, c, e, qmat)
+    call dgemm('n', 'n', nbf, nocc, nbf, 1.0_dp, smat_full, nbf, mo, nbf, 0.0_dp, sc, nbf)
+    call dgemm('t', 'n', nocc, nocc, nbf, 1.0_dp, c, nbf, sc, nbf, 0.0_dp, ov, nocc)
+    lost = sum(ov**2) < real(nocc, dp) - 0.5_dp
+  end function occupied_space_lost
+
   subroutine fock_diagonal_energies(fock, mo, mo_e, nbf)
     use precision, only: dp
     use mathlib, only: unpack_matrix

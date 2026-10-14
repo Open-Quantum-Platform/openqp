@@ -294,7 +294,7 @@ GENERIC_SCHEMA_KEYS = {
     "solute_com": _keys("enabled center force_constant atoms"),
     "input": _keys("library perf ispher d4 qmmm_flag soc_2e omp_threads verbose"),
     "d4": _keys("s6 s8 s9 a1 a2 alp"),
-    "mp2": _keys("variant same_spin_scale opposite_spin_scale"),
+    "mp2": _keys("variant transform same_spin_scale opposite_spin_scale"),
     "cc": _keys("maxit conv ndiis nfzc cholesky cholesky_tol cholesky_direct"),
     "guess": _keys("type file file2 save_mol continue_geom swapmo"),
     "pcm": _keys("enabled backend mode model solvent epsilon radii"),
@@ -894,7 +894,7 @@ def _fold_native_section_into_driver(
 # settings remain available through exact calls such as ``tdhf(nvdav=30)``.
 RESPONSE_MODEL_OPTIONS = {"nstate"}
 MP2_MODEL_OPTIONS = {
-    "reference", "variant", "same_spin_scale", "opposite_spin_scale",
+    "reference", "variant", "transform", "same_spin_scale", "opposite_spin_scale",
 }
 # Coupled cluster takes the reference plus the [cc] solver controls inline,
 # the same shape MP2 uses for its spin-scaling knobs.
@@ -2038,8 +2038,8 @@ def _validate_semantics(spec: CalculationSpec) -> None:
                     raise OQPInputError("soc %s must be a positive integer" % key)
     if driver.name in {"hess", "thermo"} and "type" in driver.kwargs:
         hess_type = str(driver.kwargs["type"]).strip().lower()
-        if hess_type not in {"numerical", "analytical"}:
-            raise OQPInputError("%s type must be numerical or analytical" % driver.name)
+        if hess_type not in {"auto", "numerical", "analytical"}:
+            raise OQPInputError("%s type must be auto, numerical or analytical" % driver.name)
     if driver.name in {"nac", "bp"} and "type" in driver.kwargs:
         nac_type = str(driver.kwargs["type"]).strip().lower()
         if nac_type not in {"numerical", "analytical"}:
@@ -2180,11 +2180,22 @@ def _validate_semantics(spec: CalculationSpec) -> None:
         if model in {
             "tddft", "tda", "tda-hf", "tdhf", "tddftb", "tda-dftb"
         } and state.label and not state.label.startswith("S"):
-            # The closed-shell RPA/TDA response has no triplet path.
-            raise OQPInputError(
-                "Conventional TD calculations support singlet labels only; "
-                "use mrsf or sf for triplet-state calculations"
+            # The closed-shell RPA/TDA response has a triplet path (no
+            # Coulomb term, f_aa - f_ab kernel) for energies, gradients and
+            # geometry optimizations: energy(T0), grad(Tn), opt(Tn).  Triplet
+            # Hessians, NACs and dynamics do not exist and stay rejected.
+            triplet_ok = (
+                model in {"tddft", "tda", "tda-hf", "tdhf"}
+                and state.label.startswith("T")
+                and driver.name in {"energy", "grad", "optimize"}
             )
+            if not triplet_ok:
+                raise OQPInputError(
+                    "Conventional TD calculations support singlet labels only, "
+                    "apart from closed-shell triplet energies, gradients and "
+                    "optimizations (energy(T0), grad(Tn), opt(Tn)); "
+                    "use mrsf or sf for other triplet-state workflows"
+                )
         if model == "mrsf-dftb" and state.label and state.label.startswith("Q"):
             raise OQPInputError("MRSF-TDDFTB supports singlet or triplet labels, not quintet")
 

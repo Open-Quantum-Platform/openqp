@@ -12,6 +12,15 @@ void oqp_simplex_qp_solve_avoid(int64_t n, const double *h, const double *g,
 /* Internal ECP-integral self-test: err[0..9] (see tests/fortran/ecp_selftest.F90). */
 void oqp_ecp_selftest(double *err);
 
+/* Internal TDHF Davidson residual self-test (tests/fortran/rpa_residual_selftest.F90).
+   Arrays are column-major: w_l, w_r, v_l, v_r (n, ndsr); q (n, ndsr, 2). */
+void oqp_rpa_residual_selftest(int64_t n, int64_t ndsr, int64_t imax,
+                               bool tamm_dancoff, double tol,
+                               double *w_l, double *w_r, double *v_l, double *v_r,
+                               const double *ee, const double *abd,
+                               double *errors, double *q, double *mxerr,
+                               int *converged);
+
 typedef double xyz_t[3];
 
 typedef struct oqp_handle_t {
@@ -29,6 +38,12 @@ typedef struct oqp_handle_t {
     struct electron_shell *elshell;
     struct trah_control *trah;
 } oqp_handle_t;
+
+/* Internal LibXC owner/setup regression; compares signed XC Fock matrices. */
+void functional_owner_cache_compare(oqp_handle_t *a, oqp_handle_t *b,
+                                    double *error, int *failed);
+int64_t functional_owner_cache_revision(oqp_handle_t *owner);
+void functional_owner_cache_clean(oqp_handle_t *owner);
 
 struct Cstring{
   int64_t length;
@@ -195,6 +210,7 @@ struct control_parameters {
     int64_t   cc_cholesky;
     double    cc_cholesky_tol;
     int64_t   cc_cholesky_direct;
+    int64_t   mp2_transform;
 };
 
 struct mpi_communicator {
@@ -476,6 +492,22 @@ void casscf_hess_bmat(int32_t nbf, int32_t ncore, int32_t nact, int32_t npar,
  * determinant encoding, in which case the caller falls back to Python. */
 int64_t casscf_excitation_stack(int32_t nact, int64_t ndet, const int64_t *dets,
     double *stack);
+/* W[t,u,a] = sum_b <a|E_tu|b> civec[b], C-order [nact,nact,ndet].
+ * Requires 1 <= nact <= 31, positive ndet, and sorted keys with their
+ * zero-based permutation to CI order. Returns 0 on success, -1 for invalid
+ * dimensions/encoding or out-of-range permutation (output untouched).
+ * Successful calls initialize W. */
+int64_t casscf_exc_stack_apply_wmat(int32_t nact, int64_t ndet,
+    const int64_t *dets, const int64_t *skeys, const int64_t *sperm,
+    const double *civec, double *wmat);
+/* Matrix-free counterpart of casscf_hess_amp. Same C-order operands, but
+ * determinant keys replace the dense excitation stack. Returns 0 on success,
+ * -1 for invalid dimensions/encoding/permutation or allocation failure
+ * (amp untouched). */
+int64_t casscf_hess_amp_mf(int32_t nact, int64_t ndet, int32_t npar,
+    const int64_t *dets, const int64_t *skeys, const int64_t *sperm,
+    const double *fder, const double *gder, const double *wmat,
+    const double *vecs, double *amp);
 /* Determinant-space bookkeeping and mean-field Fock of the PT2 path
  * (pt2_kernel.F90).  Determinant keys are the fci.py integers, so these need
  * 2*norb <= 62.  pt2_external_indices returns the number of external
@@ -748,6 +780,7 @@ int64_t casscf_ao_gradient(struct oqp_handle_t *inf, int32_t nbf,
     int32_t nvec, const double *lam, const double *avm,
     double *info);
 void hf_hessian(struct oqp_handle_t *inf);
+int oqp_functional_needs_tau(struct oqp_handle_t *inf);
 void hess1_selftest(struct oqp_handle_t *inf);
 void xi_fock_selftest(struct oqp_handle_t *inf);
 void oqp_xi_grid_ingredients(struct oqp_handle_t *inf, int64_t nalpha, const double *alphas, const int64_t *ps, int64_t scale, double cutoff);
@@ -810,6 +843,8 @@ void mrsf_nac_xc_adjoint(struct oqp_handle_t *inf);
 
 void mp2_energy(struct oqp_handle_t *inf);
 void mp2_gradient(struct oqp_handle_t *inf);
+void mp2_gradient_density_test(int64_t n, int64_t no, const double *c,
+                               const double *l2, double *gao);
 void ccsd_t_energy(struct oqp_handle_t *inf);
 
 /* Derivative-integral contraction for the analytic SC-NEVPT2 nuclear gradient

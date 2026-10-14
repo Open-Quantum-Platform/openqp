@@ -29,6 +29,8 @@ METHODS = {
 CC_METHODS = {"ccsd", "ccsd(t)"}
 SCF_TYPES = {"rhf", "rohf", "uhf"}
 TDHF_TYPES = {"rpa", "tda", "sf", "mrsf", "umrsf", "mrsf_ekt_ip", "mrsf_ekt_ea"}
+# runtypes of the closed-shell triplet RPA/TDA (tdhf_energy, tdhf_z_vector, tdhf_gradient)
+TRIPLET_RPA_RUNTYPES = {"energy", "grad", "optimize"}
 MP2_VARIANTS = {
     "mp2", "conventional",
     "scs", "scs-mp2",
@@ -234,6 +236,7 @@ WIKI_HELP = {
     "input.runtype": "Use energy, ekt, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, irc, neb, md, namd, soc, prop, or data. md runs ground-state Born-Oppenheimer molecular dynamics; namd runs excited-state nonadiabatic dynamics.",
     "input.method": "Use method=hf for HF/DFT, method=tdhf for TDHF/TDDFT/SF/MRSF, method=mp2 for ground-state MP2, method=ccsd or ccsd(t) for closed-shell coupled cluster, method=dftb for the optional OpenQP-DFTB backend, method=xtb for the optional OpenQP-xTB (LC-GFN1-xTB) backend, method=fci for legacy FCI-style CI, method=casci for fixed-orbital active-space CI, method=casscf for native CASSCF macroiterations, method=sa-casscf with [state_average] enabled=true for native SA-CASSCF, method=caspt2 for native determinant-space state-specific PT2, method=ms-caspt2 for native determinant-space multistate PT2, method=xms-caspt2 for native determinant-space extended multistate PT2, or the GAMESS-convention QDPT family: method=mrmp2 (single-state), method=mcqdpt2 (multistate, single-set), method=xmcqdpt2 (Granovsky extended H0).",
     "mp2.variant": "Use mp2, scs-mp2, sos-mp2, os-mp2, ss-mp2, scs-mi-mp2, or custom with explicit OS/SS scales.",
+    "mp2.transform": "Use auto for the normal size/work guard, direct for guarded direct-J, or n5 for a required packed energy transform. n5 can use occupied-virtual storage but stops if neither packed route succeeds.",
     "input.system": "Set system to an XYZ file path or inline coordinates with one atom per indented line.",
     "input.basis": "Set basis to a basis name, a comma-separated per-atom list, or library with tagged atoms and [input] library mappings.",
     "scf.type": "RHF is for multiplicity 1 closed-shell references. SF/MRSF needs an open-shell reference, usually ROHF.",
@@ -2222,6 +2225,25 @@ def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
             action="Choose one of the implemented DIIS types.",
         )
 
+    # TRAH minimises over orbital rotations without re-diagonalising, so it
+    # cannot keep the non-aufbau occupation MOM or rstctmo selects; from such
+    # a stationary point it descends to a lower state.  scf_driver refuses it.
+    occupation_rule = [key for key in ("mom", "rstctmo")
+                       if _is_true(_get(config, "scf", key, False))]
+    if occupation_rule:
+        for option, value in (("converger_type", converger),
+                              ("init_converger", init_converger)):
+            if value == "trah":
+                report.add(
+                    "ERROR",
+                    f"scf.{option}",
+                    "TRAH cannot keep the orbital occupation selected by "
+                    f"scf.{occupation_rule[0]}.",
+                    value=value,
+                    expected="diis or soscf",
+                    action=f"Use {option}=diis or soscf with scf.{occupation_rule[0]}.",
+                )
+
     # Match init_scf_converger() in source/scf.F90.  A nonzero vshift selects
     # the C-DIIS/E-DIIS/C-DIIS cascade for every DIIS subtype, while SOSCF and
     # TRAH never construct the simplex solver.  An explicitly configured
@@ -2367,24 +2389,36 @@ def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
             wiki=WIKI_HELP["tdhf.type"],
         )
 
-    # The conventional RPA/TDA response (tdhf_energy, tdhf_z_vector,
-    # tdhf_gradient) builds only the closed-shell singlet A and B matrices: the
-    # Coulomb term is always present and the XC kernel is the alpha-plus-beta
-    # one.  There is no triplet (exchange-only, alpha-minus-beta kernel) path,
-    # so a triplet request silently returns the singlet roots.
-    if td_type in {"rpa", "tda"} and int(td_mult) != 1:
+    # The conventional RPA/TDA response builds the closed-shell singlet A and B
+    # matrices (Coulomb term, alpha-plus-beta kernel) or, with multiplicity=3,
+    # the closed-shell triplet ones (no Coulomb term, alpha-minus-beta kernel).
+    # tdhf_energy, tdhf_z_vector and tdhf_gradient handle the triplet, so
+    # triplet energies, gradients and geometry optimizations are available on
+    # the closed-shell RHF/RKS reference; Hessians, NACs and crossings are not.
+    if td_type in {"rpa", "tda"} and int(td_mult) not in (1, 3):
         report.add(
             "ERROR",
             "tdhf.multiplicity",
-            "Conventional RPA/TDA response computes singlet excited states only; "
-            "closed-shell triplet response is not implemented and would return the singlet roots.",
+            "Conventional RPA/TDA response computes singlet (1) or closed-shell triplet (3) excited states.",
             value=td_mult,
-            expected="1",
-            action="Set [tdhf] multiplicity=1, or use [tdhf] type=mrsf (or sf) "
-                   "with an ROHF triplet reference for triplet states.",
+            expected="1 or 3",
+            action="Set [tdhf] multiplicity=1 or 3.",
             wiki=WIKI_HELP["tdhf.type"],
         )
-
+    if td_type in {"rpa", "tda"} and int(td_mult) == 3 and (
+            runtype not in TRIPLET_RPA_RUNTYPES or scf_type != "rhf"):
+        report.add(
+            "ERROR",
+            "tdhf.multiplicity",
+            "Closed-shell triplet RPA/TDA is implemented for energies, gradients and geometry "
+            "optimizations on an RHF/RKS reference; Hessians, NACs, crossings and open-shell "
+            "references are not implemented.",
+            value=f"{runtype}/{scf_type}/{td_mult}",
+            expected="input.runtype=energy, grad or optimize, and scf.type=rhf",
+            action="Use runtype=energy, grad or optimize with scf.type=rhf, or [tdhf] type=mrsf "
+                   "with an ROHF triplet reference for other triplet workflows.",
+            wiki=WIKI_HELP["tdhf.type"],
+        )
     # MECPOpt evaluates its two surfaces by switching [tdhf] multiplicity to
     # optimize.imult and optimize.jmult, so tdhf.multiplicity=1 does not keep a
     # conventional RPA/TDA MECP away from the missing triplet path: the
@@ -2528,11 +2562,20 @@ def _check_mp2(config: dict[str, Any], report: CheckReport) -> None:
 
     functional = _get(config, "input", "functional", "")
     variant = _as_lower(_get(config, "mp2", "variant", "mp2"))
+    transform = str(_get(config, "mp2", "transform", "auto")).strip().lower()
     ss_scale = _get(config, "mp2", "same_spin_scale", 1.0)
     os_scale = _get(config, "mp2", "opposite_spin_scale", 1.0)
     runtype = _as_lower(_get(config, "input", "runtype", "energy"))
     reference = _as_lower(_get(config, "scf", "type", "rhf"))
     derivative_runtypes = {"grad", "optimize", "ts", "mep", "irc"}
+
+    if transform not in {"auto", "direct", "n5"}:
+        report.add(
+            "ERROR", "mp2.transform", "Unknown MP2 transformation selector.",
+            value=transform, expected="auto, direct, or n5",
+            action="Set [mp2] transform=auto, direct, or n5.",
+            wiki=WIKI_HELP["mp2.transform"],
+        )
 
     if functional:
         report.add(
@@ -5255,14 +5298,29 @@ def _check_pt2(config: dict[str, Any], report: CheckReport) -> None:
         )
     elif engine_mode in {"direct", "python", "fortran"} \
             and canonical_method not in PT2_QDPT_METHODS:
-        report.add(
-            "ERROR",
-            "pt2.engine",
-            "The matrix-free direct engine requires a diagonal H0 (QDPT family).",
-            value={"method": canonical_method, "engine": engine_mode},
-            expected="method=mrmp2/mcqdpt2/xmcqdpt2 for engine=direct/fortran",
-            action="Use the QDPT-family methods, or engine=dense for CASPT2/NEVPT2.",
+        # This is an uncontracted, single-state energy contraction. In
+        # particular it must not intercept a strong-contraction request.
+        _h0_direct = _as_lower(_get(config, "pt2", "h0", "fock") or "fock")
+        _contr_direct = _as_lower(_get(config, "pt2", "contraction", "none") or "none")
+        _ipea_valid, _ipea_direct = _check_float_literal(
+            _get(config, "pt2", "ipea_shift", 0.0), "pt2.ipea_shift", report)
+        _caspt2_direct = (
+            canonical_method == "caspt2" and normalized_variant == "caspt2"
+            and _h0_direct in {"fock", "caspt2"}
+            and _contr_direct in {"none", "uncontracted", "full"}
+            and _ipea_valid and _ipea_direct == 0.0
+            and _as_lower(_get(config, "input", "runtype", "energy")) == "energy"
         )
+        if not _caspt2_direct:
+            report.add(
+                "ERROR",
+                "pt2.engine",
+                "The direct engine requires diagonal-Fock QDPT or uncontracted "
+                "single-state CASPT2 energy with zero IPEA shift.",
+                value={"method": canonical_method, "engine": engine_mode},
+                expected="CASPT2 energy: h0=fock, contraction=none, ipea_shift=0",
+                action="Use engine=dense for other CASPT2/NEVPT2 requests.",
+            )
     _check_int_literal(
         _get(config, "pt2", "max_terms", 30000000),
         "pt2.max_terms",
@@ -5438,6 +5496,15 @@ def _check_pt2(config: dict[str, Any], report: CheckReport) -> None:
             "PT2 target roots must be unique.",
             value=target_roots,
             action="Remove duplicate PT2 root slots.",
+        )
+    if normalized_variant in PT2_SINGLE_STATE_METHODS and len(parsed_target_roots) > 1:
+        report.add(
+            "ERROR",
+            "pt2.target_roots",
+            "Single-state PT2 corrects exactly one target root at a time.",
+            value=target_roots,
+            expected="one root slot (or leave unset for root 0)",
+            action="Select one target root, or use a multistate PT2 method.",
         )
     # A one-element explicit list passes the count/bounds checks below, and
     # _reference_roots then honours it -- so the runtime diagonalises a 1x1
@@ -6356,7 +6423,7 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
         _check_soc(config, report)
 
     if runtype == "hess":
-        _check_hess(config, report)
+        _check_hess(config, report, input_dir)
 
 
 def _check_model_curvature(config: dict[str, Any], report: CheckReport) -> None:
@@ -7314,7 +7381,8 @@ def _check_soc(config: dict[str, Any], report: CheckReport) -> None:
         )
 
 
-def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
+def analytic_hessian_capability(config: dict[str, Any],
+                                input_dir: str | None = None) -> tuple[str, str]:
     """Return analytic-Hessian capability status and a precise reason.
 
     This checker is intentionally conservative: enabling a dispatch scaffold must
@@ -7329,6 +7397,11 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
     td_nstate = int(_get(config, "tdhf", "nstate", 1))
     functional = _as_lower(_get(config, "input", "functional", ""))
     state = _get(config, "hess", "state", 0)
+    try:
+        # Raw (un-typed) configs from .inp/.oqp parsing carry "0" as a string.
+        state = int(str(state).strip() or 0)
+    except ValueError:
+        pass
 
     # The native analytic-Hessian derivative-integral machinery now covers the
     # features that were previously gated to the numerical Hessian:
@@ -7355,7 +7428,8 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
         if td_type == "sf":
             return "unsupported_tdhf_type", "SF-TDDFT analytic Hessian is not implemented; use type=numerical until the SF gradient/Z-vector finite-difference baseline is validated."
         if (td_type == "rpa" and scf_type == "rhf"
-                and td_multiplicity == 1 and state == 1 and td_nstate >= 2):
+                and td_multiplicity == 1 and state == 1
+                and (td_nstate >= 2 or _is_one_pair_response(config, input_dir))):
             # Keep this list synchronized with
             # tdhf_hessian_functional_is_verified.  Pure TDHF is selected by
             # an empty functional and remains valid.
@@ -7404,12 +7478,14 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
                     "excited root (hess.state=1); higher roots require an "
                     "indefinite-safe projected amplitude-response solver.",
                 )
-            if td_nstate < 2:
+            if td_nstate < 2 and not _is_one_pair_response(config, input_dir):
                 return (
                     "unsupported_feature",
                     "Analytic RPA Hessians require tdhf.nstate>=2 so the "
                     "lowest excited root can be verified as isolated from "
-                    "the next computed root.",
+                    "the next computed root (nstate=1 is enough only when "
+                    "the response space holds a single occupied-virtual "
+                    "pair, e.g. H2 or HeH+ in a minimal basis).",
                 )
             return "unsupported_feature", "The requested RPA Hessian functional is not in the verified analytic set."
         if td_type == "tda":
@@ -7419,29 +7495,122 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
     return "unsupported_method", f"Analytic Hessian does not support input.method={method}."
 
 
-def _basis_max_angular_momentum(config: dict[str, Any]) -> int | None:
+def resolve_hessian_type(config: dict[str, Any],
+                         input_dir: str | None = None) -> tuple[str, str]:
+    """Resolve ``[hess] type`` to ``analytical`` or ``numerical`` with a reason.
+
+    An explicit ``analytical`` or ``numerical`` is returned unchanged. ``auto``
+    (the default) selects the native analytic Hessian only for the ground-state
+    HF/DFT kernel and only when the run uses nothing that kernel does not
+    differentiate; anything else -- excited states, solvent, QM/MM, scalar
+    relativity, meta-GGA or double-hybrid functionals, fractional occupations,
+    g or higher functions, an uninspectable basis, or a numerical-only option --
+    stays on the finite-difference Hessian, which differentiates whatever the
+    gradient contains.
+    """
+
+    hess_type = _as_lower(_get(config, "hess", "type", "auto"))
+    if hess_type in {"analytical", "numerical"}:
+        return hess_type, f"[hess] type={hess_type} requested explicitly."
+
+    method = _as_lower(_get(config, "input", "method", "hf"))
+    if method != "hf":
+        return "numerical", f"auto: input.method={method} uses the numerical Hessian."
+    capability, reason = analytic_hessian_capability(config, input_dir)
+    if capability != "supported":
+        return "numerical", f"auto: {reason}"
+
+    functional = _as_lower(_get(config, "input", "functional", ""))
+    blockers = []
+    if functional in _UMRSF_META_GGA_FUNCTIONALS:
+        blockers.append(f"meta-GGA functional {functional}")
+    if functional in _UMRSF_DOUBLE_HYBRID_FUNCTIONALS:
+        blockers.append(f"double-hybrid functional {functional}")
+    if _is_true(_get(config, "pcm", "enabled", False)):
+        blockers.append("PCM solvent")
+    if _is_true(_get(config, "input", "qmmm_flag", False)):
+        blockers.append("QM/MM embedding")
+    if _is_true(_get(config, "odp", "enabled", False)):
+        blockers.append("ODP bias")
+    try:
+        if int(_get(config, "scf", "scal_rel", 0) or 0) != 0:
+            blockers.append("scalar-relativistic Hamiltonian")
+    except (TypeError, ValueError):
+        blockers.append("unparsed scf.scal_rel")
+    if _is_true(_get(config, "scf", "pfon", False)):
+        blockers.append("fractional occupations (pfon)")
+    if _is_true(_get(config, "hess", "symmetry_unique", False)):
+        blockers.append("hess.symmetry_unique (numerical-only option)")
+    # Only the finite-difference driver reads cached displacement gradients;
+    # the analytic kernel would silently ignore a restart request.
+    if _is_true(_get(config, "hess", "restart", False)):
+        blockers.append("hess.restart (numerical-only option)")
+    max_l = _basis_max_angular_momentum(config, input_dir)
+    if max_l is None:
+        blockers.append("basis angular momentum could not be inspected")
+    elif max_l >= 4:
+        blockers.append(f"basis max L={max_l} (analytic limit L<=3)")
+    if blockers:
+        return "numerical", "auto: numerical Hessian because of " + ", ".join(blockers) + "."
+    return "analytical", "auto: native ground-state analytic Hessian."
+
+
+def _basis_max_angular_momentum(config: dict[str, Any],
+                                input_dir: str | None = None) -> int | None:
     """Return max L in the configured basis, or None if it cannot be inspected."""
+    return _basis_max_l_detail(config, input_dir)[0]
+
+
+def _read_custom_basis(name: str, input_dir: str | None) -> dict | None:
+    """BSE-style data of a ``file:`` basis, resolved as set_basis does
+    (relative to the input directory), or None if it cannot be read."""
+    import json
+    path = name[len("file:"):]
+    if not os.path.isabs(path) and input_dir:
+        path = os.path.join(input_dir, path)
+    try:
+        if path.endswith(".json"):
+            with open(path, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        else:
+            import basis_set_exchange as bse
+            data = bse.read_formatted_basis_file(path)
+    except (OSError, ValueError, KeyError, RuntimeError):
+        # unreadable / unparsable custom basis: reported as "cannot inspect"
+        return None
+    return data if isinstance(data, dict) and "elements" in data else None
+
+
+def _atom_shells(config: dict[str, Any], input_dir: str | None = None
+                 ) -> tuple[list[tuple[int | None, dict]] | None, str | None]:
+    """([(Z or None, BSE element entry), ...], None) for every atom, or (None, why)
+    with why = 'basis' when the basis cannot be inspected and 'geometry' when
+    the atoms cannot be listed."""
     try:
         import basis_set_exchange as bse
-    except Exception:
-        return None
+    except ImportError:
+        return None, "basis"
 
     basis = _get(config, "input", "basis", "")
     system = _get(config, "input", "system", "")
     library = _get(config, "input", "library", "")
     inline_lines, xyz_path = _iter_coordinate_lines(system)
     lines = inline_lines
-    if xyz_path and os.path.exists(os.path.abspath(xyz_path)):
-        with open(os.path.abspath(xyz_path), "r", encoding="utf-8") as handle:
-            xyz_lines = handle.read().splitlines()
-        try:
-            num_atoms = int(xyz_lines[0])
-            lines = xyz_lines[2:2 + num_atoms]
-        except (IndexError, ValueError):
-            lines = xyz_lines
+    if xyz_path:
+        xyz_file, _ = _split_geometry_reference(xyz_path)
+        if not os.path.isabs(xyz_file) and input_dir:
+            xyz_file = os.path.join(input_dir, xyz_file)
+        if os.path.exists(os.path.abspath(xyz_file)):
+            with open(os.path.abspath(xyz_file), "r", encoding="utf-8") as handle:
+                xyz_lines = handle.read().splitlines()
+            try:
+                num_atoms = int(xyz_lines[0])
+                lines = xyz_lines[2:2 + num_atoms]
+            except (IndexError, ValueError):
+                lines = xyz_lines
 
     if not lines:
-        return None
+        return None, "geometry"
 
     per_atom_basis: list[str] = []
     if basis == "library":
@@ -7462,43 +7631,122 @@ def _basis_max_angular_momentum(config: dict[str, Any]) -> int | None:
             per_atom_basis = names
 
     if len(per_atom_basis) != len(lines):
-        return None
+        return None, "geometry"
 
-    max_l = 0
+    custom: dict[str, dict | None] = {}
+    atoms: list[tuple[int, dict]] = []
     for line, basis_name in zip(lines, per_atom_basis):
         parts = line.split()
         if not parts:
             continue
         element = parts[0]
-        data = bse.get_basis(basis_name, elements=[element])
-        for item in data.get("elements", {}).values():
-            for shell in item.get("electron_shells", []):
-                max_l = max(max_l, max(int(l) for l in shell.get("angular_momentum", [])))
-    return max_l
+        if basis_name.lower().startswith("file:"):
+            if basis_name not in custom:
+                custom[basis_name] = _read_custom_basis(basis_name, input_dir)
+            data = custom[basis_name]
+            if data is None:
+                return None, "basis"
+            try:
+                z = int(float(element))
+            except ValueError:
+                try:
+                    z = int(bse.lut.element_Z_from_sym(element))
+                except KeyError:   # unknown element symbol
+                    return None, "basis"
+            entry = data["elements"].get(str(z))
+            if entry is None:
+                return None, "basis"
+        else:
+            try:
+                data = bse.get_basis(basis_name, elements=[element])
+            except KeyError:   # basis or element not in the BSE library
+                return None, "basis"
+            elements = data.get("elements", {})
+            try:
+                z = int(float(element))
+            except ValueError:
+                try:
+                    z = int(bse.lut.element_Z_from_sym(element))
+                except (AttributeError, KeyError):   # unknown symbol
+                    z = None
+            if z is not None and str(z) in elements:
+                entry = elements[str(z)]
+            else:
+                # One element was requested; keep every shell returned.
+                entry = {"electron_shells": [shell for item in elements.values()
+                                             for shell in item.get("electron_shells", [])]}
+                if len(elements) != 1:
+                    z = None
+        atoms.append((z, entry))
+    return atoms, None
 
 
-def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
+def _basis_max_l_detail(config: dict[str, Any],
+                        input_dir: str | None = None) -> tuple[int | None, str | None]:
+    """(max L, None), or (None, why) with why = 'basis' when the basis itself
+    cannot be inspected and 'geometry' when the atoms cannot be listed."""
+    atoms, why = _atom_shells(config, input_dir)
+    if atoms is None:
+        return None, why
+    max_l = 0
+    for _, entry in atoms:
+        for shell in entry.get("electron_shells", []):
+            max_l = max(max_l, max(int(l) for l in shell.get("angular_momentum", [0])))
+    return max_l, None
+
+
+def _is_one_pair_response(config: dict[str, Any], input_dir: str | None = None) -> bool:
+    """True only when the closed-shell response space is one occupied-virtual
+    pair (nocc = 1 and two basis functions, e.g. H2 or HeH+ in STO-3G).
+
+    Any function beyond s already gives three or more basis functions, so the
+    count does not depend on spherical versus Cartesian functions.  Returns
+    False whenever the basis, the geometry or the electron count cannot be
+    read: the caller then keeps requiring two computed roots.
+    """
+    atoms, _ = _atom_shells(config, input_dir)
+    if not atoms or any(z is None for z, _ in atoms):
+        return False
+    try:
+        charge = int(_get(config, "input", "charge", 0))
+    except (TypeError, ValueError):
+        return False
+    nelec = sum(z - int(entry.get("ecp_electrons", 0) or 0) for z, entry in atoms) - charge
+    nbf = 0
+    for _, entry in atoms:
+        for shell in entry.get("electron_shells", []):
+            am = [int(l) for l in shell.get("angular_momentum", [0])]
+            ncontr = len(shell.get("coefficients", [])) if len(am) == 1 else 1
+            nbf += sum(ncontr * (2 * l + 1) for l in am)
+    return nelec == 2 and nbf == 2
+
+
+def _check_hess(config: dict[str, Any], report: CheckReport,
+                input_dir: str | None = None) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     state = _get(config, "hess", "state", 0)
-    hess_type = _as_lower(_get(config, "hess", "type", "numerical"))
+    requested_type = _as_lower(_get(config, "hess", "type", "auto"))
+    hess_type = requested_type
     read = _get(config, "hess", "read", False)
     restart = _get(config, "hess", "restart", False)
     nproc = _get(config, "hess", "nproc", 1)
     temperatures = _as_list(_get(config, "hess", "temperature", []))
 
-    if hess_type not in {"numerical", "analytical"}:
+    if hess_type not in {"auto", "numerical", "analytical"}:
         report.add(
             "ERROR",
             "hess.type",
             "Unknown Hessian type.",
             value=hess_type,
-            expected="numerical or analytical",
-            action="Set [hess] type=numerical or type=analytical.",
+            expected="auto, numerical or analytical",
+            action="Set [hess] type=auto, type=numerical or type=analytical.",
         )
         return
+    if hess_type == "auto":
+        hess_type, _ = resolve_hessian_type(config, input_dir)
 
     if hess_type == "analytical":
-        capability, reason = analytic_hessian_capability(config)
+        capability, reason = analytic_hessian_capability(config, input_dir)
         if capability != "supported":
             report.add(
                 "ERROR",
@@ -7508,7 +7756,16 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
                 expected="supported analytical Hessian capability",
                 action="Set [hess] type=numerical or use a supported analytic-Hessian method/state.",
             )
-        max_l = _basis_max_angular_momentum(config)
+        max_l, why = _basis_max_l_detail(config, input_dir)
+        if max_l is None and why == "basis":
+            report.add(
+                "ERROR",
+                "input.basis",
+                "The basis cannot be inspected, so the analytical Hessian's L<=3 limit cannot be checked.",
+                value=str(_get(config, "input", "basis", "")),
+                expected="a readable basis with no g or higher functions",
+                action="Fix the basis reference, or set [hess] type=numerical (or auto).",
+            )
         if max_l is not None and max_l >= 4:
             report.add(
                 "ERROR",

@@ -19,9 +19,7 @@ primitive with the LANL2DZ Br ECP at the HOBr O-Br separation.
 
 import os
 import unittest
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
 NATIVE_TESTS_REQUIRED = os.getenv("OQP_REQUIRE_NATIVE_TESTS") == "1"
 _RUNTIME_ERROR = ""
 
@@ -29,7 +27,6 @@ _RUNTIME_ERROR = ""
 def _runtime_available():
     global _RUNTIME_ERROR
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         import oqp
 
@@ -89,6 +86,9 @@ class NativeEcpSelfTest(unittest.TestCase):
         self.assertLess(self.err[5], 1e-14)
 
     def test_repeated_calls_reproduce_the_first(self):
+        # Every buffer is per call and every OpenMP accumulation has a fixed
+        # order, so all ten errors repeat bit for bit (threaded case:
+        # tests/test_ecp_hess_contract_reproducible.py).
         self.assertEqual(self.err, self.err_repeat)
 
     def test_f_g_element_matches_independent_quadrature(self):

@@ -5,6 +5,7 @@ import importlib.util
 import sys
 import types
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,39 +21,33 @@ def load_module(module_name, relative_path):
     return module
 
 
-def install_minimal_oqp_stubs():
-    numpy_stub = sys.modules.setdefault("numpy", types.ModuleType("numpy"))
-    for name in (
-        "void",
-        "int8",
-        "int16",
-        "int32",
-        "int64",
-        "uint8",
-        "uint16",
-        "uint32",
-        "uint64",
-        "float32",
-        "float64",
-        "complex64",
-        "complex128",
-    ):
-        setattr(numpy_stub, name, type(name, (), {}))
-    setattr(numpy_stub, "dtype", lambda value: value)
+def minimal_oqp_stubs():
+    """Fresh stand-ins for the compiled ``oqp`` package and its helpers.
 
-    oqp = sys.modules.setdefault("oqp", types.ModuleType("oqp"))
+    Every entry is a new module object, installed only for the duration of a
+    test by ``mock.patch.dict(sys.modules, ...)``.  Already-imported modules
+    must never be fetched and mutated: an earlier version used
+    ``sys.modules.setdefault("numpy", ...)``, which returned the real numpy
+    and replaced ``numpy.int32``/``numpy.float64``/``numpy.dtype`` for the
+    rest of the session.  Every later ``np.empty(n, dtype=np.int32)`` then
+    became an object array, and native kernels writing raw integers into it
+    crashed ``tolist()`` (tests/test_state_tracking.py segfault on macOS).
+    numpy is a hard dependency of pyoqp and is used as is.
+    """
+    oqp = types.ModuleType("oqp")
+    oqp.__path__ = []
     setattr(oqp, "ffi", object())
     setattr(oqp, "lib", object())
 
-    sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+    utils = types.ModuleType("oqp.utils")
+    utils.__path__ = []
+
     constants = types.ModuleType("oqp.utils.constants")
     setattr(constants, "ANGSTROM_TO_BOHR", 1.8897261254576558)
-    sys.modules["oqp.utils.constants"] = constants
 
     periodic_table = types.ModuleType("oqp.periodic_table")
     setattr(periodic_table, "MASSES", {})
     setattr(periodic_table, "SYMBOL_MAP", {})
-    sys.modules["oqp.periodic_table"] = periodic_table
 
     mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
 
@@ -61,12 +56,30 @@ def install_minimal_oqp_stubs():
         size = 1
 
     setattr(mpi_utils, "MPIManager", MPIManager)
-    sys.modules["oqp.utils.mpi_utils"] = mpi_utils
+
+    # oqpdata imports oqp.utils.qmmm (pure Python) and stores settings on it;
+    # load a private copy from source so the test runs in any order.
+    qmmm_spec = importlib.util.spec_from_file_location(
+        "oqp.utils.qmmm", ROOT / "pyoqp/oqp/utils/qmmm.py")
+    qmmm = importlib.util.module_from_spec(qmmm_spec)
+    qmmm_spec.loader.exec_module(qmmm)
+    return {
+        "oqp": oqp,
+        "oqp.utils": utils,
+        "oqp.utils.constants": constants,
+        "oqp.utils.qmmm": qmmm,
+        "oqp.periodic_table": periodic_table,
+        "oqp.utils.mpi_utils": mpi_utils,
+    }
 
 
 class PCMScaffoldTests(unittest.TestCase):
     def setUp(self):
-        install_minimal_oqp_stubs()
+        # Restores every sys.modules entry (stubs and modules loaded by the
+        # test) when the test ends.
+        modules = mock.patch.dict(sys.modules, minimal_oqp_stubs())
+        modules.start()
+        self.addCleanup(modules.stop)
 
     def test_schema_accepts_pcm_section_defaults(self):
         oqpdata = load_module(
@@ -381,6 +394,28 @@ epsilon=water
         errors = {item.path: item.message for item in report.errors}
         self.assertIn("pcm.epsilon", errors)
         self.assertIn("must be numeric", errors["pcm.epsilon"])
+
+
+class PCMScaffoldIsolationTests(unittest.TestCase):
+    """The stubs above must not leak into, or modify, real modules."""
+
+    def test_stubbed_test_leaves_numpy_and_sys_modules_untouched(self):
+        import numpy
+
+        guarded = ("int32", "int64", "float64", "complex128", "dtype")
+        numpy_before = {name: getattr(numpy, name) for name in guarded}
+        modules_before = {name: sys.modules.get(name)
+                          for name in ("numpy", *minimal_oqp_stubs())}
+
+        result = unittest.TestResult()
+        PCMScaffoldTests("test_schema_accepts_pcm_section_defaults").run(result)
+        self.assertEqual(result.errors + result.failures, [])
+
+        for name, original in numpy_before.items():
+            self.assertIs(getattr(numpy, name), original, f"numpy.{name}")
+        self.assertEqual(numpy.empty(2, dtype=numpy.int32).dtype, numpy.dtype("int32"))
+        for name, original in modules_before.items():
+            self.assertIs(sys.modules.get(name), original, name)
 
 
 if __name__ == "__main__":

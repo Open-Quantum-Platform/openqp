@@ -1,0 +1,20 @@
+# H2O+ ROHF/6-31G analytic Hessian with analytic IR and Raman intensities
+# (open-shell dipole and polarizability nuclear derivatives).
+[input]
+system=
+   8   0.000000000   0.000000000   0.117300000
+   1   0.000000000   0.757200000  -0.469200000
+   1   0.000000000  -0.757200000  -0.469200000
+charge=1
+runtype=hess
+basis=6-31g
+method=hf
+
+[scf]
+type=rohf
+multiplicity=2
+conv=1.0e-10
+
+[hess]
+type=analytical
+clean=True

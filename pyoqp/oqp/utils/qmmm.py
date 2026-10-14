@@ -429,8 +429,10 @@ def openmm_system():
          y.append(qm_position[1]+g_factor*(mm_position[1]-qm_position[1]))
          z.append(qm_position[2]+g_factor*(mm_position[2]-qm_position[2]))
 
-# If error in link atom partitioning, exit!
-   if linkatom_error: exit()
+# If error in link atom partitioning, stop with a non-zero status
+   if linkatom_error:
+      raise ValueError("QM/MM link-atom scaling factor outside (0, 1); "
+                       "reconsider the QM/MM partitioning listed above.")
 
    return num_atoms, x, y, z, q, mass
 

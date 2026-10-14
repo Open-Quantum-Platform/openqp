@@ -21,6 +21,7 @@ module tdhf_z_vector_mod
   private
   public tdhf_z_vector_C
   public oqp_tdhf_z_vector
+  public td_xc_spin_mode
 
   type :: tdhf_cg_data
     type(information), pointer :: infos
@@ -79,6 +80,8 @@ contains
     use tdhf_lib, only: int2_rpagrd_data_t
     use pcg_mod
     use printing, only: print_module_info
+    use population_analysis, only: mulliken_excited
+    use qmmm_mod, only: form_esp_charges_excited
 
     implicit none
 
@@ -400,6 +403,15 @@ contains
     call pack_matrix(wmo, wao)
     wao = wao*0.5_dp
 
+    ! QM/MM (ESPF): relaxed Mulliken and ESP charges of the target state, which
+    ! the MM electrostatic-embedding forces use (as in the MRSF z-vector).
+    ! Without them the QM/MM excited-state forces on MM atoms were built from
+    ! the ground-state charges.
+    if (infos%control%qmmm_flag) then
+      call mulliken_excited(infos)
+      call form_esp_charges_excited(infos)
+    end if
+
     ! Cleanup
     call int2_driver%clean()
     if (dft) call dftclean(infos)
@@ -413,8 +425,8 @@ contains
 !> @brief Compute H+[X+Y], H+[T], and H-[X-Y]
   subroutine compute_r_terms(infos, basis, int2_driver, molGrid, mo_a, xpy, xmy, ta, hpp, hpt, hmm, gxp)
 
-    use mod_dft_gridint_fxc, only: tddft_fxc
-    use mod_dft_gridint_gxc, only: tddft_gxc
+    use mod_dft_gridint_fxc, only: tddft_fxc, utddft_fxc
+    use mod_dft_gridint_gxc, only: tddft_gxc, utddft_gxc
     use tdhf_lib, only: int2_rpagrd_data_t
     use mathlib, only: symmetrize_matrix, orthogonal_transform
     use mathlib, only: unpack_matrix
@@ -427,10 +439,10 @@ contains
     real(kind=dp), intent(in) :: mo_a(:,:), xpy(:), xmy(:), ta(:)
     real(kind=dp), target :: hpp(:,:,:), hpt(:,:,:), hmm(:,:,:), gxp(:,:,:)
     real(kind=dp), allocatable, target :: xpy2(:,:,:,:), xmy2(:,:,:,:)
-    real(kind=dp), allocatable, target :: hp(:,:,:)
-    real(kind=dp) :: scale_exch
+    real(kind=dp), allocatable, target :: hp(:,:,:), dxb(:,:,:), fxb(:,:,:)
+    real(kind=dp) :: scale_exch, xc_beta_sign
     integer :: nocc, nvir, nbf
-    logical :: tda, dft
+    logical :: tda, dft, triplet, xc_unrestricted
     type(int2_rpagrd_data_t), target :: int2_data
 
     nbf = basis%nbf
@@ -438,6 +450,7 @@ contains
     nvir = nbf-nocc
     tda = infos%tddft%tda
     dft = infos%control%hamilton == 20
+    call td_xc_spin_mode(infos, triplet, xc_unrestricted, xc_beta_sign)
 
     allocate(xpy2(nbf,nbf,2,1), &
              xmy2(nbf,nbf,1,1), &
@@ -458,7 +471,35 @@ contains
     scale_exch = 1.0_dp
     if (dft) scale_exch = infos%dft%HFscale
 
-    if (dft) then
+    if (dft .and. xc_unrestricted) then
+      ! Closed-shell triplet: the X+Y transition density is spin-antisymmetric
+      ! (dxa = D, dxb = -D), so its kernel is f_aa - f_ab and its third
+      ! derivative uses the spin-resolved contraction (alpha blocks are taken;
+      ! for a closed-shell reference the beta blocks are equal / opposite).
+      ! T is a spin-symmetric difference density and keeps the restricted
+      ! kernel.  xc_beta_sign = +1 (test hook) routes the singlet through the
+      ! same unrestricted code, which must reproduce the restricted path.
+      allocate(dxb(nbf,nbf,1), fxb(nbf,nbf,1), hp(nbf,nbf,1), source=0.0_dp)
+      dxb(:,:,1) = xc_beta_sign*xpy2(:,:,1,1)
+      call utddft_gxc(basis=basis, molGrid=molGrid, isVecs=.true., &
+             wfa=MO_A, wfb=MO_A, fxa=gxp(:,:,1:1), fxb=fxb, &
+             dxa=xpy2(:,:,1:1,1), dxb=dxb, nmtx=1, threshold=0.0d0, infos=infos)
+
+      dxb(:,:,1) = xc_beta_sign*xpy2(:,:,1,1)
+      fxb = 0.0_dp
+      call utddft_fxc(basis=basis, molGrid=molGrid, isVecs=.true., &
+             wfa=MO_A, wfb=MO_A, fxa=hp(:,:,1:1), fxb=fxb, &
+             dxa=xpy2(:,:,1:1,1), dxb=dxb, nMtx=1, threshold=0.0d0, infos=infos)
+      hpp(:,:,1) = hpp(:,:,1) + hp(:,:,1)
+
+      hp = 0.0_dp
+      call tddft_fxc(basis=basis, molGrid=molGrid, isVecs=.true., &
+             wf=MO_A, fx=hp(:,:,1:1), dx=xpy2(:,:,2:2,1), nmtx=1, &
+             threshold=0.0d0, infos=infos)
+      hpt(:,:,1) = hpt(:,:,1) + hp(:,:,1)
+      deallocate(hp, dxb, fxb)
+
+    else if (dft) then
       call tddft_gxc(basis=basis, &
              molGrid=molGrid, &
              isVecs=.true., &
@@ -496,6 +537,8 @@ contains
             nspin = 1, &
             tamm_dancoff=tda, &
             scale_exchange=scale_exch)
+    ! Triplet: no Coulomb term in H+[X+Y] (H+[T] and H-[X-Y] unchanged)
+    int2_data%xpy_coulomb = .not. triplet
 
     call int2_driver%run(int2_data, &
             cam=dft.and.infos%dft%cam_flag, &
@@ -521,13 +564,15 @@ contains
     real(kind=dp), intent(in) :: xpy(nocc,*), xmy(nocc,*), z(nocc,*), e_mo(*), hpt(:,:), hpp(:,:), hmm(:,:)
     real(kind=dp), optional, intent(in) :: gxp(:,:)
     real(kind=dp), intent(in) :: e_state
-    real(kind=dp), intent(out) :: wmo(:,:)
+    real(kind=dp), target, intent(out) :: wmo(size(hpt,1),size(hpt,1))
     integer, intent(in) :: nocc
 
     real(kind=dp), allocatable, target :: wrk1(:,:), wrk_ia(:,:)
 
+    real(kind=dp), contiguous, pointer :: wmo_storage(:)
     integer :: nbf, nvir, i
 
+    wmo_storage(1:size(wmo)) => wmo
     nbf = ubound(wmo,1)
     nvir = nbf-nocc
 
@@ -565,11 +610,12 @@ contains
       wmo(:nocc,:nocc) = wmo(:nocc,:nocc) + 2*gxp(:nocc,:nocc)
     end if
 
+    if (nvir > 0) then
     ! W_ab (vir x vir)
     call dsyr2k('u','t',nvir,nocc, &
             e_state, xpy, nocc, &
                      xmy, nocc, &
-            1.0d0,   wmo(nocc+1:,nocc+1), nbf)
+            1.0d0,   wmo_storage(nocc*nbf+nocc+1:), nbf)
 
     do i = 1, nocc
       wrk_ia(i,:) = xpy(i,:nvir) * e_mo(i)
@@ -577,7 +623,7 @@ contains
     call dgemm('t', 'n', nvir, nvir, nocc, &
             1.0d0, xpy,    nocc, &
                    wrk_ia, nocc, &
-            1.0d0, wmo(nocc+1:,nocc+1), nbf)
+            1.0d0, wmo_storage(nocc*nbf+nocc+1:), nbf)
 
     do i = 1, nocc
       wrk_ia(i,:) = xmy(i,:nvir) * e_mo(i)
@@ -585,22 +631,24 @@ contains
     call dgemm('t', 'n', nvir, nvir, nocc, &
             1.0d0, xmy,    nocc, &
                    wrk_ia, nocc, &
-            1.0d0, wmo(nocc+1:,nocc+1), nbf)
+            1.0d0, wmo_storage(nocc*nbf+nocc+1:), nbf)
 
     ! W_ia (occ x vir)
     call dgemm('t', 'n', nocc, nvir, nocc,  &
                1.0_dp, hpp, nbf, &
                        xpy, nocc, &
-               1.0_dp, wmo(:,nocc+1), nbf)
+               1.0_dp, wmo_storage(nocc*nbf+1:), nbf)
 
     call dgemm('t', 'n', nocc, nvir, nocc,  &
                1.0_dp, hmm, nbf, &
                        xmy, nocc, &
-               1.0_dp, wmo(:,nocc+1), nbf)
+               1.0_dp, wmo_storage(nocc*nbf+1:), nbf)
 
     do i = 1, nocc
       wmo(i,nocc+1:) = wmo(i,nocc+1:) + z(i,:nvir)*e_mo(i)
     end do
+
+    end if
 
     call triangular_to_full(wmo,nbf,'u')
 
@@ -742,4 +790,24 @@ contains
     y = p%xminv*x
 
   end subroutine
+!###############################################################################
+
+!> @brief Spin mode of the conventional TD response for the gradient.
+!> @details triplet: closed-shell triplet ([tdhf] multiplicity=3).
+!>  xc_unrestricted: the X+Y XC terms use the spin-resolved kernels, with
+!>  dxb = xc_beta_sign * dxa (-1 triplet; +1 for the singlet under the internal
+!>  test hook OQP_TDDFT_XC_UNRESTRICTED=1, which must equal the restricted path).
+  subroutine td_xc_spin_mode(infos, triplet, xc_unrestricted, xc_beta_sign)
+    type(information), intent(in) :: infos
+    logical, intent(out) :: triplet, xc_unrestricted
+    real(kind=dp), intent(out) :: xc_beta_sign
+    character(len=8) :: envval
+    integer :: envlen, envstat
+
+    triplet = infos%tddft%mult == 3
+    xc_beta_sign = merge(-1.0_dp, 1.0_dp, triplet)
+    call get_environment_variable('OQP_TDDFT_XC_UNRESTRICTED', envval, length=envlen, status=envstat)
+    xc_unrestricted = triplet .or. (envstat == 0 .and. envlen > 0 .and. envval(1:1) == '1')
+  end subroutine td_xc_spin_mode
+
 end module

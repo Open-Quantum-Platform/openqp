@@ -149,7 +149,9 @@ contains
     ! Memory is the only reason to pay for it, exactly as for cholesky_direct.
     ! Every closed-shell store this routine sizes below is replicated per rank
     ! while the probe reports the node, so both route decisions and the guard
-    ! must charge the node for all the ranks sitting on it.  Deciding per rank
+    ! must charge the node for all the ranks sitting on it. local_size uses
+    ! matching processor identities when shared-node discovery is unreliable.
+    ! Duplicate names conservatively overcount distinct nodes. Deciding per rank
     ! and guarding per node made the two disagree: a job whose explicit route
     ! fit one rank but not four kept use_chol false and then aborted at the
     ! guard, instead of factorising and running.

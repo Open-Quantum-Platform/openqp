@@ -150,6 +150,7 @@ SCHEMA = {
     },
     "mp2": {
         "variant": {"type": _string, "default": "mp2"},
+        "transform": {"type": _string, "default": "auto"},
         "same_spin_scale": {"type": float, "default": "1.0"},
         "opposite_spin_scale": {"type": float, "default": "1.0"},
     },
@@ -161,7 +162,7 @@ SCHEMA = {
         "acid_padding": {"type": float, "default": "5.0"},
     },
     "hess": {
-        "type": {"type": _string, "default": "numerical"},
+        "type": {"type": _string, "default": "auto"},
         "state": {"type": int, "default": "0"},
     },
     "nac": {
@@ -668,7 +669,7 @@ $$$$
         job = (
             openqp.OpenQP(project="h2o_mp2")
             .molecule(geometry="water", basis="6-31g", charge=0, multiplicity=1)
-            .mp2(reference="uhf", variant="scs-mp2", conv=1.0e-10)
+            .mp2(reference="uhf", variant="scs-mp2", transform=" N5 ", conv=1.0e-10)
         )
 
         config = job.to_input_dict()
@@ -679,6 +680,20 @@ $$$$
         self.assertEqual(config["scf"]["type"], "uhf")
         self.assertEqual(config["scf"]["conv"], "1e-10")
         self.assertEqual(config["mp2"]["variant"], "scs-mp2")
+        self.assertEqual(config["mp2"]["transform"], "n5")
+        self.assertNotIn("transform", config["scf"])
+
+    def test_mp2_transform_settings_and_invalid_helper_preserve_job(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="transform_settings").dft("pbe")
+        before = job.to_input_dict()
+        with self.assertRaisesRegex(ValueError, "mp2.transform"):
+            job.mp2(transform="unknown", basis="cc-pvtz", conv=1e-10)
+        self.assertEqual(job.to_input_dict(), before)
+        for transform in ("auto", "direct", "n5"):
+            with self.subTest(transform=transform):
+                job.settings.mp2(transform=transform)
+                self.assertEqual(job.to_input_dict()["mp2"]["transform"], transform)
 
     def test_mp2_helper_clears_prior_dft_and_sets_custom_scales(self):
         openqp = load_openqp_module()
@@ -835,6 +850,23 @@ $$$$
         self.assertEqual(config["input"]["method"], "tdhf")
         self.assertEqual(config["input"]["functional"], "b3lyp5")
         self.assertEqual(config["tdhf"]["nstate"], "2")
+        self.assertEqual(config["tdhf"]["multiplicity"], "1")
+
+        # Closed-shell triplet response: the excited-state multiplicity goes to
+        # [tdhf], the RHF reference stays a singlet.
+        for build in (
+            lambda j: j.theory.tddft(functional="b3lyp5", basis="6-31g*", nstate=2,
+                                     state_multiplicity=3),
+            lambda j: j.theory("tddft", functional="b3lyp5", basis="6-31g*", nstate=2,
+                               state_multiplicity=3),
+            lambda j: j.theory("tdhf", basis="6-31g*", nstate=2, state_multiplicity=3),
+        ):
+            job = build(openqp.OpenQP(project="h2o_tddft_triplet")
+                        .molecule(geometry="water", charge=0, multiplicity=1))
+            config = job.to_input_dict()
+            self.assertEqual(config["scf"]["type"], "rhf")
+            self.assertEqual(config["scf"]["multiplicity"], "1")
+            self.assertEqual(config["tdhf"]["multiplicity"], "3")
 
         with self.assertRaisesRegex(ValueError, "DFT theory requires"):
             openqp.OpenQP(project="bad_dft_namespace").theory.dft()
@@ -1050,6 +1082,23 @@ $$$$
         self.assertEqual(config["input"]["runtype"], "energy")
         self.assertEqual(config["pcm"]["enabled"], "True")
         self.assertEqual(config["pcm"]["epsilon"], "78.3553")
+
+    def test_workflow_hessian_type_defaults_to_auto(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_hess_auto")
+            .molecule(geometry="water", charge=0)
+            .theory("dft", functional="pbe0", basis="def2-svp")
+        )
+        job.workflow.hessian(state=0)
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "hess")
+        self.assertEqual(config["hess"]["type"], "auto")
+
+        job.workflow.hessian(type="auto", state=0)
+        self.assertEqual(job.to_input_dict()["hess"]["type"], "auto")
+        job.workflow.hessian(type="numerical", state=0)
+        self.assertEqual(job.to_input_dict()["hess"]["type"], "numerical")
 
     def test_workflow_pcm_requires_reference_scf_theory(self):
         openqp = load_openqp_module()

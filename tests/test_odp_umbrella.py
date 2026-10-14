@@ -10,6 +10,7 @@ import sys
 import numpy as np
 import pytest
 
+from oqp_module_isolation import child_env
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -29,7 +30,6 @@ def test_odp_kernel_is_fortran_resident_and_c_interoperable():
 
 
 def test_odp_configuration_requires_explicit_metric_and_continuous_cvs():
-    sys.path.insert(0, str(ROOT / "pyoqp"))
     from oqp.library.odp import ODPUmbrella, parse_odp_cv_specification
 
     types, atoms, labels = parse_odp_cv_specification(
@@ -56,7 +56,6 @@ def test_odp_configuration_requires_explicit_metric_and_continuous_cvs():
 
 
 def test_runtime_checker_rejects_enabled_odp_outside_namd():
-    sys.path.insert(0, str(ROOT / "pyoqp"))
     from oqp.utils.input_checker import check_input_values
 
     config = {
@@ -244,11 +243,7 @@ print("ODP=" + json.dumps({
     "singular_angle": singular_angle,
 }))
 '''
-    env = os.environ.copy()
-    pythonpath = str(ROOT / "pyoqp")
-    if env.get("PYTHONPATH"):
-        pythonpath += os.pathsep + env["PYTHONPATH"]
-    env["PYTHONPATH"] = pythonpath
+    env = child_env()
     result = subprocess.run(
         [sys.executable, "-c", script], cwd=ROOT, env=env,
         capture_output=True, text=True, check=False,
@@ -393,11 +388,7 @@ payload = {
 del records
 print("ODP_IO=" + json.dumps(payload))
 '''
-    env = os.environ.copy()
-    pythonpath = str(ROOT / "pyoqp")
-    if env.get("PYTHONPATH"):
-        pythonpath += os.pathsep + env["PYTHONPATH"]
-    env["PYTHONPATH"] = pythonpath
+    env = child_env()
     env["OQP_ODP_TEST_ROOT"] = str(tmp_path)
     result = subprocess.run(
         [sys.executable, "-c", script], cwd=ROOT, env=env,
@@ -748,11 +739,7 @@ print("ODP_WHAM=" + json.dumps({
     "overlapping_segments_rejected": overlapping_segments_rejected,
 }))
 '''
-    env = os.environ.copy()
-    pythonpath = str(ROOT / "pyoqp")
-    if env.get("PYTHONPATH"):
-        pythonpath += os.pathsep + env["PYTHONPATH"]
-    env["PYTHONPATH"] = pythonpath
+    env = child_env()
     env["OQP_ODP_WHAM_ROOT"] = str(tmp_path)
     result = subprocess.run(
         [sys.executable, "-c", script], cwd=ROOT, env=env,
@@ -820,11 +807,7 @@ print("ODP_WHAM=" + json.dumps({
 
 
 def test_odp_restart_example_runs_generated_manifest(tmp_path):
-    env = os.environ.copy()
-    pythonpath = str(ROOT / "pyoqp")
-    if env.get("PYTHONPATH"):
-        pythonpath += os.pathsep + env["PYTHONPATH"]
-    env["PYTHONPATH"] = pythonpath
+    env = child_env()
     result = subprocess.run(
         [
             sys.executable,

@@ -6,35 +6,9 @@ from pathlib import Path
 
 import numpy as np
 
+from oqp_module_isolation import isolate_modules, stub_module
+
 ROOT = Path(__file__).resolve().parents[1]
-
-STUB_MODULES = [
-    "oqp",
-    "oqp.molecule",
-    "oqp.utils",
-    "oqp.utils.constants",
-    "oqp.utils.mpi_utils",
-    "oqp.utils.matrix",
-    "oqp.utils.file_utils",
-    "oqp.library",
-    "oqp.library.frequency",
-    "oqp.library.openqp_dftb",
-    "oqp.utils.state_labels",
-    "oqp.utils.qmmm",
-    "oqp.periodic_table",
-]
-
-
-def snapshot_modules(names=STUB_MODULES):
-    return {name: sys.modules.get(name) for name in names}
-
-
-def restore_modules(snapshot):
-    for name, module in snapshot.items():
-        if module is None:
-            sys.modules.pop(name, None)
-        else:
-            sys.modules[name] = module
 
 
 def load_module(name, relative_path):
@@ -47,7 +21,7 @@ def load_module(name, relative_path):
 
 class AnalyticHessianNativeDispatchTests(unittest.TestCase):
     def setUp(self):
-        self._module_snapshot = snapshot_modules()
+        self.addCleanup(isolate_modules())
         oqp_stub = types.ModuleType("oqp")
         self.native_calls = []
 
@@ -59,7 +33,7 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
         molecule_mod = types.ModuleType("oqp.molecule")
         setattr(molecule_mod, "Molecule", object)
         sys.modules["oqp.molecule"] = molecule_mod
-        sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+        stub_module("oqp.utils")
         mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
 
         class MPIManager:
@@ -121,7 +95,6 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
 
     def tearDown(self):
         sys.modules.pop("single_point_analytic_hess_dispatch", None)
-        restore_modules(self._module_snapshot)
 
     def test_hf_analytical_hessian_reads_native_fortran_hessian_without_external_backend(self):
         class Mol:
@@ -206,9 +179,9 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
 
 class AnalyticHessianInputValidationTests(unittest.TestCase):
     def setUp(self):
-        self._module_snapshot = snapshot_modules()
-        sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-        sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+        self.addCleanup(isolate_modules())
+        stub_module("oqp")
+        stub_module("oqp.utils")
         mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
 
         class MPIManager:
@@ -221,7 +194,6 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
 
     def tearDown(self):
         sys.modules.pop("input_checker_analytic_hess", None)
-        restore_modules(self._module_snapshot)
 
     def test_hf_analytical_hessian_is_allowed_by_capability_matrix(self):
         config = {
@@ -482,23 +454,37 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
         self.assertFalse(report.ok)
         self.assertIn("only the lowest excited root", report.to_text())
 
-    def test_excited_state_analytic_hessian_requires_two_computed_roots(self):
+    def _one_root_report(self, system, basis="sto-3g", charge=0):
         config = {
-            "input": {"method": "tdhf", "runtype": "hess",
-                      "system": "\nH 0 0 -0.37\nH 0 0 0.37",
-                      "basis": "sto-3g"},
+            "input": {"method": "tdhf", "runtype": "hess", "system": system,
+                      "basis": basis, "charge": charge},
             "scf": {"type": "rhf", "multiplicity": 1},
             "tdhf": {"type": "rpa", "nstate": 1, "multiplicity": 1},
             "hess": {"type": "analytical", "state": 1, "nproc": 1,
                      "temperature": [298.15]},
         }
-
-        report = self.input_checker.check_input_values(
+        return self.input_checker.check_input_values(
             config, raise_error=False, emit=False,
         )
 
-        self.assertFalse(report.ok)
-        self.assertIn("tdhf.nstate>=2", report.to_text())
+    def test_one_pair_response_space_accepts_a_single_computed_root(self):
+        # H2 and HeH+ in STO-3G: one occupied and one virtual orbital, so the
+        # only root has no partner to be degenerate with.
+        for system, charge in (("\nH 0 0 -0.37\nH 0 0 0.37", 0),
+                               ("\nHe 0 0 -0.4\nH 0 0 0.4", 1)):
+            report = self._one_root_report(system, charge=charge)
+            self.assertNotIn("tdhf.nstate", report.to_text())
+            self.assertNotIn("hess.type", {issue.path for issue in report.errors})
+
+    def test_larger_response_space_still_requires_two_computed_roots(self):
+        # H2 in 6-31G (4 basis functions) and H2O in STO-3G have several
+        # pairs: one computed root cannot show the lowest one is isolated, so
+        # the input fails here instead of after the SCF and TDHF work.
+        for system, basis in (("\nH 0 0 -0.37\nH 0 0 0.37", "6-31g"),
+                              ("\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3", "sto-3g")):
+            report = self._one_root_report(system, basis=basis)
+            self.assertFalse(report.ok, basis)
+            self.assertIn("tdhf.nstate>=2", report.to_text())
 
     def test_mrsf_analytical_hessian_is_rejected_explicitly_not_silently_numerical(self):
         config = {

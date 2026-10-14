@@ -75,7 +75,10 @@ for attr_name in dir(lib):
             continue
         raise
     if callable(attr_value):
-        if attr_name not in (
+        if attr_name == 'mp2_gradient_density_test':
+            # The array-only test adapter does not take a molecular handle.
+            globals()[attr_name] = lib.mp2_gradient_density_test
+        elif attr_name not in (
             'oqp_init', 'oqp_clean', 'oqp_set_atoms',
             'oqp_namd_counter_random', 'oqp_namd_counter_normal_fill',
             'oqp_namd_baeck_an_tdc', 'oqp_namd_nacme_gate',
@@ -86,6 +89,7 @@ for attr_name in dir(lib):
             'oqp_maximum_overlap_assignment', 'oqp_diagonal_phase_tracking',
             'oqp_simplex_qp_solve', 'oqp_simplex_qp_solve_avoid',
             'oqp_ecp_selftest',
+            'oqp_rpa_residual_selftest',
         ):
             globals()[attr_name] = _oqp_wrapper(attr_value)
         else:

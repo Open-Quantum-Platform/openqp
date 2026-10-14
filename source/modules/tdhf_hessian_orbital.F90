@@ -105,7 +105,29 @@ contains
     end do
     call ecp_deriv_ints(basis, basis%atoms%xyz, decp)
     dv = dv + decp
-    call fock_deriv_matrix(infos, basis, pfull, scale_exch, dg)
+    if (.not. infos%dft%cam_flag .and. .not. infos%mpiinfo%usempi) then
+      ! One blocked derivative-ERI traversal for all AO elements and all 3N
+      ! coordinates, instead of fock_deriv_matrix's nbf(nbf+1)/2 unit-probe
+      ! traversals.  With the identity as coefficients the helper returns the
+      ! AO operator O^x, and fock_deriv_contract(P,M) = Tr[M O^x]/8, so
+      ! fock_deriv_matrix's 2*contract(P, unit probe) is O^x/4.
+      block
+        use tdhf_hessian_z_rhs_mod, only: eri_derivative_operator_mo
+        real(dp), allocatable :: eye(:,:), op(:,:,:)
+        integer :: jj
+        allocate(eye(nbf,nbf), source=0.0_dp)
+        do jj = 1, nbf
+          eye(jj,jj) = 1.0_dp
+        end do
+        allocate(op(nbf,nbf,ncart))
+        call eri_derivative_operator_mo(infos, eye, pfull, 1, scale_exch, op)
+        dg = reshape(0.25_dp*op, [nbf,nbf,3,natom])
+        deallocate(eye, op)
+        call check_dg_operator(infos, basis, pfull, scale_exch, dg)
+      end block
+    else
+      call fock_deriv_matrix(infos, basis, pfull, scale_exch, dg)
+    end if
 
     allocate(f0ao(nbf,nbf), f0mo(nbf,nbf), gd0mo(nbf,nbf), &
              d0(nbf,nbf), d0pack(nbf2,1), gpack(nbf2,1), gfull(nbf,nbf), &
@@ -254,6 +276,33 @@ contains
     deallocate(pfull, ds, dt, dv, decp, dg, f0ao, f0mo, gd0mo, d0, &
       d0pack, gpack, gfull, probe1, bvec, uvec, dmo_occ, dxc_explicit)
   contains
+    !> OQP_HESS_G2E_CHECK=1: compare three elements of the blocked derivative
+    !> Fock matrices with fock_deriv_contract unit probes.
+    subroutine check_dg_operator(infos, basis, pfull, scale_exch, dg)
+      use fock_deriv_mod, only: fock_deriv_contract
+      use io_constants, only: iw
+      type(information), target, intent(inout) :: infos
+      type(basis_set), intent(in) :: basis
+      real(kind=dp), intent(in) :: pfull(:,:), scale_exch, dg(:,:,:,:)
+      real(kind=dp), allocatable :: probe(:,:), gx(:,:)
+      character(len=8) :: envs
+      integer :: st, n, m, kk, nb
+      call get_environment_variable('OQP_HESS_G2E_CHECK', envs, status=st)
+      if (st /= 0) return
+      if (trim(adjustl(envs)) /= '1') return
+      nb = size(pfull,1)
+      allocate(probe(nb,nb), gx(size(dg,3),size(dg,4)))
+      do kk = 0, 2
+        n = 1 + kk*(nb-1)/2; m = min(nb, n + 1 + kk)
+        probe = 0.0_dp
+        probe(n,m) = 0.5_dp; probe(m,n) = 0.5_dp
+        if (n == m) probe(n,n) = 1.0_dp
+        call fock_deriv_contract(infos, basis, pfull, probe, scale_exch, gx)
+        write(iw,'(A,2I5,A,ES12.4,A,ES12.4)') '  td dg check mu,nu=', n, m, &
+          '  max|ref|=', maxval(abs(2.0_dp*gx)), '  max|ref-op|=', maxval(abs(2.0_dp*gx-dg(n,m,:,:)))
+      end do
+    end subroutine check_dg_operator
+
     subroutine ao_to_mo(ao, coeff, mo_mat, work)
       real(kind=dp), intent(in) :: ao(:,:), coeff(:,:)
       real(kind=dp), intent(out) :: mo_mat(:,:), work(:,:)

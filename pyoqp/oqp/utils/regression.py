@@ -121,17 +121,26 @@ REGISTRY = (
     # sidecar. 'hess' is the raw matrix (mapped from sidecar 'hessian').
     RegKey('hess', runtypes=frozenset({'hess'}), required=True, source='sidecar',
            sidecar_field='hessian'),
-    RegKey('freqs', runtypes=frozenset({'hess'}), required=True, source='sidecar'),
+    # Frequencies of 10^3-10^4 cm^-1 under the absolute round(diff,4) gate
+    # demand ~9 significant figures. A finite-difference Hessian cannot hold
+    # that from run to run: gradient noise at the 1e-10 convergence level
+    # divided by dx moves H2 RPA S1 (4884.88 cm^-1, dx=0.001) by up to 4e-4
+    # cm^-1 between otherwise identical threaded runs. A relative 1e-6
+    # (5e-3 cm^-1 at 5000 cm^-1) is still far below any physically meaningful
+    # or regression-sized change (>= 0.1 cm^-1).
+    RegKey('freqs', runtypes=frozenset({'hess'}), required=True, source='sidecar',
+           rtol=1e-6),
     # IR intensities and Raman activities are second-order response properties
-    # (dipole / polarizability derivatives over the analytic Hessian). They are
-    # far more sensitive to the SCF convergence *path* than the energy or the
-    # Hessian itself: an SCF that converges to the same energy via a different
-    # route (e.g. the coarse->fine XC grid ramp, integral screening, a different
-    # guess/BLAS order) shifts the converged density at ~1e-6 and these
-    # quantities amplify that to ~1e-4 (IR) / ~1e-3 (Raman) -- above the global
-    # round(diff,4) ~5e-5 gate, while the energy stays bit-identical. Compare
-    # them with a small relative tolerance (a genuine regression is orders of
-    # magnitude larger). Same rationale as the SOC rtol below.
+    # (dipole / polarizability derivatives over the analytic Hessian) with
+    # magnitudes up to ~1e3, so the absolute round(diff,4) gate alone would
+    # demand 7-8 significant figures; a different SCF convergence path (XC grid
+    # ramp, integral screening, guess or BLAS order) moves them more than the
+    # energy.  Measured 2026-10-10 on the default path (26 HESS/ECP example
+    # outputs from two zeus x86_64 builds against these references): max
+    # relative drift 3.3e-7 (IR) and 2.1e-7 (Raman).  Both tolerances below
+    # therefore keep a >=300x margin over that drift, while a genuine
+    # regression (a wrong derivative or missing response term) is many orders
+    # of magnitude larger.  Same rationale as the SOC rtol below.
     RegKey('infrared_intensities', runtypes=frozenset({'hess'}),
            required=True, source='sidecar', rtol=1e-3),
     RegKey('raman_activities', runtypes=frozenset({'hess'}),

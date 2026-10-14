@@ -16,6 +16,8 @@ import types
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import child_env, stub_module
+
 ROOT = Path(__file__).resolve().parents[1]
 RUNFUNC = ROOT / "pyoqp" / "oqp" / "library" / "runfunc.py"
 OQPDATA = ROOT / "pyoqp" / "oqp" / "molecule" / "oqpdata.py"
@@ -200,8 +202,8 @@ def load_input_checker_with_minimal_stubs():
 
     stub_names = ("oqp", "oqp.utils", "oqp.utils.mpi_utils")
     saved = {name: sys.modules.get(name) for name in stub_names}
-    sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-    sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+    stub_module("oqp")
+    stub_module("oqp.utils")
     sys.modules["oqp.utils.mpi_utils"] = mpi_utils
     try:
         spec = importlib.util.spec_from_file_location(
@@ -356,15 +358,8 @@ class ROHFStatusAndInterfaceTests(unittest.TestCase):
             inp.write_text(ROHF_NMR_INPUT)
             env = dict(os.environ)
             env["OPENQP_ROOT"] = str(runtime_root)
-            # Use this checkout's Python wrapper while allowing it to load the
-            # selected compiled OpenQP runtime from OPENQP_ROOT.  This keeps the
-            # ROHF/NMR guard test from accidentally exercising an older
-            # pip-installed wrapper that may not know properties.nmr_gauge.
-            root_parent = str(Path(runtime_root).parent)
-            source_parent = str(ROOT / "pyoqp")
-            env["PYTHONPATH"] = os.pathsep.join(
-                item for item in (source_parent, root_parent, env.get("PYTHONPATH", "")) if item
-            )
+            # The child imports the same oqp package as this test session.
+            env = child_env(env)
             proc = subprocess.run(
                 [sys.executable, "-m", "oqp.pyoqp", str(inp)],
                 cwd=workdir,

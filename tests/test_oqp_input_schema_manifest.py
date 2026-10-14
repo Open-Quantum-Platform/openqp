@@ -236,8 +236,14 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
     # 368 with the ACID cube grid controls [properties] acid_spacing and
     # acid_padding.
     # 369 with the DKH decoupling-basis control [scf] scal_rel_decontract;
-    # 374 with the xi^alpha ingredient controls [dftgrid] xi_mode, xi_alpha,
+    # 370 with the MP2 energy transformation selector [mp2] transform;
+    # 375 with the xi^alpha ingredient controls [dftgrid] xi_mode, xi_alpha,
     # xi_p, xi_scale, xi_cutoff.
+    assert ("mp2", "transform") in checked
+    assert len(checked) == 375
+    # Keep the prior manifest count exact after removing the new selector.
+    # The original 374 controls must still be represented, in addition to it.
+    checked = [key for key in checked if key != ("mp2", "transform")]
     assert len(checked) == 374
 
 

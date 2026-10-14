@@ -39,9 +39,7 @@ contains
     real(kind=dp), allocatable :: gminus(:,:), gplus(:,:), deri_m(:,:), deri_p(:,:)
     real(kind=dp), allocatable :: inner_m(:,:), inner_p(:,:), work(:,:), dmo(:,:,:)
     real(kind=dp), allocatable :: deri_full_m(:,:,:),deri_full_p(:,:,:)
-    real(kind=dp), allocatable :: orbital_m(:,:),orbital_p(:,:)
     integer :: c, k, nbf, ncart, ncoord, nocc, nvir, nexc, status
-    logical :: zero_orbital_connection
 
     basis => infos%basis
     basis%atoms => infos%atoms
@@ -134,64 +132,16 @@ contains
       deri_p, inner_p, dapbv, status)
     if (status /= 0) call show_message('Failed to assemble d(A+B)V.', WITH_ABORT)
 
-    allocate(orbital_m(nexc,ncart),orbital_p(nexc,ncart))
-    call orbital_channel_derivative(u0,-1,orbital_m)
-    call orbital_channel_derivative(v0,+1,orbital_p)
-    ! Never suppress the KS orbital/density connection.  The DFT kxc and XC
-    ! response rows require dD even when the antisymmetric part of U vanishes.
-    zero_orbital_connection = infos%control%hamilton < 20
-    do k=1,ncart
-      if (maxval(abs(umat(:,:,k)-transpose(umat(:,:,k)))) > 1.0e-10_dp) &
-        zero_orbital_connection = .false.
-    end do
-    do k=1,ncart
-      ! The derivative-gradient polarization is already expressed in the
-      ! moving AO frame used by the analytic gradient.  It therefore contains
-      ! the metric/orbital-energy connection terms which would otherwise be
-      ! added explicitly in a fixed AO frame.  Adding C*U and eps^R here would
-      ! count those contributions twice.
-      if (zero_orbital_connection) then
-        dambu(:,k)=deri_m(:,k)+orbital_m(:,k)
-        dapbv(:,k)=deri_p(:,k)+orbital_p(:,k)
-      end if
-    end do
-
+    ! d(A-B)U and d(A+B)V are always the assembled fixed-AO-frame actions.
+    ! A former HF branch replaced them by moving-frame derivative-gradient
+    ! polarizations whenever every U was symmetric (H2/STO-3G, where parity
+    ! makes U_ov vanish); it only fitted the matching shortcut in
+    ! tdhf_hessian, and both together gave 0.20 instead of 1.159 Eh/bohr^2
+    ! for the H2 excited-state zz element.
     deallocate(pu, pv, put, pvt, dp_u, dp_v, &
       densities, amb_ao, apb_ao, gminus, gplus, deri_m, deri_p, inner_m, &
-      inner_p, work, dmo, deri_full_m, deri_full_p, orbital_m, orbital_p)
+      inner_p, work, dmo, deri_full_m, deri_full_p)
   contains
-    subroutine orbital_channel_derivative(z,channel,result)
-      real(dp),intent(in)::z(:)
-      integer,intent(in)::channel
-      real(dp),intent(out)::result(:,:)
-      real(dp),allocatable::ct(:,:),dc(:,:),dens(:,:,:),am(:,:,:),ap(:,:,:),vals(:,:),tmp(:,:),momat(:,:)
-      real(dp),parameter::steps(4)=[0.5_dp,-0.5_dp,1.0_dp,-1.0_dp]
-      integer::kk,s
-      allocate(ct(nbf,nbf),dc(nbf,nbf),dens(nbf,nbf,4),am(nbf,nbf,4),ap(nbf,nbf,4), &
-        vals(nexc,4),tmp(nbf,nbf),momat(nbf,nbf))
-      do kk=1,ncart
-        ! Only the anti-Hermitian MO rotation is an independent response in
-        ! the moving-AO frame.  The symmetric metric connection is already
-        ! contained in the explicit derivative-gradient polarization.
-        dc=0.5_dp*matmul(mo,umat(:,:,kk)-transpose(umat(:,:,kk)))
-        do s=1,4
-          ct=mo+steps(s)*dc
-          call transition_density(ct,nocc,z,dens(:,:,s))
-        end do
-        call apply_tdhf_ao_operators(infos,dens,am,ap)
-        do s=1,4
-          ct=mo+steps(s)*dc
-          if(channel<0) then
-            call ao_to_mo(am(:,:,s),ct,momat,tmp)
-          else
-            call ao_to_mo(ap(:,:,s),ct,momat,tmp)
-          end if
-          vals(:,s)=reshape(momat(1:nocc,nocc+1:),[nexc])
-        end do
-        result(:,kk)=(4.0_dp*(vals(:,1)-vals(:,2))-(vals(:,3)-vals(:,4))/2.0_dp)/3.0_dp
-      end do
-      deallocate(ct,dc,dens,am,ap,vals,tmp,momat)
-    end subroutine orbital_channel_derivative
 
     subroutine transition_density(coeff, no, z, p)
       real(kind=dp), intent(in) :: coeff(:,:), z(:)

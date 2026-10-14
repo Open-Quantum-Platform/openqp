@@ -10,10 +10,12 @@ runtype=hess
 method=hf
 
 [scf]
+conv=1.0e-9
 type=rhf
 multiplicity=1
 
 [hess]
+type=numerical
 state=0
 clean=True
 

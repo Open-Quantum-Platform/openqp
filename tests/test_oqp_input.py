@@ -325,8 +325,29 @@ def test_response_spin_is_selected_only_by_physical_state():
     # would silently answer with the singlet roots.
     for route in ("tddft(nstate=4)/pbe0/def2-svp", "tda(nstate=4)/pbe0/def2-svp",
                   "tdhf(nstate=4)/def2-svp", "tda-tdhf(nstate=4)/def2-svp"):
+        _, triplet_grad = _parse('%s geom="h2o.xyz" grad(T1)' % route)
+        assert triplet_grad["input"]["runtype"] == "grad"
+        assert triplet_grad["tdhf"]["multiplicity"] == "3"
+        assert triplet_grad["scf"]["multiplicity"] == "1"
+        assert triplet_grad["properties"]["grad"] == "2"
         with pytest.raises(OQPInputError, match="singlet labels only"):
-            oqp_input.parse_canonical_oqp('%s geom="h2o.xyz" grad(T0)' % route)
+            oqp_input.parse_canonical_oqp('%s geom="h2o.xyz" hess(T0)' % route)
+
+    # Closed-shell triplet RPA/TDA energies: energy(T0) keeps the RHF singlet
+    # reference and selects [tdhf] multiplicity=3.
+    for route, td_type in (("tddft(nstate=4)/pbe0/def2-svp", "rpa"),
+                           ("tda(nstate=4)/pbe0/def2-svp", "tda"),
+                           ("tdhf(nstate=4)/def2-svp", "rpa")):
+        _, triplet = _parse('%s geom="h2o.xyz" energy(T0)' % route)
+        assert triplet["input"]["runtype"] == "energy"
+        assert triplet["scf"]["type"] == "rhf"
+        assert triplet["scf"]["multiplicity"] == "1"
+        assert triplet["tdhf"]["type"] == td_type
+        assert triplet["tdhf"]["multiplicity"] == "3"
+        assert triplet["tdhf"]["nstate"] == "4"
+    for route in ("tddftb(nstate=4)/def2-svp",):
+        with pytest.raises(OQPInputError):
+            oqp_input.parse_canonical_oqp('%s geom="h2o.xyz" energy(T0)' % route)
 
     with pytest.raises(OQPInputError, match="does not take spin"):
         oqp_input.parse_canonical_oqp(
@@ -418,6 +439,18 @@ def test_mp2_reference_is_route_owned_and_lowers_to_scf_type():
         oqp_input.parse_canonical_oqp(
             'mp2(reference=rohf)/cc-pvdz geom="h2o.xyz" mult=1 energy'
         )
+
+
+@pytest.mark.parametrize("transform", ["auto", "direct", "n5"])
+def test_mp2_transform_exact_and_inline_lowering(transform):
+    suffix = ' geom="h2o.xyz" energy'
+    _, inline = _parse(f'mp2(transform={transform})/6-31g' + suffix)
+    _, exact = _parse(f'mp2/6-31g mp2(transform={transform})' + suffix)
+    assert inline == exact
+    assert inline["mp2"]["transform"] == transform
+    assert "transform" not in inline.get("scf", {})
+    with pytest.raises(OQPInputError, match="route-owned"):
+        _parse(f'mp2(transform={transform})/6-31g mp2(transform=auto)' + suffix)
 
 
 def test_umrsf_uses_triplet_uhf_reference():
@@ -2251,7 +2284,7 @@ def test_misspelled_derivative_types_fail_early():
             'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" '
             'nac(S0,S1,type=analytic)'
         )
-    with pytest.raises(OQPInputError, match="type must be numerical or analytical"):
+    with pytest.raises(OQPInputError, match="type must be auto, numerical or analytical"):
         oqp_input.parse_canonical_oqp(
             'dft/pbe0/def2-svp geom="h2o.xyz" hess(S0,type=analyticla)'
         )
@@ -2343,6 +2376,8 @@ def _atom_table(text):
 
 
 def test_every_wf_methods_example_has_a_committed_oqp_twin():
+    # 33 since H4_CASPT2_direct.inp added the explicit uncontracted direct
+    # CASPT2 energy route alongside the default dense example.
     # 29 since the analytic CASPT2 gradient added H4_CASPT2_numgrad.inp (the
     # central-difference companion the analytic route replaced as the default)
     # and H4_XMS-CASPT2_grad.inp (the multistate/XMS analytic gradient);
@@ -2369,7 +2404,12 @@ def test_every_wf_methods_example_has_a_committed_oqp_twin():
     # 31 since correlated-state irrep selection added H2O_CASCI_IRREP_B1.inp
     # ([ci] irrep) and H2_FCI_IRREP_B1U.inp ([fci] irrep with irrep_min_purity,
     # and the branch where the symmetry and spin filters must agree on a root).
-    assert len(WF_EXAMPLES) == 32
+    # 33 since H4_CASPT2_direct.inp (main, #479) pinned the explicit
+    # single-state CASPT2 direct energy path;
+    # 34 since H2O_CASSCF_CAS66_ANALYTIC.inp added the 400-determinant analytic
+    # CASSCF Hessian that selects the direct excitation products above the
+    # 4 MiB excitation-stack storage threshold.
+    assert len(WF_EXAMPLES) == 34
     missing = [
         name for name in WF_EXAMPLES
         if not (WF_EXAMPLE_DIR / name).with_suffix(".oqp").is_file()

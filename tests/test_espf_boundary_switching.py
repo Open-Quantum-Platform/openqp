@@ -97,8 +97,6 @@ def test_the_driver_reuses_the_shared_selection():
     """The OpenMM-dependent driver must delegate, not fork, this policy."""
     pytest.importorskip(
         "openmm", reason="the QM/MM driver imports OpenMM at module level")
-    if str(ROOT / "pyoqp") not in sys.path:
-        sys.path.insert(0, str(ROOT / "pyoqp"))
     try:
         from oqp.library.qmmm_driver import OpenQpQMMM
     except (ImportError, RuntimeError) as exc:
