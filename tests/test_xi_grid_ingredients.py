@@ -101,6 +101,15 @@ class XiGridIngredientsValidationTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "alpha"):
                 self._call([bad])
 
+    def test_scale_and_cutoff_validated(self):
+        from oqp.library.xi_ingredients import grid_ingredients
+        for scale in (2, -1, 0.5, True):
+            with self.assertRaisesRegex(ValueError, "scale"):
+                grid_ingredients(None, alphas=[0.5], scale=scale)
+        for cutoff in (-1.0, float("nan"), float("inf")):
+            with self.assertRaisesRegex(ValueError, "cutoff"):
+                grid_ingredients(None, alphas=[0.5], cutoff=cutoff)
+
     def test_explicit_p_must_be_auto_0_or_1(self):
         for bad in ([2], [-2], [0.5]):
             with self.assertRaisesRegex(ValueError, "p entries"):

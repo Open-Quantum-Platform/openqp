@@ -40,6 +40,11 @@ def grid_ingredients(mol, alphas, p=None, scale=0, cutoff=0.0):
             raise ValueError("grid_ingredients: p entries must be -1 (auto), 0 or 1")
         if np.any((ps == 0) & (alphas > 0.0)):
             raise ValueError("grid_ingredients: p=0 requires alpha <= 0")
+    if isinstance(scale, bool) or scale not in (0, 1):
+        raise ValueError("grid_ingredients: scale must be 0 or 1")
+    cutoff = float(cutoff)
+    if not np.isfinite(cutoff) or cutoff < 0.0:
+        raise ValueError("grid_ingredients: cutoff must be a finite number >= 0 (bohr; 0 = exact)")
     ps = np.where(ps < 0, np.where(alphas > 0.0, 1, 0), ps).astype(np.int64)
     oqp.oqp_xi_grid_ingredients(
         mol,

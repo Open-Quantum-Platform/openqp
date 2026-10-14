@@ -8,10 +8,9 @@ OpenQP runtime.
 """
 
 import os
+import tempfile
 import unittest
 from pathlib import Path
-
-SELFTEST_OUT = Path("/tmp/xi_fock_selftest.out")
 
 INPUT = """[input]
 system=
@@ -55,22 +54,24 @@ def _runtime_available():
 @unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime not available")
 class XiFockSelfTest(unittest.TestCase):
     def _run(self, tag, scf, mult, alpha, p, scale):
+        import numpy as np
         import oqp
         from oqp.pyoqp import Runner
 
-        workdir = Path("/tmp/oqp_xi_fock_test")
-        workdir.mkdir(exist_ok=True)
-        inp = workdir / f"h2o_{tag}.inp"
-        inp.write_text(INPUT.format(scf=scf, mult=mult, alpha=alpha, p=p, scale=scale))
-        log = workdir / f"h2o_{tag}.log"
-        if SELFTEST_OUT.exists():
-            SELFTEST_OUT.unlink()
-        runner = Runner(project=f"h2o_xi_{tag}", input_file=str(inp), log=str(log))
-        runner.run()
-        oqp.xi_fock_selftest(runner.mol)
-        self.assertTrue(SELFTEST_OUT.exists(), "self-test produced no output file")
-        result = SELFTEST_OUT.read_text()
-        self.assertIn("XI_FOCK_SELFTEST PASS", result, msg=result)
+        with tempfile.TemporaryDirectory(prefix=f"oqp_xi_fock_{tag}_") as tmp:
+            workdir = Path(tmp)
+            inp = workdir / f"h2o_{tag}.inp"
+            inp.write_text(INPUT.format(scf=scf, mult=mult, alpha=alpha, p=p, scale=scale))
+            runner = Runner(project=f"h2o_xi_{tag}", input_file=str(inp), log=str(workdir / f"h2o_{tag}.log"))
+            runner.run()
+            res = np.full(8, np.nan)
+            oqp.xi_fock_selftest(runner.mol, oqp.ffi.cast("double *", res.ctypes.data))
+        msg = ("tau: FD=%.14e analytic=%.14e ratio=%.14e\n"
+               "xi : FD=%.14e analytic=%.14e ratio=%.14e\nrelative mismatch=%.2e" % tuple(res[:7]))
+        self.assertTrue(np.all(np.isfinite(res)), msg)
+        self.assertGreater(abs(res[4]), 1e-12, msg)
+        self.assertLess(res[6], 1e-6, msg)
+        self.assertEqual(res[7], 1.0, msg)
 
     def test_rhf_alpha_half(self):
         self._run("rhf_a05", "rhf", 1, 0.5, -1, 0)

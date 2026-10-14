@@ -9,19 +9,25 @@ module xi_fock_selftest_mod
 !>   ratios FD/analytic must agree, which proves that the xi^alpha Fock
 !>   contribution (V_tau D_i.D_j) is the exact derivative of the energy that the
 !>   same code evaluates.  Diagnostic harness only.
+!>   Results go to the caller's res(1:8) (no shared file, so concurrent pytest
+!>   workers cannot overwrite each other):
+!>     res = [FD_tau, analytic_tau, ratio_tau, FD_xi, analytic_xi, ratio_xi,
+!>            relative ratio mismatch, 1 (pass) / 0 (fail)]
   implicit none
 contains
 
-  subroutine xi_fock_selftest_C(c_handle) bind(C, name="xi_fock_selftest")
+  subroutine xi_fock_selftest_C(c_handle, res) bind(C, name="xi_fock_selftest")
+    use, intrinsic :: iso_c_binding, only: c_double
     use c_interop, only: oqp_handle_t, oqp_handle_get_info
     use types, only: information
     type(oqp_handle_t) :: c_handle
+    real(c_double), intent(out) :: res(8)
     type(information), pointer :: inf
     inf => oqp_handle_get_info(c_handle)
-    call xi_fock_selftest(inf)
+    call xi_fock_selftest(inf, res)
   end subroutine xi_fock_selftest_C
 
-  subroutine xi_fock_selftest(infos)
+  subroutine xi_fock_selftest(infos, res)
     use types, only: information
     use precision, only: dp
     use mod_dft, only: dft_initialize
@@ -30,12 +36,13 @@ contains
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_DM_A, OQP_DM_B
 
     type(information), target, intent(inout) :: infos
+    real(dp), intent(out) :: res(8)
 
     type(dft_grid_t) :: molgrid
     real(dp), contiguous, pointer :: dm_a(:), dm_b(:)
     real(dp), allocatable :: dmat(:,:), pfxc(:,:), delta(:,:), dpert(:,:)
     real(dp) :: e0, ep, em, ne, ek, eps, fd(0:1), an(0:1), ratio(0:1), w
-    integer :: nbf, ntri, nspin, p, i, j, m, iu, mode_in
+    integer :: nbf, ntri, nspin, p, i, j, m, iu
     integer(8) :: xi_mode_save
     logical :: urohf, ok
 
@@ -67,7 +74,6 @@ contains
       end do
 
       xi_mode_save = infos%dft%xi_mode
-      mode_in = int(xi_mode_save)
       eps = 1.0e-4_dp
 
       do m = 0, 1
@@ -96,18 +102,8 @@ contains
 
       ok = abs(ratio(1) - ratio(0)) < 1.0e-6_dp*abs(ratio(0)) .and. abs(an(1)) > 1.0e-12_dp
 
-      open (newunit=iu, file='/tmp/xi_fock_selftest.out', status='replace', action='write')
-      write (iu, '(a,i0,a,f8.4,a,i0,a,i0)') 'xi_mode(input)=', mode_in, ' xi_alpha=', infos%dft%xi_alpha, &
-                                            ' xi_p=', infos%dft%xi_p, ' xi_scale=', infos%dft%xi_scale
-      write (iu, '(a,es22.14,a,es22.14,a,es22.14)') 'tau      : FD=', fd(0), ' analytic=', an(0), ' ratio=', ratio(0)
-      write (iu, '(a,es22.14,a,es22.14,a,es22.14)') 'xi^alpha : FD=', fd(1), ' analytic=', an(1), ' ratio=', ratio(1)
-      write (iu, '(a,es10.2)') 'relative ratio mismatch = ', abs(ratio(1) - ratio(0))/max(abs(ratio(0)), 1.0e-300_dp)
-      if (ok) then
-        write (iu, '(a)') 'XI_FOCK_SELFTEST PASS'
-      else
-        write (iu, '(a)') 'XI_FOCK_SELFTEST FAIL'
-      end if
-      close (iu)
+      res = [fd(0), an(0), ratio(0), fd(1), an(1), ratio(1), &
+             abs(ratio(1) - ratio(0))/max(abs(ratio(0)), 1.0e-300_dp), merge(1.0_dp, 0.0_dp, ok)]
     end associate
   end subroutine xi_fock_selftest
 
