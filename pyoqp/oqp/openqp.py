@@ -1207,8 +1207,12 @@ class OpenQP:
 
     def mp2(self, reference="rhf", runtype=None, multiplicity=None,
             basis=None, variant=None, same_spin_scale=None,
-            opposite_spin_scale=None, **scf_keywords):
+            opposite_spin_scale=None, transform=None, **scf_keywords):
         """Use a compact OpenQP MP2 setup for energy or analytic-gradient jobs."""
+        if transform is not None:
+            transform = str(transform).strip().lower()
+            if transform not in {"auto", "direct", "n5"}:
+                raise ValueError("mp2.transform must be auto, direct, or n5")
         if runtype is None:
             runtype = "energy"
         elif str(runtype).lower() not in {"energy", "grad", "optimize", "ts", "mep", "irc"}:
@@ -1253,6 +1257,8 @@ class OpenQP:
             self._set_optimize_options(istate=0)
 
         mp2_updates = {}
+        if transform is not None:
+            mp2_updates["transform"] = transform
         if variant is not None:
             mp2_updates["variant"] = variant
         if same_spin_scale is not None:

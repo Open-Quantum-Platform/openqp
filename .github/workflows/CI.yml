@@ -107,6 +107,9 @@ jobs:
             # down (exit 143) three times (runs 38119612878, 38121150488), also
             # with 3 parallel jobs.  The arm legs run only the example suite.
             OQP_CI_BUILD_TYPE: ${{ contains(matrix.os, 'arm') && 'Debug' || 'RelWithDebInfo' }}
+            # Check the production MP2 source in both execution lanes without
+            # changing global/external flags or the shared dependency cache key.
+            OQP_CI_MP2_BOUNDS: ${{ matrix.os == 'ubuntu-24.04' && (matrix.role == 'pytest' || matrix.MPI == 'ON') && 'ON' || 'OFF' }}
            run: |
             # Build + install from the repo root in one step. scikit-build-core
             # (pyproject [tool.scikit-build], wheel.install-dir = oqp) bundles the
@@ -133,12 +136,23 @@ jobs:
             # the upstream hosts intermittently return HTTP 504. The bundled-
             # externals cache persists across retries, so a re-run only re-fetches
             # whatever failed.
+            set -o pipefail
+            build_dir="$RUNNER_TEMP/openqp-package-build"
+            # A fresh directory prevents an old instrumented object or library
+            # from being mistaken for evidence from this package installation.
+            test ! -e "$build_dir"
+            mkdir -p "$build_dir"
+            python -c 'import time; print(time.time_ns())' > "$build_dir/package-build-start-ns"
             n=0
             until pip install -v . \
+                --config-settings=build-dir="$build_dir" \
+                --config-settings=cmake.define.CMAKE_EXPORT_COMPILE_COMMANDS=ON \
+                --config-settings=cmake.define.OQP_MP2_BOUNDS_CHECK="$OQP_CI_MP2_BOUNDS" \
                 --config-settings=cmake.build-type="$OQP_CI_BUILD_TYPE" \
                 --config-settings=cmake.define.LINALG_LIB=OpenBLAS \
                 --config-settings=cmake.define.ENABLE_DDX=ON \
-                --config-settings=cmake.define.ENABLE_MPI=${{ matrix.MPI }}; do
+                --config-settings=cmake.define.ENABLE_MPI=${{ matrix.MPI }} \
+                2>&1 | tee -a "$build_dir/package-build.log"; do
               n=$((n + 1))
               if [ "$n" -ge 3 ]; then
                 echo "::error::build failed after $n attempts"
@@ -147,6 +161,24 @@ jobs:
               echo "::warning::build attempt $n failed (likely a transient dependency download); retrying in 30s"
               sleep 30
             done
+            touch "$build_dir/package-build-success"
+         - name: Verify production MP2 bounds compilation and package identity
+           if: ${{ matrix.os == 'ubuntu-24.04' && (matrix.role == 'pytest' || matrix.MPI == 'ON') }}
+           run: |
+            record="$RUNNER_TEMP/openqp-package-build/mp2-bounds.json"
+            python tests/native/check_mp2_bounds_build.py "$RUNNER_TEMP/openqp-package-build" "$record"
+            echo "OQP_MP2_BOUNDS_RECORD=$record" >> "$GITHUB_ENV"
+            echo "OQP_REQUIRE_MP2_BOUNDS=1" >> "$GITHUB_ENV"
+         - name: Preserve MP2 bounds build and execution evidence
+           if: ${{ always() && matrix.os == 'ubuntu-24.04' && (matrix.role == 'pytest' || matrix.MPI == 'ON') }}
+           uses: actions/upload-artifact@v4
+           with:
+            name: mp2-bounds-${{ matrix.MPI }}-${{ matrix.role }}-${{ github.run_id }}-${{ github.run_attempt }}
+            path: |
+               ${{ runner.temp }}/openqp-package-build/mp2-bounds.json
+               ${{ runner.temp }}/openqp-package-build/compile_commands.json
+               ${{ runner.temp }}/openqp-package-build/package-build*
+            if-no-files-found: ignore
          - name: Check MPI banner single-writer ordering
            if: ${{ matrix.MPI == 'ON' }}
            run: |
@@ -157,6 +189,8 @@ jobs:
               exit 1
             fi
             export LD_LIBRARY_PATH="$(dirname "$ddx_lib"):${LD_LIBRARY_PATH:-}"
+            # Later MPI steps run in fresh shells and also load liboqp.
+            echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
             test_dir="$(mktemp -d)"
             cp examples/QUANTUM/h2.inp "$test_dir/banner.inp"
             mpiexec --oversubscribe -n 2 openqp "$test_dir/banner.inp" --silent
@@ -273,6 +307,19 @@ jobs:
             name: tagarray-memory-${{ github.run_id }}-${{ github.run_attempt }}
             path: tagarray-memory/
             if-no-files-found: ignore
+         - name: Pin CASPT2 direct engines on two MPI ranks
+           timeout-minutes: 5
+           if: ${{ matrix.MPI == 'ON' && matrix.os == 'ubuntu-24.04' }}
+           env:
+            OMP_NUM_THREADS: "1"
+            OMP_DYNAMIC: "FALSE"
+            OPENBLAS_NUM_THREADS: "1"
+           run: |
+            pip install pytest mpi4py
+            ddx_lib="$(find "$HOME"/.cache/openqp -name 'libddx.so*' -print -quit 2>/dev/null)"
+            test -n "$ddx_lib"
+            export LD_LIBRARY_PATH="$(dirname "$ddx_lib"):${LD_LIBRARY_PATH:-}"
+            mpiexec --oversubscribe -n 2 python -m mpi4py tests/caspt2_direct_mpi.py "$(mktemp -d)"
          # The example suite above validates numerical references end to end, but
          # it never touches the pure-Python layer -- the tests/ pytest suite was
          # not executed by CI at all, so everything under pyoqp/oqp (the analysis
@@ -288,6 +335,7 @@ jobs:
             # This is a post-build job.  Native EDIIS/A-DIIS tests must fail,
             # rather than skip, if the extension or its C ABI symbols are absent.
             OQP_REQUIRE_NATIVE_TESTS: "1"
+            OMP_DYNAMIC: "FALSE"
             # Opt the analytic-TDHF-Hessian end-to-end gate in. Without this the
             # only test that actually compares an analytic Hessian against its
             # finite-difference reference never runs, and the file's remaining
@@ -297,6 +345,8 @@ jobs:
             # STO-3G systems, measured at ~105 s total.
             OPENQP_RUN_TDHF_HESSIAN_REGRESSION: "1"
            run: |
+            # A selector failure must not be hidden by the path-filter pipe.
+            set -o pipefail
             # --forked is not optional here: 39 test files mutate sys.modules,
             # and tests/test_analytic_hessian.py replaces the whole `oqp`
             # package with a stub. Sharing one interpreter lets that leak into
@@ -322,15 +372,42 @@ jobs:
             # installed `oqp` package. Bare pytest only adds tests/ and the
             # module fails to import.
             if [ -n "$BASE_SHA" ]; then git fetch --no-tags --quiet origin "$BASE_SHA" || true; fi
-            selection="$(python .github/scripts/select_pr_tests.py)"
+            # MP2 has its own single-interpreter OMP1/4 step below. Exclude it
+            # from both full-suite collection and explicitly selected paths.
+            selection="$(python .github/scripts/select_pr_tests.py | sed '\|^tests/test_mp2_dispatch.py$|d')"
             if [ "$selection" = "ALL" ]; then
-              echo "Running the full pytest suite"
-              python -m pytest tests -q -n auto --forked --tb=short -rf
+              echo "Running the full pytest suite (MP2 runs separately)"
+              python -m pytest tests -q -n auto --forked --tb=short -rf --ignore=tests/test_mp2_dispatch.py
             else
-              echo "Running $(echo "$selection" | wc -l) selected test files (full suite runs after merge to main):"
+              echo "Running $(echo "$selection" | wc -l) selected test files (full suite runs after merge to main; MP2 runs separately):"
               echo "$selection"
-              python -m pytest $selection -q -n auto --forked --tb=short -rf
+              python -m pytest $selection -q -n auto --forked --tb=short -rf --ignore=tests/test_mp2_dispatch.py
             fi
+         - name: Check MP2 transforms and thread restoration
+           if: ${{ matrix.role == 'pytest' }}
+           run: |
+            set -o pipefail
+            for width in 1 4; do
+              OMP_NUM_THREADS="$width" OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+                python -m pytest tests/test_mp2_dispatch.py -q --tb=short \
+                  2>&1 | tee "$RUNNER_TEMP/openqp-package-build/mp2-omp$width.log"
+            done
+         - name: Check MP2 rank-specific allocation failure consensus
+           if: ${{ matrix.MPI == 'ON' && matrix.os == 'ubuntu-24.04' }}
+           run: |
+            set -o pipefail
+            pip install pytest mpi4py
+            python tests/mp2_mpi_regression.py "$RUNNER_TEMP/openqp-package-build/mp2-mpi" \
+              2>&1 | tee "$RUNNER_TEMP/openqp-package-build/mp2-mpi.log"
+         - name: Preserve MP2 production execution diagnostics
+           if: ${{ always() && matrix.os == 'ubuntu-24.04' && (matrix.role == 'pytest' || matrix.MPI == 'ON') }}
+           uses: actions/upload-artifact@v4
+           with:
+            name: mp2-execution-${{ matrix.MPI }}-${{ matrix.role }}-${{ github.run_id }}-${{ github.run_attempt }}
+            path: |
+               ${{ runner.temp }}/openqp-package-build/mp2-omp*.log
+               ${{ runner.temp }}/openqp-package-build/mp2-mpi*
+            if-no-files-found: ignore
 
    # Intel oneAPI leg: ifx + icx/icpx + MKL ILP64 on Linux x86_64. This is the
    # LINALG_LIB=auto source-build mandate for Linux x86_64 (Intel MKL ILP64),

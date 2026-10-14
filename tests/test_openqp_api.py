@@ -150,6 +150,7 @@ SCHEMA = {
     },
     "mp2": {
         "variant": {"type": _string, "default": "mp2"},
+        "transform": {"type": _string, "default": "auto"},
         "same_spin_scale": {"type": float, "default": "1.0"},
         "opposite_spin_scale": {"type": float, "default": "1.0"},
     },
@@ -668,7 +669,7 @@ $$$$
         job = (
             openqp.OpenQP(project="h2o_mp2")
             .molecule(geometry="water", basis="6-31g", charge=0, multiplicity=1)
-            .mp2(reference="uhf", variant="scs-mp2", conv=1.0e-10)
+            .mp2(reference="uhf", variant="scs-mp2", transform=" N5 ", conv=1.0e-10)
         )
 
         config = job.to_input_dict()
@@ -679,6 +680,20 @@ $$$$
         self.assertEqual(config["scf"]["type"], "uhf")
         self.assertEqual(config["scf"]["conv"], "1e-10")
         self.assertEqual(config["mp2"]["variant"], "scs-mp2")
+        self.assertEqual(config["mp2"]["transform"], "n5")
+        self.assertNotIn("transform", config["scf"])
+
+    def test_mp2_transform_settings_and_invalid_helper_preserve_job(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="transform_settings").dft("pbe")
+        before = job.to_input_dict()
+        with self.assertRaisesRegex(ValueError, "mp2.transform"):
+            job.mp2(transform="unknown", basis="cc-pvtz", conv=1e-10)
+        self.assertEqual(job.to_input_dict(), before)
+        for transform in ("auto", "direct", "n5"):
+            with self.subTest(transform=transform):
+                job.settings.mp2(transform=transform)
+                self.assertEqual(job.to_input_dict()["mp2"]["transform"], transform)
 
     def test_mp2_helper_clears_prior_dft_and_sets_custom_scales(self):
         openqp = load_openqp_module()

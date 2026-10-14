@@ -294,7 +294,7 @@ GENERIC_SCHEMA_KEYS = {
     "solute_com": _keys("enabled center force_constant atoms"),
     "input": _keys("library perf ispher d4 qmmm_flag soc_2e omp_threads verbose"),
     "d4": _keys("s6 s8 s9 a1 a2 alp"),
-    "mp2": _keys("variant same_spin_scale opposite_spin_scale"),
+    "mp2": _keys("variant transform same_spin_scale opposite_spin_scale"),
     "cc": _keys("maxit conv ndiis nfzc cholesky cholesky_tol cholesky_direct"),
     "guess": _keys("type file file2 save_mol continue_geom swapmo"),
     "pcm": _keys("enabled backend mode model solvent epsilon radii"),
@@ -893,7 +893,7 @@ def _fold_native_section_into_driver(
 # settings remain available through exact calls such as ``tdhf(nvdav=30)``.
 RESPONSE_MODEL_OPTIONS = {"nstate"}
 MP2_MODEL_OPTIONS = {
-    "reference", "variant", "same_spin_scale", "opposite_spin_scale",
+    "reference", "variant", "transform", "same_spin_scale", "opposite_spin_scale",
 }
 # Coupled cluster takes the reference plus the [cc] solver controls inline,
 # the same shape MP2 uses for its spin-scaling knobs.
