@@ -836,6 +836,8 @@ void mrsf_nac_xc_adjoint(struct oqp_handle_t *inf);
 
 void mp2_energy(struct oqp_handle_t *inf);
 void mp2_gradient(struct oqp_handle_t *inf);
+void mp2_gradient_density_test(int64_t n, int64_t no, const double *c,
+                               const double *l2, double *gao);
 void ccsd_t_energy(struct oqp_handle_t *inf);
 
 /* Derivative-integral contraction for the analytic SC-NEVPT2 nuclear gradient

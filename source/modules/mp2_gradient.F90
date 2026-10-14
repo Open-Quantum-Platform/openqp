@@ -31,7 +31,7 @@ module mp2_gradient_mod
   character(len=*), parameter :: module_name = 'mp2_gradient_mod'
   integer, parameter :: DEFAULT_MAX_NBF = 60
 
-  public :: mp2_gradient
+  public :: mp2_gradient, l2_to_ao_2rdm
 
   ! The derivative-ERI consumer.  d0 is the converged RHF spin-summed density,
   ! dc is the relaxed MP2 correction to the spin-summed density, and g2c is the
@@ -86,7 +86,7 @@ contains
     type(grd2_mp2_compute_data_t) :: gcomp
 
     real(dp), contiguous, pointer :: mo(:,:), eps(:), dm0p(:), erip(:)
-    real(dp), allocatable :: mo_c(:,:), eri_mo(:), t2(:,:,:,:), l2(:,:,:,:), g2mo(:,:,:,:)
+    real(dp), allocatable :: mo_c(:,:), eri_mo(:), t2(:,:,:,:), l2(:,:,:,:)
     real(dp), allocatable :: doo(:,:), dvv(:,:), dm1mo(:,:), imat(:,:)
     real(dp), allocatable :: dm0(:,:), dc(:,:), vmat(:,:), xvo(:,:), rhs(:,:), u(:,:)
     real(dp), allocatable :: zeta(:,:), imao(:,:), wao(:,:), pocc(:,:), tmp(:,:)
@@ -131,7 +131,7 @@ contains
     call tagarray_get_data(infos%dat, OQP_AO_ERI, erip)
 
     allocate(mo_c(0:n-1,0:n-1), eri_mo(n**4), t2(no,no,nv,nv), l2(no,no,nv,nv), &
-             g2mo(n,n,n,n), doo(no,no), dvv(nv,nv), dm1mo(n,n), imat(n,n), &
+             doo(no,no), dvv(nv,nv), dm1mo(n,n), imat(n,n), &
              dm0(n,n), dc(n,n), vmat(n,n), xvo(nv,no), rhs(no*nv,1), &
              u(no*nv,1), zeta(n,n), imao(n,n), wao(n,n), pocc(n,n), &
              tmp(n,n), dtotal(n,n), wpack(n*(n+1)/2), dpack(n*(n+1)/2), &
@@ -213,28 +213,17 @@ contains
     dm1mo(1:no,1:no) = doo + transpose(doo)
     dm1mo(no+1:n,no+1:n) = dvv + transpose(dvv)
 
-    ! The amplitude-linear 2-RDM has only ovov and vovo blocks.  It is also
-    ! used to form the non-Hermitian MP2 orbital Lagrangian intermediate Imat
-    ! directly in the MO basis, avoiding an O(n^6) AO contraction.
-    do i = 1, no
-      do j = 1, no
-        do a = 1, nv
-          do b = 1, nv
-            g2mo(i,no+a,j,no+b) = 2.0_dp*l2(i,j,a,b)
-            g2mo(no+a,i,no+b,j) = 2.0_dp*l2(i,j,a,b)
-          end do
-        end do
-      end do
-    end do
+    ! The amplitude-linear 2-RDM has only ovov and vovo blocks.  Contract
+    ! their values directly from l2 without storing a dense MO 2-RDM.
     do p = 1, n
       do i = 1, no
         do j = 1, no
           do a = 1, nv
             do b = 1, nv
               imat(p,no+a) = imat(p,no+a) &
-                - eri4(eri_mo,n,i,p,j,no+b)*g2mo(i,no+a,j,no+b)
+                - eri4(eri_mo,n,i,p,j,no+b)*(2.0_dp*l2(i,j,a,b))
               imat(p,i) = imat(p,i) &
-                - eri4(eri_mo,n,no+a,p,no+b,j)*g2mo(no+a,i,no+b,j)
+                - eri4(eri_mo,n,no+a,p,no+b,j)*(2.0_dp*l2(i,j,a,b))
             end do
           end do
         end do
@@ -304,8 +293,7 @@ contains
     ! Transform and eight-fold symmetrize the amplitude-linear 2-RDM.
     allocate(gcomp%g2c(n,n,n,n), gcomp%d0(n,n), gcomp%dc(n,n), stat=ierr)
     if (ierr /= 0) call show_message('MP2 gradient 2-RDM allocation failed', with_abort)
-    call mo2ao_4index(n, mo, g2mo, gcomp%g2c)
-    call symmetrize_eri_density(n, gcomp%g2c)
+    call l2_to_ao_2rdm(n, no, mo, l2, gcomp%g2c)
     gcomp%d0 = dm0
     gcomp%dc = dc
     gcomp%nbf = n
@@ -390,42 +378,143 @@ contains
     ap = ap + p
   end subroutine add_packed_symmetric
 
-  subroutine mo2ao_4index(n, c, gmo, gao)
-    integer, intent(in) :: n
-    real(dp), intent(in) :: c(n,n), gmo(n,n,n,n)
+  ! Transform the two nonzero MO blocks one occupied index at a time.
+  ! w1, w2 and w3 are local to this call and reused for every occupied index.
+  ! gao and the symmetrization copy remain dense; this does not bound total RSS.
+  subroutine l2_to_ao_2rdm(n, no, c, l2, gao)
+    use messages, only: show_message, with_abort
+    integer, intent(in) :: n, no
+    real(dp), intent(in) :: c(n,n), l2(no,no,n-no,n-no)
     real(dp), intent(out) :: gao(n,n,n,n)
-    real(dp), allocatable :: t1(:,:,:,:), t2w(:,:,:,:), t3(:,:,:,:)
-    integer :: mu, nu, la, si, p, q, r, s
-    allocate(t1(n,n,n,n), t2w(n,n,n,n), t3(n,n,n,n), source=0.0_dp)
-    do s=1,n; do r=1,n; do q=1,n; do mu=1,n
-      do p=1,n
-        t1(mu,q,r,s)=t1(mu,q,r,s)+c(mu,p)*gmo(p,q,r,s)
-      end do
-    end do; end do; end do; end do
-    do s=1,n; do r=1,n; do nu=1,n; do mu=1,n
-      do q=1,n
-        t2w(mu,nu,r,s)=t2w(mu,nu,r,s)+c(nu,q)*t1(mu,q,r,s)
-      end do
-    end do; end do; end do; end do
-    do s=1,n; do la=1,n; do nu=1,n; do mu=1,n
-      do r=1,n
-        t3(mu,nu,la,s)=t3(mu,nu,la,s)+c(la,r)*t2w(mu,nu,r,s)
-      end do
-    end do; end do; end do; end do
+    integer :: nv, j, a, b, mu, nu, la, si, i, ierr
+    real(dp), allocatable :: w1(:,:,:), w2(:,:,:), w3(:,:,:)
+
+    nv = n - no
+    allocate(w1(n,nv,nv), w2(n,n,nv), w3(n,n,n), stat=ierr)
+    if (ierr /= 0) call show_message( &
+      'MP2 gradient density scratch allocation failed', with_abort)
     gao = 0.0_dp
-    do si=1,n; do la=1,n; do nu=1,n; do mu=1,n
-      do s=1,n
-        gao(mu,nu,la,si)=gao(mu,nu,la,si)+c(si,s)*t3(mu,nu,la,s)
+
+    ! === ovov contribution ===
+    ! gao(mu,nu,la,si) += sum_{i,j,a,b} 2*l2(i,j,a,b)
+    !                      * C(mu,i) * C(nu,no+a) * C(la,j) * C(si,no+b)
+    do j = 1, no
+      ! w1(mu,a,b) = sum_i C(mu,i) * l2(i,j,a,b)
+      do b = 1, nv
+        do a = 1, nv
+          w1(:,a,b) = 0.0_dp
+          do i = 1, no
+            do mu = 1, n
+              w1(mu,a,b) = w1(mu,a,b) + c(mu,i) * l2(i,j,a,b)
+            end do
+          end do
+        end do
       end do
-    end do; end do; end do; end do
-  end subroutine mo2ao_4index
+
+      ! w2(mu,nu,b) = sum_a w1(mu,a,b) * C(nu,no+a)
+      w2 = 0.0_dp
+      do b = 1, nv
+        do a = 1, nv
+          do nu = 1, n
+            do mu = 1, n
+              w2(mu,nu,b) = w2(mu,nu,b) + w1(mu,a,b) * c(nu,no+a)
+            end do
+          end do
+        end do
+      end do
+
+      ! w3(mu,nu,si) = sum_b w2(mu,nu,b) * C(si,no+b)
+      w3 = 0.0_dp
+      do b = 1, nv
+        do si = 1, n
+          do nu = 1, n
+            do mu = 1, n
+              w3(mu,nu,si) = w3(mu,nu,si) + w2(mu,nu,b) * c(si,no+b)
+            end do
+          end do
+        end do
+      end do
+
+      ! gao(mu,nu,la,si) += 2*C(la,j)*w3(mu,nu,si)
+      do si = 1, n
+        do la = 1, n
+          do nu = 1, n
+            do mu = 1, n
+              gao(mu,nu,la,si) = gao(mu,nu,la,si) &
+                + 2.0_dp * c(la,j) * w3(mu,nu,si)
+            end do
+          end do
+        end do
+      end do
+    end do
+
+    ! === vovo contribution ===
+    ! gao(mu,nu,la,si) += sum_{i,j,a,b} 2*l2(i,j,a,b)
+    !                      * C(mu,no+a) * C(nu,i) * C(la,no+b) * C(si,j)
+    do j = 1, no
+      ! w1(nu,a,b) = sum_i C(nu,i) * l2(i,j,a,b)
+      do b = 1, nv
+        do a = 1, nv
+          w1(:,a,b) = 0.0_dp
+          do i = 1, no
+            do nu = 1, n
+              w1(nu,a,b) = w1(nu,a,b) + c(nu,i) * l2(i,j,a,b)
+            end do
+          end do
+        end do
+      end do
+
+      ! w2(mu,nu,b) = sum_a C(mu,no+a) * w1(nu,a,b)
+      w2 = 0.0_dp
+      do b = 1, nv
+        do a = 1, nv
+          do nu = 1, n
+            do mu = 1, n
+              w2(mu,nu,b) = w2(mu,nu,b) + c(mu,no+a) * w1(nu,a,b)
+            end do
+          end do
+        end do
+      end do
+
+      ! w3(mu,nu,la) = sum_b C(la,no+b) * w2(mu,nu,b)
+      w3 = 0.0_dp
+      do b = 1, nv
+        do la = 1, n
+          do nu = 1, n
+            do mu = 1, n
+              w3(mu,nu,la) = w3(mu,nu,la) + w2(mu,nu,b) * c(la,no+b)
+            end do
+          end do
+        end do
+      end do
+
+      ! gao(mu,nu,la,si) += 2*C(si,j)*w3(mu,nu,la)
+      do si = 1, n
+        do la = 1, n
+          do nu = 1, n
+            do mu = 1, n
+              gao(mu,nu,la,si) = gao(mu,nu,la,si) &
+                + 2.0_dp * c(si,j) * w3(mu,nu,la)
+            end do
+          end do
+        end do
+      end do
+    end do
+
+    deallocate(w1, w2, w3)
+    ! Symmetrization owns a separate dense copy, after scratch is released.
+    call symmetrize_eri_density(n, gao)
+  end subroutine l2_to_ao_2rdm
 
   subroutine symmetrize_eri_density(n, g)
+    use messages, only: show_message, with_abort
     integer, intent(in) :: n
     real(dp), intent(inout) :: g(n,n,n,n)
     real(dp), allocatable :: h(:,:,:,:)
-    integer :: i,j,k,l
-    allocate(h(n,n,n,n))
+    integer :: i,j,k,l,ierr
+    allocate(h(n,n,n,n), stat=ierr)
+    if (ierr /= 0) call show_message( &
+      'MP2 gradient density symmetrization allocation failed', with_abort)
     h = g
     do i=1,n; do j=1,n; do k=1,n; do l=1,n
       g(i,j,k,l) = 0.125_dp*(h(i,j,k,l)+h(j,i,k,l)+h(i,j,l,k)+h(j,i,l,k) &
