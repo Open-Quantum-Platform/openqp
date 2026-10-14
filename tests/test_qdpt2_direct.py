@@ -89,6 +89,10 @@ def _pt2_on_shared_reference(tmp_path, project, pt2_variants, **kw):
     """
     from oqp.library.caspt2_dyall import native_caspt2_energy
 
+    # Variants overwrite one resolved [pt2] block in place; with identical key
+    # sets nothing one variant sets can survive into the next.
+    assert all(set(v) == set(pt2_variants[0]) for v in pt2_variants), \
+        "shared-reference PT2 variants must set the same [pt2] keys"
     runner = _run(tmp_path, project, pt2=pt2_variants[0], **kw)
     mol = runner.mol
     # The driver overwrites VEC_MO_A with semicanonical orbitals; it keeps the
@@ -97,22 +101,29 @@ def _pt2_on_shared_reference(tmp_path, project, pt2_variants, **kw):
     shape = np.asarray(mol.data["OQP::VEC_MO_A"]).shape
 
     def collect():
-        np.testing.assert_array_equal(
-            np.asarray(mol.data["OQP::CASPT2_REFERENCE_MO"], dtype=float), ref_mo)
         return (np.sort(np.asarray(mol.energies, dtype=float)),
                 np.sort(np.asarray(mol.data["OQP::CASPT2_REFERENCE_ENERGIES"],
-                                   dtype=float)))
+                                   dtype=float)),
+                np.array(mol.data["OQP::VEC_MO_A"], dtype=float, copy=True))
 
     results = [collect()]
     for pt2 in pt2_variants[1:]:
+        # Poison the stash: only a driver that consumed the restored orbitals
+        # and republished them can turn it back into ref_mo.
+        mol.data["OQP::CASPT2_REFERENCE_MO"] = np.full_like(ref_mo, np.nan)
         mol.data["OQP::VEC_MO_A"][...] = np.ascontiguousarray(ref_mo.T.reshape(shape))
         mol.config["pt2"].update(pt2)
         native_caspt2_energy(mol)
+        np.testing.assert_array_equal(
+            np.asarray(mol.data["OQP::CASPT2_REFERENCE_MO"], dtype=float), ref_mo)
         results.append(collect())
-    # Same orbitals in -> same CASCI reference out; anything else means the
-    # variants did not run on one reference and the comparison is void.
-    for _, ref in results[1:]:
+    # Same orbitals in -> same semicanonical orbitals and CASCI reference out;
+    # anything else means the variants did not run on one reference and the
+    # comparison is void.
+    for _, ref, mo_sc in results[1:]:
         np.testing.assert_allclose(ref, results[0][1], rtol=0, atol=1.0e-12)
+        np.testing.assert_allclose(mo_sc, results[0][2], rtol=0, atol=1.0e-12)
+    results = [(e, ref) for e, ref, _ in results]
     return results
 
 
