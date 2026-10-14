@@ -51,6 +51,8 @@ def _runtime_available():
 class XiGridIngredientsTest(unittest.TestCase):
     def test_export_matches_tau_and_density(self):
         import numpy as np
+        import oqp
+        self.assertTrue(callable(oqp.oqp_xi_grid_ingredients))  # exported by liboqp
         from oqp.pyoqp import Runner
         from oqp.library.xi_ingredients import grid_ingredients
 
