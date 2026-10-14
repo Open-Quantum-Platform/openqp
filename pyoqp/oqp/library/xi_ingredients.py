@@ -16,6 +16,10 @@ import numpy as np
 
 import oqp
 
+# Largest p - alpha for which the xi^alpha kernel is validated
+# (source/dftlib/xi_alpha_kernel.F90, XI_C_MAX).
+XI_C_MAX = 2.0
+
 
 def grid_ingredients(mol, alphas, p=None, scale=0, cutoff=0.0):
     """Return a dict of numpy arrays (points along the first axis)."""
@@ -46,6 +50,9 @@ def grid_ingredients(mol, alphas, p=None, scale=0, cutoff=0.0):
     if not np.isfinite(cutoff) or cutoff < 0.0:
         raise ValueError("grid_ingredients: cutoff must be a finite number >= 0 (bohr; 0 = exact)")
     ps = np.where(ps < 0, np.where(alphas > 0.0, 1, 0), ps).astype(np.int64)
+    if np.any(ps - alphas > XI_C_MAX):
+        raise ValueError("grid_ingredients: p - alpha must be <= 2 (validated kernel range; "
+                         "alpha >= -2 with p=0, alpha >= -1 with p=1)")
     oqp.oqp_xi_grid_ingredients(
         mol,
         int(n),

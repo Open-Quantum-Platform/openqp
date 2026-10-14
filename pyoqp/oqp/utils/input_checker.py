@@ -2087,6 +2087,13 @@ def _check_xi(config: dict[str, Any], report: CheckReport) -> None:
     if not math.isfinite(alpha) or alpha > 1.0:
         report.add("ERROR", "dftgrid.xi_alpha", "xi_alpha must be a finite number <= 1.",
                    value=alpha, action="Choose alpha in (-inf, 1].")
+    elif okp and p in (-1, 0, 1) and (p if p >= 0 else (1 if alpha > 0.0 else 0)) - alpha > 2.0:
+        # c = p - alpha beyond the validated kernel range (xi_alpha_kernel XI_C_MAX);
+        # very negative alpha overflows the Gauss-Jacobi normalization to NaN weights.
+        report.add("ERROR", "dftgrid.xi_alpha",
+                   "xi_p - xi_alpha must be <= 2 (validated range of the xi^alpha kernel).",
+                   value=f"xi_p={p}, xi_alpha={alpha}",
+                   action="Use xi_alpha >= -2 (xi_p=0 or auto) or xi_alpha >= -1 (xi_p=1).")
     elif okp and p in (0, 1):
         if p == 0 and alpha > 0.0:
             report.add("ERROR", "dftgrid.xi_p",

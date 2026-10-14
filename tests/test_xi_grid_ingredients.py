@@ -110,6 +110,11 @@ class XiGridIngredientsValidationTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "cutoff"):
                 grid_ingredients(None, alphas=[0.5], cutoff=cutoff)
 
+    def test_order_beyond_kernel_range_rejected(self):
+        for alphas, p in (([-1100.0], None), ([-2.5], [0]), ([-1.5], [1])):
+            with self.assertRaisesRegex(ValueError, "<= 2"):
+                self._call(alphas, p=p)
+
     def test_explicit_p_must_be_auto_0_or_1(self):
         for bad in ([2], [-2], [0.5]):
             with self.assertRaisesRegex(ValueError, "p entries"):

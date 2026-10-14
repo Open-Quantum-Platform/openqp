@@ -14,6 +14,10 @@ module xi_alpha_kernel
   public :: xi_kernel_t
 
   integer, parameter :: NJ_DEFAULT = 48, NL_DEFAULT = 32
+  !> Largest c = p - alpha for which the quadrature and the tables are validated
+  !> (see the header).  Beyond it the Gauss-Jacobi normalization mu0 overflows
+  !> while 2^(-c)/Gamma(c) underflows (c ~ 1000 gives Inf*0 = NaN weights).
+  real(fp), parameter, public :: XI_C_MAX = 2.0_fp
   real(fp), parameter :: T_SPLIT = 7.0_fp
   !> Chebyshev tabulation (built at init from the quadrature; evaluation by
   !> Clenshaw recurrence).  Low regime x <= X0 in s = sqrt(x) on NPAN panels,
@@ -65,6 +69,7 @@ contains
     end if
     this%c = real(this%p, fp) - alpha
     if (this%c < 0.0_fp) error stop 'xi_alpha_kernel: p - alpha must be non-negative'
+    if (.not. (this%c <= XI_C_MAX)) error stop 'xi_alpha_kernel: p - alpha must be <= 2 (validated range)'
     this%ready = .true.
     this%use_table = .true.
     if (this%c == 0.0_fp) return   ! integer order: K_n(x) = exp(-x), no quadrature needed
