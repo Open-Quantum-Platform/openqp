@@ -1,0 +1,27 @@
+# Experimental energy path: run with OQP_UMRSF_PAIR_CACHE=1.
+[input]
+system=
+ O 0.0 0.0 -0.041061554
+ H -0.533194329 0.533194329 -0.614469223
+ H 0.533194329 -0.533194329 -0.614469223
+charge=0
+method=tdhf
+basis=6-31g
+runtype=energy
+functional=bhhlyp
+d4=false
+[guess]
+type=huckel
+save_mol=false
+[scf]
+type=uhf
+multiplicity=3
+conv=1e-10
+maxit=100
+save_molden=false
+[tdhf]
+type=umrsf
+multiplicity=1
+nstate=3
+conv=1e-9
+maxit=100

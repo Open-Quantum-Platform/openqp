@@ -421,6 +421,7 @@ contains
     use printing, only: print_module_info
     use iso_c_binding, only: c_f_pointer, c_int
 
+    use tdhf_mrsf_lib, only: umrsf_pair_t,umrsf_pair_allowed,umrsf_pair_setup,umrsf_pair_apply
     implicit none
 
     character(len=*), parameter :: subroutine_name = "tdhf_mrsf_energy"
@@ -491,6 +492,8 @@ contains
 
     type(int2_compute_t) :: int2_driver
     type(int2_mrsf_data_t), target :: int2_data_st
+    type(umrsf_pair_t) :: pair_kernel
+    logical :: use_pair
     type(int2_umrsf_data_t), target :: int2_udata_st
 
     type(int2_td_data_t), target :: int2_data_q
@@ -993,6 +996,12 @@ contains
       end if
     end if
 
+    use_pair=umrsf_pair_allowed(infos,mo_a,mo_b,dft.and.infos%dft%cam_flag,int2_driver%petite)
+    if(use_pair)then
+      call umrsf_pair_setup(pair_kernel,infos,int2_driver,mo_a,mo_b,scale_exch)
+      write(iw,'(2X,A)') 'UMRSF pair cache: 1 dynamic exchange; quadratic spin-pair matrix'
+    end if
+
     ist = 1
     iend = nvec
     iter = 0
@@ -1060,6 +1069,7 @@ contains
         if (umrsf) then
           call int2_udata_st%clean()
           int2_udata_st%d3 => mrsf_density(:iv,:,:,:)
+          int2_udata_st%general_only = use_pair
           int2_udata_st%tamm_dancoff = tamm_dancoff
           int2_udata_st%scale_exchange = scale_exch
           int2_udata_st%scale_coulomb = scale_exch
@@ -1189,6 +1199,8 @@ contains
 
         end if
       end do
+
+      if(use_pair)call umrsf_pair_apply(pair_kernel,bvec_mo(:,ist:iend),amo(:,ist:iend))
 
       end if   ! use_sig / native sigma path
 
