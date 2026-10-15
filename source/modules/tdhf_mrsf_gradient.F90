@@ -224,39 +224,19 @@ contains
            !threshold=1.0d-15, &
            threshold=0.0d0, &
            infos=infos, &
-           include_ground_state=.false., cache=ao_cache)
+           include_ground_state=.false., &
+           include_weight_derivative=.true., cache=ao_cache)
 
-      ! Lee Eq. (3.16) identifies P=T+Z as the relaxed linear XC probe.
-      ! The call above contains the established ground-state and fixed-grid
-      ! AO/basis terms, but it does not differentiate the normalized
-      ! atom-centred quadrature weights or the motion of each grid slice with
-      ! its owner atom.  Add only those two moving-grid contributions in a
-      ! separate sweep.  Combining the ground-state and probe responses here
-      ! would differentiate a different quantity and double count terms.
+      ! Lee Eq. (3.16): P=T+Z is one relaxed linear XC probe. Its AO,
+      ! partition-weight and grid-owner derivatives share the contraction above.
+      ! The ROKS reference energy still uses its separate ground-state consumer.
       block
-        real(kind=dp), allocatable :: grid_correction(:,:), grid_d(:,:,:), &
-                                      grid_p(:,:,:)
+        real(kind=dp), allocatable :: grid_correction(:,:), grid_d(:,:,:)
         allocate(grid_correction(3,infos%mol_prop%natom), &
-                 grid_d(nbf,nbf,2), grid_p(nbf,nbf,2), source=0.0_dp)
-        ! utddft_xc_gradient temporarily applies AO normalization factors to
-        ! its density arguments.  Copies avoid a second normalization round
-        ! trip changing the arrays used later by mrsf_2e_grad.
+                 grid_d(nbf,nbf,2), source=0.0_dp)
+        ! Protect the densities used later by mrsf_2e_grad from another
+        ! normalization round trip in the ground-state XC routine.
         grid_d = d
-        grid_p = p
-        call utddft_xc_gradient(basis=basis, &
-             molGrid=molGrid, &
-             dedft=grid_correction, &
-             da=grid_d(:,:,1), &
-             db=grid_d(:,:,2), &
-             pa=grid_p(:,:,1:1), &
-             pb=grid_p(:,:,2:2), &
-             nmtx=1, &
-             threshold=0.0_dp, &
-             infos=infos, &
-             include_ground_state=.false., &
-             include_weight_derivative=.true., &
-             weight_derivative_only=.true., cache=ao_cache)
-        infos%atoms%grad = infos%atoms%grad + grid_correction
 
         ! The total excited-state energy also contains the ROKS reference
         ! energy.  Add its complete finite-grid XC gradient with the dedicated
@@ -274,7 +254,7 @@ contains
                dft_threshold=0.0_dp, urohf=.true., infos=infos, cache=ao_cache)
         end block
         infos%atoms%grad = infos%atoms%grad + grid_correction
-        deallocate(grid_correction, grid_d, grid_p)
+        deallocate(grid_correction, grid_d)
       end block
 
       call dftclean(infos)
