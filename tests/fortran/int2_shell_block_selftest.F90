@@ -164,6 +164,7 @@ contains
         x%int_apb=.true.;x%int_amb=.true.
       type is(int2_mrsf_data_t)
         x%d3=>mr(:,1:7,:,:)
+        x%general_only=mode==6
       type is(int2_umrsf_data_t)
         x%d3=>mr
       end select

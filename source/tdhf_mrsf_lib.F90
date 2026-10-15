@@ -5,6 +5,11 @@ module tdhf_mrsf_lib
     use basis_tools, only: basis_set
     use oqp_linalg
 
+    type :: mrsf_pair_t
+      real(dp),allocatable :: matrix(:,:)
+      integer,allocatable :: slot(:)
+    end type
+
     type, extends(int2_fock_data_t) :: int2_mrsf_data_t
 
       real(kind=dp), allocatable :: f3(:,:,:,:,:)
@@ -13,6 +18,7 @@ module tdhf_mrsf_lib
       real(kind=sp), allocatable :: ds_sp(:,:,:,:) !< FP32 copy of ds (opt-in OQP_MRSF_FP32)
       real(kind=sp), allocatable :: d3_sp(:,:,:,:) !< FP32 copy of d3 (opt-in OQP_MRSF_FP32)
       real(kind=sp), allocatable :: f3s(:,:,:,:,:) !< FP32 Fock accumulator (opt-in OQP_MRSF_FP32)
+      logical :: general_only = .false. ! energy-only: fixed spin-pair correction applied separately
       logical :: tamm_dancoff = .true. !< Tamm-Dancoff approximation
 
     contains
@@ -177,6 +183,7 @@ contains
     if (allocated(this%ds_sp)) deallocate(this%ds_sp)
     if (allocated(this%d3_sp)) deallocate(this%d3_sp)
     if (allocated(this%f3s)) deallocate(this%f3s)
+    this%general_only=.false.
     nullify(this%d3)
 
   end subroutine
@@ -263,11 +270,13 @@ contains
     type(int2_storage_t), intent(inout) :: buf
     integer :: i, j, k, l, n, v, c
     real(kind=dp) :: val, xval, cval
-    integer :: mythread
+    integer :: mythread, first_k, last_j
 
     mythread = buf%thread_id
 
     if (.not.this%tamm_dancoff) return
+    first_k=merge(7,1,this%general_only)
+    last_j=merge(0,4,this%general_only)
 
     associate ( f3 => this%f3(:,:,:,:,mythread), &
                 d3 => this%d3, &
@@ -292,7 +301,7 @@ contains
             val = buf%ints(n)
             cs = real(val*this%scale_coulomb, sp)
             xs = real(val*this%scale_exchange, sp)
-            do c = 1, 4
+            do c = 1, last_j
               do v = 1, nf
                 f3s(v,c,i,j) = f3s(v,c,i,j) + cs*ds_sp(v,c,k,l)
                 f3s(v,c,j,i) = f3s(v,c,j,i) + cs*ds_sp(v,c,k,l)
@@ -300,7 +309,7 @@ contains
                 f3s(v,c,l,k) = f3s(v,c,l,k) + cs*ds_sp(v,c,i,j)
               end do
             end do
-            do c = 1, 7
+            do c = first_k, 7
               do v = 1, nf
                 f3s(v,c,i,k) = f3s(v,c,i,k) - xs*d3_sp(v,c,j,l)
                 f3s(v,c,k,i) = f3s(v,c,k,i) - xs*d3_sp(v,c,l,j)
@@ -326,7 +335,7 @@ contains
           ! Coulomb (components 1:4): the 8 permutational contributions collapse
           ! to 4 distinct Fock targets, each reading one symmetric ds slab.
           ! Explicit loops (stride-1 v inner) vectorize and avoid array temporaries.
-          do c = 1, 4
+          do c = 1, last_j
             do v = 1, nf
               f3(v,c,i,j) = f3(v,c,i,j) + cval*ds(v,c,k,l)
               f3(v,c,j,i) = f3(v,c,j,i) + cval*ds(v,c,k,l)
@@ -335,7 +344,7 @@ contains
             end do
           end do
           ! Exchange (components 1:7): 8 distinct targets (no symmetry to fold).
-          do c = 1, 7
+          do c = first_k, 7
             do v = 1, nf
               f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,j,l)
               f3(v,c,k,i) = f3(v,c,k,i) - xval*d3(v,c,l,j)
@@ -4076,7 +4085,7 @@ contains
     logical :: bab,bcd,bsame
     integer :: i, j, k, l, n, v, c
     real(kind=dp) :: val, xval, cval
-    integer :: mythread
+    integer :: mythread, first_k, last_j
 
     bab=shell_block%shells(1)==shell_block%shells(2)
     bcd=shell_block%shells(3)==shell_block%shells(4)
@@ -4084,6 +4093,8 @@ contains
     mythread = thread_id
 
     if (.not.this%tamm_dancoff) return
+    first_k=merge(7,1,this%general_only)
+    last_j=merge(0,4,this%general_only)
 
     associate ( f3 => this%f3(:,:,:,:,mythread), &
                 d3 => this%d3, &
@@ -4140,7 +4151,7 @@ contains
 
             cs = real(val*this%scale_coulomb, sp)
             xs = real(val*this%scale_exchange, sp)
-            do c = 1, 4
+            do c = 1, last_j
               do v = 1, nf
                 f3s(v,c,i,j) = f3s(v,c,i,j) + cs*ds_sp(v,c,k,l)
                 f3s(v,c,j,i) = f3s(v,c,j,i) + cs*ds_sp(v,c,k,l)
@@ -4148,7 +4159,7 @@ contains
                 f3s(v,c,l,k) = f3s(v,c,l,k) + cs*ds_sp(v,c,i,j)
               end do
             end do
-            do c = 1, 7
+            do c = first_k, 7
               do v = 1, nf
                 f3s(v,c,i,k) = f3s(v,c,i,k) - xs*d3_sp(v,c,j,l)
                 f3s(v,c,k,i) = f3s(v,c,k,i) - xs*d3_sp(v,c,l,j)
@@ -4209,7 +4220,7 @@ contains
           ! Coulomb (components 1:4): the 8 permutational contributions collapse
           ! to 4 distinct Fock targets, each reading one symmetric ds slab.
           ! Explicit loops (stride-1 v inner) vectorize and avoid array temporaries.
-          do c = 1, 4
+          do c = 1, last_j
             do v = 1, nf
               f3(v,c,i,j) = f3(v,c,i,j) + cval*ds(v,c,k,l)
               f3(v,c,j,i) = f3(v,c,j,i) + cval*ds(v,c,k,l)
@@ -4218,7 +4229,7 @@ contains
             end do
           end do
           ! Exchange (components 1:7): 8 distinct targets (no symmetry to fold).
-          do c = 1, 7
+          do c = first_k, 7
             do v = 1, nf
               f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,j,l)
               f3(v,c,k,i) = f3(v,c,k,i) - xval*d3(v,c,l,j)
@@ -4481,5 +4492,133 @@ contains
 
 
   end subroutine int2_umrsf_consume_shell
+
+  ! The spin-pair correction acts only between CO and OV amplitudes.
+  ! Its three SOMO exchange images are independent of the trial vector.
+  logical function mrsf_pair_allowed(infos,ca,cb,cam,petite,limit_bytes) result(on)
+    use types, only: information
+    implicit none
+    type(information),intent(in)::infos
+    real(dp),intent(in)::ca(:,:),cb(:,:)
+    logical,intent(in)::cam,petite
+    integer(8),intent(in),optional::limit_bytes
+    integer(8)::limit
+    character(16)::value
+    integer::status,n
+    on=.false.
+    call get_environment_variable('OQP_MRSF_PAIR_CACHE',value,status=status)
+    if(status/=0.or.trim(value)/='1')return
+    if(infos%tddft%umrsf.or.cam.or.petite.or.infos%control%mrsf_fp32/=0)return
+    if(infos%tddft%mult/=1.and.infos%tddft%mult/=3)return
+    if(infos%mol_prop%nelec_a-infos%mol_prop%nelec_b/=2)return
+    if(.not.all(ca==cb).or.abs(infos%tddft%hfscale)<=epsilon(1.0_dp))return
+    n=size(ca,1)
+    limit=256_8*1024_8*1024_8
+    if(present(limit_bytes))limit=limit_bytes
+    ! Bound the persistent quadratic correction, not total process memory.
+    if(32_8*int(n-2,8)**2>limit)return
+    on=.true.
+  end function
+
+  subroutine mrsf_pair_setup(pair,infos,driver,c,scale)
+    use types, only: information
+    use int2_compute, only: int2_compute_t
+    use messages, only: show_message,with_abort
+    implicit none
+    type(mrsf_pair_t),intent(out)::pair
+    type(information),intent(in)::infos
+    type(int2_compute_t),intent(inout)::driver
+    real(dp),intent(in)::c(:,:),scale
+    type(int2_mrsf_data_t)::data
+    real(dp),allocatable,target::density(:,:,:,:)
+    real(dp),allocatable::b(:,:,:),tmp(:,:),ao(:,:)
+    integer::n,o1,o2,k,mu,nu,ok
+    n=size(c,1);o2=infos%mol_prop%nelec_a;o1=o2-1
+    allocate(density(3,7,n,n),b(n,n,3),tmp(n,n),ao(n,n),stat=ok)
+    if(ok/=0)call show_message('MRSF pair setup: cannot allocate matrices',with_abort)
+    density=0
+    do nu=1,n
+      do mu=1,n
+        density(1,7,mu,nu)=c(mu,o1)*c(nu,o1)
+        density(2,7,mu,nu)=c(mu,o2)*c(nu,o2)
+        density(3,7,mu,nu)=c(mu,o1)*c(nu,o2)
+      end do
+    end do
+    data%d3=>density;data%general_only=.true.
+    data%scale_exchange=scale;data%scale_coulomb=scale
+    call driver%run(data)
+    do k=1,3
+      ao=-data%f3(k,7,:,:,1)
+      call dgemm('t','n',n,n,n,1.0_dp,c,n,ao,n,0.0_dp,tmp,n)
+      call dgemm('n','n',n,n,n,1.0_dp,tmp,n,c,n,0.0_dp,b(:,:,k),n)
+    end do
+    call mrsf_pair_matrix(pair,infos,b)
+    call data%clean()
+  end subroutine
+
+  subroutine mrsf_pair_matrix(pair,infos,b)
+    use types, only: information
+    use messages, only: show_message,with_abort
+    implicit none
+    type(mrsf_pair_t),intent(out)::pair
+    type(information),intent(in)::infos
+    real(dp),intent(in)::b(:,:,:)
+    integer::n,nc,nv,na,m,i,j,a,v1,v2,ok
+    real(dp)::sgn,cc,vv,cv,d
+    n=size(b,1);nc=infos%mol_prop%nelec_b;na=nc+2;nv=n-na;m=2*(nc+nv)
+    allocate(pair%matrix(m,m),pair%slot(m),stat=ok)
+    if(ok/=0)call show_message('MRSF pair matrix: cannot allocate correction',with_abort)
+    pair%matrix=0
+    sgn=merge(1.0_dp,-1.0_dp,infos%tddft%mult==1)
+    cc=sgn*infos%tddft%spc_coco/infos%tddft%hfscale
+    vv=sgn*infos%tddft%spc_ovov/infos%tddft%hfscale
+    cv=sgn*infos%tddft%spc_coov/infos%tddft%hfscale
+    do i=1,nc
+      pair%slot(i)=i;pair%slot(nc+i)=na+i
+      do j=1,nc
+        pair%matrix(i,j)=cc*b(i,j,2)
+        pair%matrix(i,nc+j)=-cc*b(i,j,3)
+        pair%matrix(nc+i,j)=-cc*b(j,i,3)
+        pair%matrix(nc+i,nc+j)=cc*b(i,j,1)
+      end do
+    end do
+    do i=1,nv
+      a=na+i;v1=2*nc+i;v2=v1+nv
+      pair%slot(v1)=(a-nc-1)*na+na-1
+      pair%slot(v2)=pair%slot(v1)+1
+      do j=1,nv
+        pair%matrix(v1,2*nc+j)=vv*b(a,na+j,2)
+        pair%matrix(v1,2*nc+nv+j)=-vv*b(a,na+j,3)
+        pair%matrix(v2,2*nc+j)=-vv*b(na+j,a,3)
+        pair%matrix(v2,2*nc+nv+j)=vv*b(a,na+j,1)
+      end do
+      do j=1,nc
+        d=cv*(b(j,a,3)-b(a,j,3))
+        pair%matrix(j,v2)=d;pair%matrix(v2,j)=d
+        pair%matrix(nc+j,v1)=-d;pair%matrix(v1,nc+j)=-d
+      end do
+    end do
+  end subroutine
+
+  subroutine mrsf_pair_apply(pair,x,sigma)
+    use messages, only: show_message,with_abort
+    implicit none
+    type(mrsf_pair_t),intent(in)::pair
+    real(dp),intent(in)::x(:,:)
+    real(dp),intent(inout)::sigma(:,:)
+    real(dp),allocatable::packed(:,:),y(:,:)
+    integer::m,nf,i,ok
+    m=size(pair%slot);nf=size(x,2)
+    if(m==0.or.nf==0)return
+    allocate(packed(m,nf),y(m,nf),stat=ok)
+    if(ok/=0)call show_message('MRSF pair apply: cannot allocate vectors',with_abort)
+    do i=1,m
+      packed(i,:)=x(pair%slot(i),:)
+    end do
+    call dgemm('n','n',m,nf,m,1.0_dp,pair%matrix,m,packed,m,0.0_dp,y,m)
+    do i=1,m
+      sigma(pair%slot(i),:)=sigma(pair%slot(i),:)+y(i,:)
+    end do
+  end subroutine
 
 end module tdhf_mrsf_lib

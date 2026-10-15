@@ -397,7 +397,8 @@ contains
 
     use precision, only: dp
     use int2_compute, only: int2_compute_t
-    use tdhf_mrsf_lib, only: int2_mrsf_data_t, int2_umrsf_data_t
+    use tdhf_mrsf_lib, only: int2_mrsf_data_t, int2_umrsf_data_t, &
+      mrsf_pair_t,mrsf_pair_allowed,mrsf_pair_setup,mrsf_pair_apply
     use tdhf_lib, only: sym_response_project, &
       int2_td_data_t
     use tdhf_lib, only: &
@@ -489,6 +490,8 @@ contains
     logical :: uhfref
     logical :: debug_mode
 
+    type(mrsf_pair_t) :: pair_kernel
+    logical :: use_pair
     type(int2_compute_t) :: int2_driver
     type(int2_mrsf_data_t), target :: int2_data_st
     type(int2_umrsf_data_t), target :: int2_udata_st
@@ -993,6 +996,12 @@ contains
       end if
     end if
 
+    use_pair=mrsf_pair_allowed(infos,mo_a,mo_b,dft.and.infos%dft%cam_flag,int2_driver%petite)
+    if(use_pair)then
+      call mrsf_pair_setup(pair_kernel,infos,int2_driver,mo_a,scale_exch)
+      write(iw,'(2X,A)') 'MRSF pair cache: 1 dynamic exchange; quadratic spin-pair matrix'
+    end if
+
     ist = 1
     iend = nvec
     iter = 0
@@ -1078,6 +1087,7 @@ contains
         else
           call int2_data_st%clean()
           int2_data_st%d3 => mrsf_density(:iv,:,:,:)
+          int2_data_st%general_only = use_pair
           int2_data_st%tamm_dancoff = tamm_dancoff
           int2_data_st%scale_exchange = scale_exch
           int2_data_st%scale_coulomb = scale_exch
@@ -1189,6 +1199,8 @@ contains
 
         end if
       end do
+
+      if(use_pair)call mrsf_pair_apply(pair_kernel,bvec_mo(:,ist:iend),amo(:,ist:iend))
 
       end if   ! use_sig / native sigma path
 

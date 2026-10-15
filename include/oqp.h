@@ -11,6 +11,7 @@ void oqp_simplex_qp_solve_avoid(int64_t n, const double *h, const double *g,
 
 /* Internal ECP-integral self-test: err[0..9] (see tests/fortran/ecp_selftest.F90). */
 void oqp_ecp_selftest(double *err);
+void mrsf_pair_selftest(double *error, int32_t *checks, int32_t *failures);
 
 /* Internal TDHF Davidson residual self-test (tests/fortran/rpa_residual_selftest.F90).
    Arrays are column-major: w_l, w_r, v_l, v_r (n, ndsr); q (n, ndsr, 2). */
