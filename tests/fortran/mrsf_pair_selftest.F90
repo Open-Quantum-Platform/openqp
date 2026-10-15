@@ -11,8 +11,8 @@ contains
   subroutine mrsf_pair_selftest(error,checks,failures) bind(C)
     real(c_double),intent(out)::error
     integer(c_int),intent(out)::checks,failures
-    type(information)::inf
-    type(basis_set),target::basis
+    type(information),target::inf
+    type(basis_set),pointer::basis
     type(int2_mrsf_data_t)::old,new,stat
     type(mrsf_pair_t)::pair
     type(int2_storage_t)::buf
@@ -26,7 +26,7 @@ contains
     integer,parameter::sizes(5)=[6,8,4,4,2],occup(5)=[4,5,2,4,2]
     error=0;checks=0;failures=0
     call mrsf_set_fp32(0)
-    inf%basis=>basis
+    basis=>inf%basis
     inf%tddft%debug_mode=.false.;inf%tddft%umrsf=.false.;inf%control%mrsf_fp32=0
     inf%tddft%hfscale=0.6_dp
     call get_environment_variable('OQP_MRSF_PAIR_CACHE',option,status=env_status)
