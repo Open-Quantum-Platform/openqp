@@ -397,6 +397,7 @@ contains
 
     use precision, only: dp
     use int2_compute, only: int2_compute_t
+    use tdhf_mrsf_lib, only: mrsf_general_mntoia
     use tdhf_mrsf_lib, only: int2_mrsf_data_t, int2_umrsf_data_t, &
       mrsf_pair_t,mrsf_pair_allowed,mrsf_pair_setup,mrsf_pair_apply
     use tdhf_lib, only: sym_response_project, &
@@ -1108,6 +1109,7 @@ contains
 
         endif
 
+        if(.not.use_pair)then
         ! Scaling factor if triplet
         if (umrsf .and. mrst==3) then
           fmrst2(:,1:10,:,:) = -fmrst2(:,1:10,:,:)
@@ -1144,6 +1146,8 @@ contains
              fmrst2(:,1:4,:,:) = fmrst2(:,1:4,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
         endif
 
+        end if ! static pair matrix already contains the spin-pair scales
+
       else if (mrst==5) then
 
         int2_data_q = int2_td_data_t( &
@@ -1168,7 +1172,9 @@ contains
         if (mrst==1 .or. mrst==3) then
 
           ! Product (A-B)*X
-          if (umrsf) then
+          if(use_pair)then
+            call mrsf_general_mntoia(infos,fmrst2(iv,1,:,:),amo,mo_a,mo_b,ivec)
+          else if (umrsf) then
             call umrsfmntoia(infos, fmrst2(iv,:,:,:), amo, mo_a, mo_b, ivec)
           else
             call mrsfmntoia(infos, fmrst2(iv,:,:,:), amo, mo_a, mo_b, ivec)
