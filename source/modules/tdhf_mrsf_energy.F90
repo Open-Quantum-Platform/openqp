@@ -996,7 +996,10 @@ contains
       end if
     end if
 
-    use_pair=mrsf_pair_allowed(infos,mo_a,mo_b,dft.and.infos%dft%cam_flag,int2_driver%petite)
+    ! The device session replaces the native sigma build, so it would never use
+    ! the cache. A mid-run decline falls back to the full native contraction.
+    use_pair=.false.
+    if(.not.use_sig)use_pair=mrsf_pair_allowed(infos,mo_a,mo_b,dft.and.infos%dft%cam_flag,int2_driver%petite)
     if(use_pair)then
       call mrsf_pair_setup(pair_kernel,infos,int2_driver,mo_a,scale_exch)
       write(iw,'(2X,A)') 'MRSF pair cache: 1 dynamic exchange; quadratic spin-pair matrix'
