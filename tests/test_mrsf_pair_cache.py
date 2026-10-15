@@ -46,7 +46,7 @@ class MrsfPairLive(unittest.TestCase):
                     text = source.read_text().replace("basis=6-31g", "basis=" + basis)
                     text = text.replace("multiplicity=1", f"multiplicity={spin}") + extra
                     Path(wd, "run.inp").write_text(text)
-                    env = dict(os.environ)
+                    env = dict(os.environ, OQP_ROUTEC_SIG="0")
                     env.pop("OQP_MRSF_PAIR_CACHE", None)
                     if option is not None:
                         env["OQP_MRSF_PAIR_CACHE"] = option
