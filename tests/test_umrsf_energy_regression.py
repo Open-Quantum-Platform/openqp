@@ -224,7 +224,11 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
         source = compact(LIB.read_text())
         kernel = source.split("subroutineint2_umrsf_data_t_update", 1)[1].split(
             "endsubroutineint2_umrsf_data_t_update", 1)[0]
-        mixed = kernel.split("doc=9,10", 1)[1].split("enddo", 2)
+        # Full-channel execution retains channels 9:10; general-only execution
+        # uses the empty 9:8 range. Check that contract before the permutation.
+        prefix, mixed = kernel.split("doc=9,last_mixed", 1)
+        self.assertIn("last_mixed=merge(8,10,this%general_only)", prefix)
+        mixed = mixed.split("enddo", 2)
         mixed = mixed[0] + "enddo" + mixed[1]
         expected_updates = (
             "f3(v,c,i,l)=f3(v,c,i,l)-xval*d3(v,c,k,j)",
