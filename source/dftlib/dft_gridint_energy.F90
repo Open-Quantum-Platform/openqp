@@ -462,6 +462,9 @@ contains
     xc_opts%functional => infos%functional
     xc_opts%hasBeta = urohf
     xc_opts%isWFVecs = .false.
+    ! The KS update reads aoV/aoG1 and the density; of the transformed
+    ! vectors only D*phi is needed (for LDA/GGA, see compDRhoAO).
+    xc_opts%valueOnlyMOs = .true.
     xc_opts%numAOs = nbf
     xc_opts%maxPts = molGrid%maxSlicePts
     xc_opts%limPts = molGrid%maxNRadTimesNAng
