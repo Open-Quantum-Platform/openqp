@@ -807,6 +807,7 @@ void tdhf_mrsf_energy(struct oqp_handle_t *inf);
 void tdhf_umrsf_energy(struct oqp_handle_t *inf);
 void tdhf_umrsf_z_vector(struct oqp_handle_t *inf);
 void tdhf_umrsf_gradient(struct oqp_handle_t *inf);
+void umrsf_bra_reuse_selftest(double *error, int *checks);
 void tdhf_mrsf_ekt_ip(struct oqp_handle_t *inf);
 void tdhf_mrsf_ekt_ea(struct oqp_handle_t *inf);
 void tdhf_mrsf_z_vector(struct oqp_handle_t *inf);
