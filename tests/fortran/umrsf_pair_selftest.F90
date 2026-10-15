@@ -113,6 +113,8 @@ contains
               call old%parallel_start(basis,workers)
               call new%parallel_start(basis,workers)
               call stat%parallel_start(basis,workers)
+              if(size(new%f3,2)/=1.or.size(stat%f3,2)/=1)failures=failures+1
+              if(size(new%ds)/=0.or.size(stat%ds)/=0)failures=failures+1
               if(maxval(abs(old%dsh-new%dsh))>0)failures=failures+1
               q=0
               do i=1,n
@@ -137,7 +139,7 @@ contains
               end do
               call old%parallel_stop();call new%parallel_stop();call stat%parallel_stop()
               do k=1,6
-                b(:,:,k)=-stat%f3(k,11,:,:,1)
+                b(:,:,k)=-stat%f3(k,1,:,:,1)
               end do
               call umrsf_pair_matrix(pair,inf,c,cb,b)
               do v=1,nf
@@ -146,8 +148,16 @@ contains
                   image(k,:,:)=image(k,:,:)*scales(k)
                 end do
                 call umrsfmntoia(inf,image,aold,c,cb,v)
-                image=new%f3(v,:,:,:,1)
+                image=0.0_dp
+                image(11,:,:)=new%f3(v,1,:,:,1)
                 call umrsfmntoia(inf,image,anew,c,cb,v)
+                block
+                  real(dp) :: reference(size(anew,1))
+                  reference=anew(:,v)
+                  call mrsf_general_mntoia(inf,new%f3(v,1,:,:,1),anew,c,cb,v)
+                  error=max(error,maxval(abs(reference-anew(:,v))))
+                  if(maxval(abs(reference-anew(:,v)))>2e-10_dp)failures=failures+1
+                end block
               end do
               call umrsf_pair_apply(pair,x,anew)
               delta=maxval(abs(aold-anew))

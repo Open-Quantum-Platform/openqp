@@ -166,6 +166,7 @@ contains
         x%d3=>mr(:,1:7,:,:)
       type is(int2_umrsf_data_t)
         x%d3=>mr
+        x%general_only=mode==6
       end select
     end subroutine
     subroutine compare(delta)

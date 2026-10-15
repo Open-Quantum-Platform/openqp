@@ -421,6 +421,7 @@ contains
     use printing, only: print_module_info
     use iso_c_binding, only: c_f_pointer, c_int
 
+    use tdhf_mrsf_lib, only: mrsf_general_mntoia
     use tdhf_mrsf_lib, only: umrsf_pair_t,umrsf_pair_allowed,umrsf_pair_setup,umrsf_pair_apply
     implicit none
 
@@ -1105,6 +1106,7 @@ contains
 
         endif
 
+        if(.not.use_pair)then
         ! Scaling factor if triplet
         if (umrsf .and. mrst==3) then
           fmrst2(:,1:10,:,:) = -fmrst2(:,1:10,:,:)
@@ -1141,6 +1143,8 @@ contains
              fmrst2(:,1:4,:,:) = fmrst2(:,1:4,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
         endif
 
+        end if ! static pair matrix already contains the spin-pair scales
+
       else if (mrst==5) then
 
         int2_data_q = int2_td_data_t( &
@@ -1165,7 +1169,9 @@ contains
         if (mrst==1 .or. mrst==3) then
 
           ! Product (A-B)*X
-          if (umrsf) then
+          if(use_pair)then
+            call mrsf_general_mntoia(infos,fmrst2(iv,1,:,:),amo,mo_a,mo_b,ivec)
+          else if (umrsf) then
             call umrsfmntoia(infos, fmrst2(iv,:,:,:), amo, mo_a, mo_b, ivec)
           else
             call mrsfmntoia(infos, fmrst2(iv,:,:,:), amo, mo_a, mo_b, ivec)

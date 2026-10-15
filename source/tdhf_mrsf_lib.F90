@@ -70,7 +70,8 @@ contains
     class(int2_mrsf_data_t), target, intent(inout) :: this
     type(basis_set), intent(in) :: basis
     integer, intent(in) :: nthreads
-    integer :: nbf, nsh, nmatrix, mu, nu, ncoul
+    integer :: nbf, nsh, nmatrix, mu, nu, ncoul, noutput
+    logical :: compact
 
     this%shell_blocks=.false.
     this%shell_block_min=256
@@ -87,11 +88,18 @@ contains
     nsh = basis%nshell
     nmatrix = ubound(this%d3, 2) ! 7 ! spin pair copuling A': bo2v, bo1v, bco1, bco2, o21v, co12; A: ball
 
+    compact=.false.
+    select type(this)
+    type is(int2_umrsf_data_t)
+      compact=this%general_only
+    end select
+    noutput=merge(1,nmatrix,compact)
+
     if (this%cur_pass == 1) then
       if (allocated(this%f3)) deallocate(this%f3)
       if (allocated(this%dsh)) deallocate(this%dsh)
 
-      allocate(this%f3(this%nfocks, nmatrix, nbf, nbf, nthreads), &
+      allocate(this%f3(this%nfocks, noutput, nbf, nbf, nthreads), &
                this%dsh(nsh,nsh), &
                source=0.0d0)
 
@@ -105,6 +113,7 @@ contains
       type is (int2_umrsf_data_t)
         ncoul = 8
       end select
+      if(compact)ncoul=0 ! No Coulomb consumer for the single dynamic image.
       if (allocated(this%ds)) deallocate(this%ds)
       allocate(this%ds(this%nfocks, ncoul, nbf, nbf))
       do nu = 1, nbf
@@ -392,13 +401,14 @@ contains
     type(int2_storage_t), intent(inout) :: buf
     integer :: i, j, k, l, n, v, c
     real(kind=dp) :: val, xval, cval
-    integer :: mythread, last_pair, last_mixed
+    integer :: mythread, last_pair, last_mixed, general_channel
 
     mythread = buf%thread_id
 
     if (.not.this%tamm_dancoff) return
     last_pair=merge(0,8,this%general_only)
     last_mixed=merge(8,10,this%general_only)
+    general_channel=merge(1,11,this%general_only)
 
     associate ( f3 => this%f3(:,:,:,:,mythread), &
                 d3 => this%d3, &
@@ -446,14 +456,14 @@ contains
             end do
           end do
           do v = 1, nf
-            f3(v,11,i,k) = f3(v,11,i,k) - xval*d3(v,11,j,l)
-            f3(v,11,k,i) = f3(v,11,k,i) - xval*d3(v,11,l,j)
-            f3(v,11,i,l) = f3(v,11,i,l) - xval*d3(v,11,j,k)
-            f3(v,11,l,i) = f3(v,11,l,i) - xval*d3(v,11,k,j)
-            f3(v,11,j,k) = f3(v,11,j,k) - xval*d3(v,11,i,l)
-            f3(v,11,k,j) = f3(v,11,k,j) - xval*d3(v,11,l,i)
-            f3(v,11,j,l) = f3(v,11,j,l) - xval*d3(v,11,i,k)
-            f3(v,11,l,j) = f3(v,11,l,j) - xval*d3(v,11,k,i)
+            f3(v,general_channel,i,k) = f3(v,general_channel,i,k) - xval*d3(v,11,j,l)
+            f3(v,general_channel,k,i) = f3(v,general_channel,k,i) - xval*d3(v,11,l,j)
+            f3(v,general_channel,i,l) = f3(v,general_channel,i,l) - xval*d3(v,11,j,k)
+            f3(v,general_channel,l,i) = f3(v,general_channel,l,i) - xval*d3(v,11,k,j)
+            f3(v,general_channel,j,k) = f3(v,general_channel,j,k) - xval*d3(v,11,i,l)
+            f3(v,general_channel,k,j) = f3(v,general_channel,k,j) - xval*d3(v,11,l,i)
+            f3(v,general_channel,j,l) = f3(v,general_channel,j,l) - xval*d3(v,11,i,k)
+            f3(v,general_channel,l,j) = f3(v,general_channel,l,j) - xval*d3(v,11,k,i)
           end do
 
           ! Mixed alpha/beta spin-pair channels use the GAMESS-compatible
@@ -479,14 +489,14 @@ contains
           i = buf%ids(1,n); j = buf%ids(2,n); k = buf%ids(3,n); l = buf%ids(4,n)
           xval = buf%ints(n) * this%scale_exchange
           do v = 1, nf
-            f3(v,11,i,k) = f3(v,11,i,k) - xval*d3(v,11,j,l)
-            f3(v,11,k,i) = f3(v,11,k,i) - xval*d3(v,11,l,j)
-            f3(v,11,i,l) = f3(v,11,i,l) - xval*d3(v,11,j,k)
-            f3(v,11,l,i) = f3(v,11,l,i) - xval*d3(v,11,k,j)
-            f3(v,11,j,k) = f3(v,11,j,k) - xval*d3(v,11,i,l)
-            f3(v,11,k,j) = f3(v,11,k,j) - xval*d3(v,11,l,i)
-            f3(v,11,j,l) = f3(v,11,j,l) - xval*d3(v,11,i,k)
-            f3(v,11,l,j) = f3(v,11,l,j) - xval*d3(v,11,k,i)
+            f3(v,general_channel,i,k) = f3(v,general_channel,i,k) - xval*d3(v,11,j,l)
+            f3(v,general_channel,k,i) = f3(v,general_channel,k,i) - xval*d3(v,11,l,j)
+            f3(v,general_channel,i,l) = f3(v,general_channel,i,l) - xval*d3(v,11,j,k)
+            f3(v,general_channel,l,i) = f3(v,general_channel,l,i) - xval*d3(v,11,k,j)
+            f3(v,general_channel,j,k) = f3(v,general_channel,j,k) - xval*d3(v,11,i,l)
+            f3(v,general_channel,k,j) = f3(v,general_channel,k,j) - xval*d3(v,11,l,i)
+            f3(v,general_channel,j,l) = f3(v,general_channel,j,l) - xval*d3(v,11,i,k)
+            f3(v,general_channel,l,j) = f3(v,general_channel,l,j) - xval*d3(v,11,k,i)
           end do
         end do
       end if
@@ -4317,7 +4327,7 @@ contains
     logical :: bab,bcd,bsame
     integer :: i, j, k, l, n, v, c
     real(kind=dp) :: val, xval, cval
-    integer :: mythread, last_pair, last_mixed
+    integer :: mythread, last_pair, last_mixed, general_channel
 
     bab=shell_block%shells(1)==shell_block%shells(2)
     bcd=shell_block%shells(3)==shell_block%shells(4)
@@ -4327,6 +4337,7 @@ contains
     if (.not.this%tamm_dancoff) return
     last_pair=merge(0,8,this%general_only)
     last_mixed=merge(8,10,this%general_only)
+    general_channel=merge(1,11,this%general_only)
 
     associate ( f3 => this%f3(:,:,:,:,mythread), &
                 d3 => this%d3, &
@@ -4406,14 +4417,14 @@ contains
             end do
           end do
           do v = 1, nf
-            f3(v,11,i,k) = f3(v,11,i,k) - xval*d3(v,11,j,l)
-            f3(v,11,k,i) = f3(v,11,k,i) - xval*d3(v,11,l,j)
-            f3(v,11,i,l) = f3(v,11,i,l) - xval*d3(v,11,j,k)
-            f3(v,11,l,i) = f3(v,11,l,i) - xval*d3(v,11,k,j)
-            f3(v,11,j,k) = f3(v,11,j,k) - xval*d3(v,11,i,l)
-            f3(v,11,k,j) = f3(v,11,k,j) - xval*d3(v,11,l,i)
-            f3(v,11,j,l) = f3(v,11,j,l) - xval*d3(v,11,i,k)
-            f3(v,11,l,j) = f3(v,11,l,j) - xval*d3(v,11,k,i)
+            f3(v,general_channel,i,k) = f3(v,general_channel,i,k) - xval*d3(v,11,j,l)
+            f3(v,general_channel,k,i) = f3(v,general_channel,k,i) - xval*d3(v,11,l,j)
+            f3(v,general_channel,i,l) = f3(v,general_channel,i,l) - xval*d3(v,11,j,k)
+            f3(v,general_channel,l,i) = f3(v,general_channel,l,i) - xval*d3(v,11,k,j)
+            f3(v,general_channel,j,k) = f3(v,general_channel,j,k) - xval*d3(v,11,i,l)
+            f3(v,general_channel,k,j) = f3(v,general_channel,k,j) - xval*d3(v,11,l,i)
+            f3(v,general_channel,j,l) = f3(v,general_channel,j,l) - xval*d3(v,11,i,k)
+            f3(v,general_channel,l,j) = f3(v,general_channel,l,j) - xval*d3(v,11,k,i)
           end do
 
           ! Mixed alpha/beta spin-pair channels use the GAMESS-compatible
@@ -4475,14 +4486,14 @@ contains
 
           xval = val * this%scale_exchange
           do v = 1, nf
-            f3(v,11,i,k) = f3(v,11,i,k) - xval*d3(v,11,j,l)
-            f3(v,11,k,i) = f3(v,11,k,i) - xval*d3(v,11,l,j)
-            f3(v,11,i,l) = f3(v,11,i,l) - xval*d3(v,11,j,k)
-            f3(v,11,l,i) = f3(v,11,l,i) - xval*d3(v,11,k,j)
-            f3(v,11,j,k) = f3(v,11,j,k) - xval*d3(v,11,i,l)
-            f3(v,11,k,j) = f3(v,11,k,j) - xval*d3(v,11,l,i)
-            f3(v,11,j,l) = f3(v,11,j,l) - xval*d3(v,11,i,k)
-            f3(v,11,l,j) = f3(v,11,l,j) - xval*d3(v,11,k,i)
+            f3(v,general_channel,i,k) = f3(v,general_channel,i,k) - xval*d3(v,11,j,l)
+            f3(v,general_channel,k,i) = f3(v,general_channel,k,i) - xval*d3(v,11,l,j)
+            f3(v,general_channel,i,l) = f3(v,general_channel,i,l) - xval*d3(v,11,j,k)
+            f3(v,general_channel,l,i) = f3(v,general_channel,l,i) - xval*d3(v,11,k,j)
+            f3(v,general_channel,j,k) = f3(v,general_channel,j,k) - xval*d3(v,11,i,l)
+            f3(v,general_channel,k,j) = f3(v,general_channel,k,j) - xval*d3(v,11,l,i)
+            f3(v,general_channel,j,l) = f3(v,general_channel,j,l) - xval*d3(v,11,i,k)
+            f3(v,general_channel,l,j) = f3(v,general_channel,l,j) - xval*d3(v,11,k,i)
           end do
               end do
             end do
@@ -4552,7 +4563,7 @@ contains
     data%scale_exchange=scale;data%scale_coulomb=scale
     call driver%run(data)
     do k=1,6
-      images(:,:,k)=-data%f3(k,11,:,:,1)
+      images(:,:,k)=-data%f3(k,1,:,:,1)
     end do
     call umrsf_pair_matrix(pair,infos,ca,cb,images)
     call data%clean()
@@ -4630,5 +4641,35 @@ contains
       sigma(pair%slot(i),:)=sigma(pair%slot(i),:)+y(i,:)
     end do
   end subroutine
+
+
+  ! Project the sole dynamic exchange image; static spin-pair terms are added separately.
+  subroutine mrsf_general_mntoia(infos,image,pmo,ca,cb,ivec)
+    use types, only: information
+    use messages, only: show_message,with_abort
+    implicit none
+    type(information),intent(in)::infos
+    real(dp),intent(in)::image(:,:),ca(:,:),cb(:,:)
+    real(dp),intent(inout)::pmo(:,:)
+    integer,intent(in)::ivec
+    real(dp),allocatable::work(:,:),response(:,:)
+    integer::n,na,nb,nv,ok
+    n=infos%basis%nbf;na=infos%mol_prop%nelec_a;nb=infos%mol_prop%nelec_b;nv=n-nb
+    allocate(work(na,n),response(na,nv),stat=ok)
+    if(ok/=0)call show_message('MRSF general projection: cannot allocate matrices',with_abort)
+    call dgemm('t','n',na,n,n,1.0_dp,ca,n,image,n,0.0_dp,work,na)
+    call dgemm('n','n',na,nv,n,1.0_dp,work,na,cb(:,nb+1:n),n,0.0_dp,response,na)
+    ! The first two particle columns are O1/O2; retain the established OO fold.
+    if(infos%tddft%mult==1)then
+      response(na-1,1)=(response(na-1,1)-response(na,2))/sqrt(2.0_dp)
+    else
+      response(na-1,1)=(response(na-1,1)+response(na,2))/sqrt(2.0_dp)
+      response(na,1)=0.0_dp
+      response(na-1,2)=0.0_dp
+    end if
+    response(na,2)=0.0_dp
+    pmo(:,ivec)=0.0_dp
+    pmo(1:na*nv,ivec)=reshape(response,[na*nv])
+  end subroutine mrsf_general_mntoia
 
 end module tdhf_mrsf_lib
