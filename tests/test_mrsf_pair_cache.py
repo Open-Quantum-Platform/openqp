@@ -1,0 +1,83 @@
+"""Signed production-density pin for the quadratic MRSF spin-pair matrix."""
+import ctypes
+import os
+import json
+import sys
+import subprocess
+import tempfile
+from pathlib import Path
+import unittest
+
+
+class MrsfPairCache(unittest.TestCase):
+    def test_signed_sigma_and_repeated_lifetime(self):
+        import oqp.runtime as runtime
+        root, suffix = runtime.resolve_oqp_root()
+        lib = ctypes.CDLL(runtime.library_path(root, suffix))
+        check = lib.mrsf_pair_selftest
+        check.argtypes = [ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_int),
+                          ctypes.POINTER(ctypes.c_int)]
+        check.restype = None
+        for call in range(3):
+            with self.subTest(call=call):
+                error, count, failed = ctypes.c_double(), ctypes.c_int(), ctypes.c_int()
+                check(ctypes.byref(error), ctypes.byref(count), ctypes.byref(failed))
+                self.assertEqual(count.value, 80)
+                self.assertEqual(failed.value, 0)
+                self.assertLessEqual(error.value, 2e-10)
+                print(f"MRSF_PAIR_PIN cases={count.value} max_abs={error.value:.16g}")
+
+
+class MrsfPairLive(unittest.TestCase):
+    def test_molecular_dispatch_and_spectrum(self):
+        import numpy as np
+        source = Path(__file__).resolve().parents[1] / "examples/MRSF-TDDFT/H2O_MRSF_PAIR_CACHE.inp"
+        cases = (("singlet", 1, "6-31g", ""), ("triplet", 3, "6-31g", ""),
+                 ("spc", 1, "6-31g", "spc_coco=0.2\nspc_ovov=0.7\nspc_coov=0.35\n"),
+                 ("spherical", 1, "cc-pvdz", ""))
+        for name, spin, basis, extra in cases:
+            results = []
+            for option in ((None, "false", "true") if name == "singlet" else ("false", "true")):
+                with self.subTest(case=name, option=option), tempfile.TemporaryDirectory(prefix="mrsf_pair_") as wd:
+                    text = source.read_text().replace("basis=6-31g", "basis=" + basis)
+                    self.assertIn("pair_cache=true\n", text)
+                    text = text.replace("pair_cache=true\n", "")
+                    text = text.replace("multiplicity=1", f"multiplicity={spin}") + extra
+                    if option is not None:
+                        text += f"pair_cache={option}\n"
+                    Path(wd, "run.inp").write_text(text)
+                    env = dict(os.environ, OQP_ROUTEC_SIG="0")
+                    proc = subprocess.run([sys.executable, str(Path(__file__).resolve()), "--live"],
+                                          cwd=wd, env=env, text=True, capture_output=True, timeout=180)
+                    self.assertEqual(proc.returncode, 0, proc.stdout[-3000:] + proc.stderr[-3000:])
+                    result = json.loads(Path(wd, "result.json").read_text())
+                    results.append(result)
+                    log = Path(wd, "run.log").read_text()
+                    self.assertIn("energies converged in", log)
+                    self.assertEqual("1 dynamic exchange; quadratic spin-pair matrix" in log, option == "true")
+            for result in results[1:]:
+                np.testing.assert_allclose(result, results[0], atol=1e-8, rtol=0)
+
+    def test_excluded_request_reports_standard_path(self):
+        # FP32 digestion is excluded from the cache, so a request must say so and fall back.
+        source = Path(__file__).resolve().parents[1] / "examples/MRSF-TDDFT/H2O_MRSF_PAIR_CACHE.inp"
+        with tempfile.TemporaryDirectory(prefix="mrsf_pair_") as wd:
+            Path(wd, "run.inp").write_text(source.read_text() + "fp32=on\n")
+            proc = subprocess.run([sys.executable, str(Path(__file__).resolve()), "--live"],
+                                  cwd=wd, env=dict(os.environ, OQP_ROUTEC_SIG="0"), text=True,
+                                  capture_output=True, timeout=180)
+            self.assertEqual(proc.returncode, 0, proc.stdout[-3000:] + proc.stderr[-3000:])
+            log = Path(wd, "run.log").read_text()
+            self.assertIn("energies converged in", log)
+            self.assertIn("MRSF pair cache: not applicable", log)
+            self.assertNotIn("1 dynamic exchange; quadratic spin-pair matrix", log)
+
+
+if __name__ == '__main__':
+    if sys.argv[1:] == ["--live"]:
+        from oqp.pyoqp import Runner
+        runner = Runner(project="pair", input_file="run.inp", log="run.log", silent=1, usempi=False)
+        runner.run()
+        Path("result.json").write_text(json.dumps(runner.mol.data["OQP::td_energies"].tolist()))
+    else:
+        unittest.main()
