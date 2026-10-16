@@ -1198,8 +1198,9 @@ contains
 !> Verified against the CAS/finite-difference gate of the derivation notes (worst 5.25e-12 ≤ 1e-9).
 !>   ω_2e = Σ_k ⟨B_k, F_k⟩,  F_k = s_k int2[D]_k,  D=umrsfcbc, B=umrsf_bra_density,  int2_umrsf
 !>   is CHANNEL-DIAGONAL & SELF-ADJOINT (J/K of 8-fold-sym ERIs) ⇒ for the ket-derivative term
-!>   ⟨B_k, s_k int2[∂D_k]⟩ = ⟨GB_k, ∂D_k⟩ with GB_k = s_k int2[B]_k. B is a signed permutation
-!>   of D, so GB_k is the same permutation of F (umrsf_bra_image); no second int2 build.
+!>   ⟨B_k, s_k int2[∂D_k]⟩ = ⟨GB_k, ∂D_k⟩ with GB_k = s_k int2[B]_k. B is a scaled, signed
+!>   channel permutation of D (B(1:8)=D(5:8,1:4)/2, B(9:10)=-D(9:10), B(11)=D(11)), so GB_k
+!>   is the same map applied to F (umrsf_bra_image); no second int2 build.
 !>   g2e = V_σᵀ Γ_σ ,  Γ_σ = Σ_k [⟨F_k,∂B_k/∂V_σ⟩ + ⟨GB_k,∂D_k/∂V_σ⟩].
 !> Each channel density is V_l A_k V_rᵀ (sparse amplitude core A_k; ket core A, bra core AB;
 !> spin pairing aa=1,3,5,7 / bb=2,4,6,8 / ab=9,10,11). Gradient of ⟨M,V_l A V_rᵀ⟩:
@@ -1235,7 +1236,7 @@ contains
              mc(nbf,nbf), vacc(nbf,nbf), &
              densd(1,11,nbf,nbf), source=0.0_dp)
 
-    ! The bra densities are a signed permutation of the ket densities.
+    ! The bra densities are a scaled, signed channel permutation of the ket densities.
     call iatogen(xamp, xmat, nocca, noccb)
     call umrsfcbc(infos, va, vb, xmat, densd(1,:,:,:))
 
