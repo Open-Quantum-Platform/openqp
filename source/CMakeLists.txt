@@ -23,6 +23,7 @@ add_subdirectory(dftlib)
 # not globbed: tests/fortran/ also holds standalone test PROGRAMs that must NOT
 # be compiled into the library.
 list(APPEND SOURCES
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/mrsf_pair_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/response_cache_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/functional_owner_cache_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/response_workspace_selftest.F90"

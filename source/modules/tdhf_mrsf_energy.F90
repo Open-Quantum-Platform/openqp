@@ -397,7 +397,9 @@ contains
 
     use precision, only: dp
     use int2_compute, only: int2_compute_t
-    use tdhf_mrsf_lib, only: int2_mrsf_data_t, int2_umrsf_data_t
+    use tdhf_mrsf_lib, only: mrsf_general_mntoia
+    use tdhf_mrsf_lib, only: int2_mrsf_data_t, int2_umrsf_data_t, &
+      mrsf_pair_t,mrsf_pair_allowed,mrsf_pair_setup,mrsf_pair_apply
     use tdhf_lib, only: sym_response_project, &
       int2_td_data_t
     use tdhf_lib, only: &
@@ -489,6 +491,8 @@ contains
     logical :: uhfref
     logical :: debug_mode
 
+    type(mrsf_pair_t) :: pair_kernel
+    logical :: use_pair
     type(int2_compute_t) :: int2_driver
     type(int2_mrsf_data_t), target :: int2_data_st
     type(int2_umrsf_data_t), target :: int2_udata_st
@@ -993,6 +997,19 @@ contains
       end if
     end if
 
+    ! The device session replaces the native sigma build, so it would never use
+    ! the cache. A mid-run decline falls back to the full native contraction.
+    use_pair=.false.
+    if(.not.use_sig)use_pair=mrsf_pair_allowed(infos,mo_a,mo_b,dft.and.infos%dft%cam_flag,int2_driver%petite)
+    if(use_pair)then
+      call mrsf_pair_setup(pair_kernel,infos,int2_driver,mo_a,scale_exch)
+      write(iw,'(2X,A)') 'MRSF pair cache: 1 dynamic exchange; quadratic spin-pair matrix'
+    else if(infos%tddft%pair_cache.and.use_sig)then
+      write(iw,'(2X,A)') 'MRSF pair cache: not used with the device sigma route'
+    else if(infos%tddft%pair_cache)then
+      write(iw,'(2X,A)') 'MRSF pair cache: not applicable to this calculation; standard contraction'
+    end if
+
     ist = 1
     iend = nvec
     iter = 0
@@ -1078,6 +1095,7 @@ contains
         else
           call int2_data_st%clean()
           int2_data_st%d3 => mrsf_density(:iv,:,:,:)
+          int2_data_st%general_only = use_pair
           int2_data_st%tamm_dancoff = tamm_dancoff
           int2_data_st%scale_exchange = scale_exch
           int2_data_st%scale_coulomb = scale_exch
@@ -1095,6 +1113,7 @@ contains
 
         endif
 
+        if(.not.use_pair)then
         ! Scaling factor if triplet
         if (umrsf .and. mrst==3) then
           fmrst2(:,1:10,:,:) = -fmrst2(:,1:10,:,:)
@@ -1131,6 +1150,8 @@ contains
              fmrst2(:,1:4,:,:) = fmrst2(:,1:4,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
         endif
 
+        end if ! static pair matrix already contains the spin-pair scales
+
       else if (mrst==5) then
 
         int2_data_q = int2_td_data_t( &
@@ -1155,7 +1176,9 @@ contains
         if (mrst==1 .or. mrst==3) then
 
           ! Product (A-B)*X
-          if (umrsf) then
+          if(use_pair)then
+            call mrsf_general_mntoia(infos,fmrst2(iv,1,:,:),amo,mo_a,mo_b,ivec)
+          else if (umrsf) then
             call umrsfmntoia(infos, fmrst2(iv,:,:,:), amo, mo_a, mo_b, ivec)
           else
             call mrsfmntoia(infos, fmrst2(iv,:,:,:), amo, mo_a, mo_b, ivec)
@@ -1189,6 +1212,8 @@ contains
 
         end if
       end do
+
+      if(use_pair)call mrsf_pair_apply(pair_kernel,bvec_mo(:,ist:iend),amo(:,ist:iend))
 
       end if   ! use_sig / native sigma path
 
