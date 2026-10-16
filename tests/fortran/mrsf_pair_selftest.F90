@@ -20,17 +20,12 @@ contains
     real(dp),allocatable::c(:,:),x(:,:),aold(:,:),anew(:,:),work(:,:),b(:,:,:),image(:,:,:)
     integer::shape,n,na,nc,dim,nf,spin,spc,workers,mode,i,j,k,l,v,idx,q,pq,rs,reuse
     real(dp)::value,delta,scales(6)
-    character(16)::option
-    integer::env_status
-    logical::enabled
     integer,parameter::sizes(5)=[6,8,4,4,2],occup(5)=[4,5,2,4,2]
     error=0;checks=0;failures=0
     call mrsf_set_fp32(0)
     basis=>inf%basis
     inf%tddft%debug_mode=.false.;inf%tddft%umrsf=.false.;inf%control%mrsf_fp32=0
     inf%tddft%hfscale=0.6_dp
-    call get_environment_variable('OQP_MRSF_PAIR_CACHE',option,status=env_status)
-    enabled=env_status==0.and.trim(option)=='1'
     call buf%init(1)
     do shape=1,5
       n=sizes(shape);na=occup(shape);nc=na-2;dim=na*(n-nc)
@@ -44,8 +39,10 @@ contains
         end do
       end do
       if(shape==1)then
-        inf%tddft%mult=1
-        if(mrsf_pair_allowed(inf,c,c,.false.,.false.).neqv.enabled)failures=failures+1
+        inf%tddft%mult=1;inf%tddft%pair_cache=.false.
+        if(mrsf_pair_allowed(inf,c,c,.false.,.false.))failures=failures+1
+        inf%tddft%pair_cache=.true.
+        if(.not.mrsf_pair_allowed(inf,c,c,.false.,.false.))failures=failures+1
         if(mrsf_pair_allowed(inf,c,c,.false.,.false.,0_8))failures=failures+1
         if(mrsf_pair_allowed(inf,c,c,.true.,.false.))failures=failures+1
         if(mrsf_pair_allowed(inf,c,c,.false.,.true.))failures=failures+1

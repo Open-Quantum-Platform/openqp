@@ -6,7 +6,6 @@ import sys
 import subprocess
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
 import unittest
 
 
@@ -19,11 +18,8 @@ class MrsfPairCache(unittest.TestCase):
         check.argtypes = [ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_int),
                           ctypes.POINTER(ctypes.c_int)]
         check.restype = None
-        for option in ("1", "0", None):
-            with self.subTest(option=option), patch.dict(os.environ):
-                os.environ.pop("OQP_MRSF_PAIR_CACHE", None)
-                if option is not None:
-                    os.environ["OQP_MRSF_PAIR_CACHE"] = option
+        for call in range(3):
+            with self.subTest(call=call):
                 error, count, failed = ctypes.c_double(), ctypes.c_int(), ctypes.c_int()
                 check(ctypes.byref(error), ctypes.byref(count), ctypes.byref(failed))
                 self.assertEqual(count.value, 80)
@@ -41,15 +37,16 @@ class MrsfPairLive(unittest.TestCase):
                  ("spherical", 1, "cc-pvdz", ""))
         for name, spin, basis, extra in cases:
             results = []
-            for option in ((None, "0", "1") if name == "singlet" else ("0", "1")):
+            for option in ((None, "false", "true") if name == "singlet" else ("false", "true")):
                 with self.subTest(case=name, option=option), tempfile.TemporaryDirectory(prefix="mrsf_pair_") as wd:
                     text = source.read_text().replace("basis=6-31g", "basis=" + basis)
+                    self.assertIn("pair_cache=true\n", text)
+                    text = text.replace("pair_cache=true\n", "")
                     text = text.replace("multiplicity=1", f"multiplicity={spin}") + extra
+                    if option is not None:
+                        text += f"pair_cache={option}\n"
                     Path(wd, "run.inp").write_text(text)
                     env = dict(os.environ, OQP_ROUTEC_SIG="0")
-                    env.pop("OQP_MRSF_PAIR_CACHE", None)
-                    if option is not None:
-                        env["OQP_MRSF_PAIR_CACHE"] = option
                     proc = subprocess.run([sys.executable, str(Path(__file__).resolve()), "--live"],
                                           cwd=wd, env=env, text=True, capture_output=True, timeout=180)
                     self.assertEqual(proc.returncode, 0, proc.stdout[-3000:] + proc.stderr[-3000:])
@@ -57,9 +54,23 @@ class MrsfPairLive(unittest.TestCase):
                     results.append(result)
                     log = Path(wd, "run.log").read_text()
                     self.assertIn("energies converged in", log)
-                    self.assertEqual("1 dynamic exchange; quadratic spin-pair matrix" in log, option == "1")
+                    self.assertEqual("1 dynamic exchange; quadratic spin-pair matrix" in log, option == "true")
             for result in results[1:]:
                 np.testing.assert_allclose(result, results[0], atol=1e-8, rtol=0)
+
+    def test_excluded_request_reports_standard_path(self):
+        # FP32 digestion is excluded from the cache, so a request must say so and fall back.
+        source = Path(__file__).resolve().parents[1] / "examples/MRSF-TDDFT/H2O_MRSF_PAIR_CACHE.inp"
+        with tempfile.TemporaryDirectory(prefix="mrsf_pair_") as wd:
+            Path(wd, "run.inp").write_text(source.read_text() + "fp32=on\n")
+            proc = subprocess.run([sys.executable, str(Path(__file__).resolve()), "--live"],
+                                  cwd=wd, env=dict(os.environ, OQP_ROUTEC_SIG="0"), text=True,
+                                  capture_output=True, timeout=180)
+            self.assertEqual(proc.returncode, 0, proc.stdout[-3000:] + proc.stderr[-3000:])
+            log = Path(wd, "run.log").read_text()
+            self.assertIn("energies converged in", log)
+            self.assertIn("MRSF pair cache: not applicable", log)
+            self.assertNotIn("1 dynamic exchange; quadratic spin-pair matrix", log)
 
 
 if __name__ == '__main__':

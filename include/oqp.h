@@ -128,6 +128,7 @@ struct tddft_parameters {
     int64_t z_solver;
     int64_t gmres_dim;
     bool umrsf;
+    bool pair_cache;
 };
 
 struct control_parameters {

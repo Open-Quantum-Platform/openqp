@@ -1004,6 +1004,10 @@ contains
     if(use_pair)then
       call mrsf_pair_setup(pair_kernel,infos,int2_driver,mo_a,scale_exch)
       write(iw,'(2X,A)') 'MRSF pair cache: 1 dynamic exchange; quadratic spin-pair matrix'
+    else if(infos%tddft%pair_cache.and.use_sig)then
+      write(iw,'(2X,A)') 'MRSF pair cache: not used with the device sigma route'
+    else if(infos%tddft%pair_cache)then
+      write(iw,'(2X,A)') 'MRSF pair cache: not applicable to this calculation; standard contraction'
     end if
 
     ist = 1

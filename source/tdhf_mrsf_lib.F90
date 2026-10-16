@@ -4522,11 +4522,9 @@ contains
     logical,intent(in)::cam,petite
     integer(8),intent(in),optional::limit_bytes
     integer(8)::limit
-    character(16)::value
-    integer::status,n
+    integer::n
     on=.false.
-    call get_environment_variable('OQP_MRSF_PAIR_CACHE',value,status=status)
-    if(status/=0.or.trim(value)/='1')return
+    if(.not.infos%tddft%pair_cache)return
     if(infos%tddft%umrsf.or.cam.or.petite.or.infos%control%mrsf_fp32/=0)return
     if(infos%tddft%mult/=1.and.infos%tddft%mult/=3)return
     if(infos%mol_prop%nelec_a-infos%mol_prop%nelec_b/=2)return

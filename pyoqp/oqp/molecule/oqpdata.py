@@ -487,6 +487,9 @@ OQP_CONFIG_SCHEMA = {
         'resp_cutoff': {'type': string, 'default': 'auto'},
         'fp32': {'type': string, 'default': 'auto'},
         'zv_warmstart': {'type': string, 'default': 'auto'},
+        # Reuse the fixed spin-pair contractions in the MRSF energy response;
+        # unsupported cases (UMRSF, CAM, FP32, ...) keep the standard path.
+        'pair_cache': {'type': bool, 'default': 'False'},
     },
     'ekt': {
         'ip': {'type': bool, 'default': 'True'},
@@ -1096,6 +1099,7 @@ class OQPData:
             "resp_cutoff": "set_tdhf_resp_cutoff",
             "fp32": "set_tdhf_fp32",
             "zv_warmstart": "set_tdhf_zv_warmstart",
+            "pair_cache": "set_tdhf_pair_cache",
         },
         "qmmm": {
             "forcefield": "set_qmmm_forcefield",
@@ -1663,6 +1667,10 @@ class OQPData:
     def set_tdhf_cam_mu(self, cam_mu):
         """Set range separation parameter mu in response calculation"""
         self._data.tddft.cam_mu = cam_mu
+
+    def set_tdhf_pair_cache(self, pair_cache):
+        """Reuse fixed spin-pair contractions in the MRSF energy response"""
+        self._data.tddft.pair_cache = pair_cache
 
     def set_tdhf_spc_coco(self, spc_coco):
         """Set CO-CO spin-pair coupling parameter (C=closed, O=open, V=virtual MOs) in MRSF calculation"""

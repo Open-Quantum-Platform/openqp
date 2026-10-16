@@ -236,12 +236,14 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
     # 368 with the ACID cube grid controls [properties] acid_spacing and
     # acid_padding.
     # 369 with the DKH decoupling-basis control [scf] scal_rel_decontract;
-    # 370 with the MP2 energy transformation selector [mp2] transform.
+    # 370 with the MP2 energy transformation selector [mp2] transform;
+    # 371 with the MRSF energy spin-pair cache switch [tdhf] pair_cache.
     assert ("mp2", "transform") in checked
-    assert len(checked) == 370
+    assert ("tdhf", "pair_cache") in checked
+    assert len(checked) == 371
     # Keep the prior manifest count exact after removing the new selector.
     # The original 369 controls must still be represented, in addition to it.
-    checked = [key for key in checked if key != ("mp2", "transform")]
+    checked = [key for key in checked if key not in {("mp2", "transform"), ("tdhf", "pair_cache")}]
     assert len(checked) == 369
 
 

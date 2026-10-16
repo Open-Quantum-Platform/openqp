@@ -1,4 +1,4 @@
-# Experimental energy path: run with OQP_MRSF_PAIR_CACHE=1.
+# MRSF energy with the spin-pair cache ([tdhf] pair_cache=true).
 # The .json reference is the default (uncached) result; the cache must reproduce it.
 [input]
 system=
@@ -26,3 +26,4 @@ multiplicity=1
 nstate=3
 conv=1e-9
 maxit=100
+pair_cache=true
