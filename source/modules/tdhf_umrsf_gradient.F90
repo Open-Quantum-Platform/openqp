@@ -677,7 +677,7 @@ contains
       gta = 2.0_dp*matmul(famoa, talpha)
       gtb = 2.0_dp*matmul(famob, tbeta)
       call umrsf_timing_log(iw, 'raw generalized Fock', twall, tcpu)
-      ! ---- G̃ 2e channel-adjoint: ANALYTIC (default, 2 int2 builds) / FD oracle / GATE ----
+      ! ---- G̃ 2e channel-adjoint: ANALYTIC (default, 1 int2 build) / FD oracle / GATE ----
       if (dbg_w2e) then
         write(iw,'(2x,a)') 'UMRSF response stage: 2e generalized Fock'
         call flush(iw)
@@ -1194,11 +1194,12 @@ contains
 
 !###############################################################################
 !> ANALYTIC 11-channel 2e generalized Fock  g2e^σ_pq = ∂ω_2e/∂U^σ_pq  (BOTH spins, one call),
-!> replacing the FD oracle umrsf_g2e_onesided (4·nbf² int2 builds → 2 builds). Derivation +
+!> replacing the FD oracle umrsf_g2e_onesided (4·nbf² int2 builds → 1 build). Derivation +
 !> Verified against the CAS/finite-difference gate of the derivation notes (worst 5.25e-12 ≤ 1e-9).
 !>   ω_2e = Σ_k ⟨B_k, F_k⟩,  F_k = s_k int2[D]_k,  D=umrsfcbc, B=umrsf_bra_density,  int2_umrsf
 !>   is CHANNEL-DIAGONAL & SELF-ADJOINT (J/K of 8-fold-sym ERIs) ⇒ for the ket-derivative term
-!>   ⟨B_k, s_k int2[∂D_k]⟩ = ⟨GB_k, ∂D_k⟩ with GB_k = s_k int2[B]_k (precomputed once).
+!>   ⟨B_k, s_k int2[∂D_k]⟩ = ⟨GB_k, ∂D_k⟩ with GB_k = s_k int2[B]_k. B is a signed permutation
+!>   of D, so GB_k is the same permutation of F (umrsf_bra_image); no second int2 build.
 !>   g2e = V_σᵀ Γ_σ ,  Γ_σ = Σ_k [⟨F_k,∂B_k/∂V_σ⟩ + ⟨GB_k,∂D_k/∂V_σ⟩].
 !> Each channel density is V_l A_k V_rᵀ (sparse amplitude core A_k; ket core A, bra core AB;
 !> spin pairing aa=1,3,5,7 / bb=2,4,6,8 / ab=9,10,11). Gradient of ⟨M,V_l A V_rᵀ⟩:
