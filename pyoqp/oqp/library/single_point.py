@@ -2211,11 +2211,9 @@ class Hessian(Calculator):
         coord0 = np.asarray(self.mol.get_system(), dtype=float).reshape((-1, 3))
         ncoord = coord0.size
         if modes.ndim != 2 or modes.shape[1] != ncoord:
-            self.mol.vibrational_intensity_metadata = {
-                'status': 'failed',
-                'reason': f'Expected modes with shape (nmode, {ncoord}), got {modes.shape}',
-            }
-            return
+            raise ValueError(
+                f'IR/Raman intensities: expected normal modes with shape '
+                f'(nmode, {ncoord}), got {modes.shape}')
 
         displacement = 1.0e-3
         analytic_dip = getattr(self, '_analytic_dipole_derivs', None)
@@ -2228,16 +2226,16 @@ class Hessian(Calculator):
         for idx in range(ncoord if analytic_dip is None or analytic_pol is None else 0):
             disp = np.zeros(ncoord, dtype=float)
             disp[idx] = displacement
-            try:
-                dip_plus, polar_plus = self._native_property_tensors_at((flat0 + disp).reshape(coord0.shape))
-                dip_minus, polar_minus = self._native_property_tensors_at((flat0 - disp).reshape(coord0.shape))
-            except Exception as exc:
-                self.mol.vibrational_intensity_metadata = {
-                    'status': 'failed',
-                    'backend': 'native_openqp_finite_difference',
-                    'reason': str(exc),
-                }
-                return
+            # No try/except here. Every failure of a displaced child run -- an
+            # input-schema rejection of the copied config, a non-converged
+            # SCF, a native property kernel error -- means the intensities
+            # requested by runtype=hess cannot be formed. Catching it and
+            # recording status='failed' let the run finish with empty IR and
+            # Raman arrays and exit 0; the real message (e.g. "Unknown option:
+            # tdhf.cv4os") reached neither the log nor the exit status, and
+            # only a regression comparison noticed the missing numbers.
+            dip_plus, polar_plus = self._native_property_tensors_at((flat0 + disp).reshape(coord0.shape))
+            dip_minus, polar_minus = self._native_property_tensors_at((flat0 - disp).reshape(coord0.shape))
             dipole_derivs[:, idx] = (dip_plus - dip_minus) / (2.0 * displacement)
             polar_derivs[:, :, idx] = (polar_plus - polar_minus) / (2.0 * displacement)
         if analytic_dip is not None:
