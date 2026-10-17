@@ -104,6 +104,11 @@ struct dft_parameters {
     int64_t rad_grid_type;
     int64_t dft_bfc_algo;
     bool dft_wt_der;
+    int64_t xi_mode;
+    double xi_alpha;
+    int64_t xi_p;
+    int64_t xi_scale;
+    double xi_cutoff;
 };
 
 struct tddft_parameters {
@@ -779,6 +784,9 @@ int64_t casscf_ao_gradient(struct oqp_handle_t *inf, int32_t nbf,
 void hf_hessian(struct oqp_handle_t *inf);
 int oqp_functional_needs_tau(struct oqp_handle_t *inf);
 void hess1_selftest(struct oqp_handle_t *inf);
+/* xi^alpha Kohn-Sham FD self-test: res[0..7] (see tests/fortran/xi_fock_selftest.F90). */
+void xi_fock_selftest(struct oqp_handle_t *inf, double *res);
+void oqp_xi_grid_ingredients(struct oqp_handle_t *inf, int64_t nalpha, const double *alphas, const int64_t *ps, int64_t scale, double cutoff);
 void grd2_hess_selftest(struct oqp_handle_t *inf);
 void cholesky_eri_selftest(struct oqp_handle_t *inf);
 void hess_skel_selftest(struct oqp_handle_t *inf);

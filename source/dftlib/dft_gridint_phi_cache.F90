@@ -52,6 +52,7 @@ module mod_dft_gridint_phi_cache
     integer      :: sig_natoms  = 0
     integer      :: sig_nmolpts = 0       !< grid identity: total quadrature points
     real(fp)     :: sig_thr     = -1.0_fp
+    real(fp)     :: sig_xi(5)   = 0.0_fp  !< xi^alpha [mode, alpha, p, scale, cutoff]; 0 = off
     integer(i8b) :: nbytes     = 0_i8b
     type(phi_slice_t), allocatable :: slices(:)
   contains
@@ -117,19 +118,27 @@ contains
 !> @param[in] natoms      number of atoms
 !> @param[in] geom_hash   geometry hash (see phi_cache_geom_hash)
 !> @param[in] thr         DFT integration threshold (affects nonzero-point set)
+!> @param[in] xi_key      optional xi^alpha settings [mode, alpha, p, scale, cutoff]
+!>                        whose D^alpha chi vectors are cached with the AO block;
+!>                        compared exactly (not hashed, so no two settings collide)
 !>
 !> @note nMolPts is an explicit grid-identity key so a mid-run grid swap (e.g.
 !>   the coarse->fine XC ramp, OQP_XC_C2F) can never be mistaken for a cache hit:
 !>   with a user-fixed dft_threshold the thr/AO/atom/geom signatures are identical
 !>   across the coarse and fine grids, leaving nSlices as the only other guard;
 !>   the two grids' point counts differ even if their slice counts collide.
-  subroutine begin_run(self, enable, nSlices, nMolPts, numAOs, numAOVecs, natoms, geom_hash, thr)
+  subroutine begin_run(self, enable, nSlices, nMolPts, numAOs, numAOVecs, natoms, geom_hash, thr, xi_key)
     class(phi_cache_t), intent(inout) :: self
     logical,      intent(in) :: enable
     integer,      intent(in) :: nSlices, nMolPts, numAOs, numAOVecs, natoms
     integer(i8b), intent(in) :: geom_hash
     real(fp),     intent(in) :: thr
+    real(fp),     intent(in), optional :: xi_key(5)
     logical :: match
+    real(fp) :: xik(5)
+
+    xik = 0.0_fp
+    if (present(xi_key)) xik = xi_key
 
     self%active = enable
     self%replay = .false.
@@ -142,7 +151,8 @@ contains
       .and. self%numAOVecs  == numAOVecs &
       .and. self%sig_natoms == natoms   &
       .and. self%sig_geom   == geom_hash &
-      .and. self%sig_thr    == thr
+      .and. self%sig_thr    == thr &
+      .and. all(self%sig_xi == xik)
 
     if (match) then
       self%replay = .true.
@@ -158,6 +168,7 @@ contains
     self%sig_natoms = natoms
     self%sig_geom   = geom_hash
     self%sig_thr    = thr
+    self%sig_xi     = xik
     allocate(self%slices(nSlices))
     self%ready  = .false.
     self%replay = .false.

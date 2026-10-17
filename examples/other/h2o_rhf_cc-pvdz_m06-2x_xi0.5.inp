@@ -1,0 +1,30 @@
+[input]
+system=
+ 8   0.000000000   0.000000000  -0.041061554
+ 1  -0.533194329   0.533194329  -0.614469223
+ 1   0.533194329  -0.533194329  -0.614469223
+charge=0
+method=hf
+basis=cc-pvdz
+runtype=energy
+functional=m06-2x
+d4=False
+ispher=True
+[guess]
+type=huckel
+save_mol=False
+
+[scf]
+type=rhf
+maxit=50
+maxdiis=5
+multiplicity=1
+conv=1.0e-8
+save_molden=False
+
+[dftgrid]
+rad_npts=96
+ang_npts=302
+pruned=
+xi_mode=1
+xi_alpha=0.5

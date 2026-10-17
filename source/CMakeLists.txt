@@ -35,6 +35,7 @@ list(APPEND SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/int2_shell_block_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/simplex_qp_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/ecp_selftest.F90"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/xi_fock_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/rpa_residual_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/mrsf_xc_sweep_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/umrsf_bra_reuse_selftest.F90"

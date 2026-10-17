@@ -71,6 +71,12 @@ module types
                                                             !<  contribution to the nuclear gradient is needed
                                                             !< Weight derivatives are not always required,
                                                             !< especially if the fine grid is used
+    integer(c_int64_t) :: xi_mode               = 0      !< fractional-derivative ingredient xi^alpha:
+                                                         !< 0 off, 1 = use xi^alpha in place of tau
+    real(c_double)     :: xi_alpha              = 1.0_dp !< order alpha (<= 1) of xi^alpha
+    integer(c_int64_t) :: xi_p                  = -1     !< inner integer order p (0/1); -1 = auto
+    integer(c_int64_t) :: xi_scale              = 0      !< 0: path normalised to [0,1]; 1: physical length
+    real(c_double)     :: xi_cutoff             = 0.0_dp !< cutoff radius (bohr) for D^alpha chi; 0 = exact
 
 
   end type dft_parameters
