@@ -72,13 +72,67 @@ _CAS22 = {"active_electrons": "2", "active_orbitals": "2", "frozen_core": "1",
           "max_det": "2000"}
 
 
+def _pt2_on_shared_reference(tmp_path, project, pt2_variants, **kw):
+    """Run the RHF reference once, then every ``[pt2]`` variant on it.
+
+    Two independent runs do NOT share a reference once OpenMP is on: the
+    two-electron Fock build (``int2.F90``, ``schedule(dynamic,1)`` over shell
+    pairs into thread-private Fock copies) sums in a run-dependent order, and
+    the SCF stops at ``[scf] conv`` along a slightly different path.  On
+    threaded OpenBLAS CI the converged orbitals then differ by up to ~2e-7 and
+    the PT2 energies by ~1e-7 between two otherwise identical runs, so an
+    engine comparison over two SCFs measures the SCF, not the engines.  Each
+    variant here re-enters the PT2 driver (integrals, CASCI, semicanonical
+    orbitals, PT2) from the identical reference orbitals.
+
+    Returns the sorted PT2 energies and CASCI reference energies per variant.
+    """
+    from oqp.library.caspt2_dyall import native_caspt2_energy
+
+    # Variants overwrite one resolved [pt2] block in place; with identical key
+    # sets nothing one variant sets can survive into the next.
+    assert all(set(v) == set(pt2_variants[0]) for v in pt2_variants), \
+        "shared-reference PT2 variants must set the same [pt2] keys"
+    runner = _run(tmp_path, project, pt2=pt2_variants[0], **kw)
+    mol = runner.mol
+    # The driver overwrites VEC_MO_A with semicanonical orbitals; it keeps the
+    # reference orbitals it started from in CASPT2_REFERENCE_MO.
+    ref_mo = np.array(mol.data["OQP::CASPT2_REFERENCE_MO"], dtype=float, copy=True)
+    shape = np.asarray(mol.data["OQP::VEC_MO_A"]).shape
+
+    def collect():
+        return (np.sort(np.asarray(mol.energies, dtype=float)),
+                np.sort(np.asarray(mol.data["OQP::CASPT2_REFERENCE_ENERGIES"],
+                                   dtype=float)),
+                np.array(mol.data["OQP::VEC_MO_A"], dtype=float, copy=True))
+
+    results = [collect()]
+    for pt2 in pt2_variants[1:]:
+        # Poison the stash: only a driver that consumed the restored orbitals
+        # and republished them can turn it back into ref_mo.
+        mol.data["OQP::CASPT2_REFERENCE_MO"] = np.full_like(ref_mo, np.nan)
+        mol.data["OQP::VEC_MO_A"][...] = np.ascontiguousarray(ref_mo.T.reshape(shape))
+        mol.config["pt2"].update(pt2)
+        native_caspt2_energy(mol)
+        np.testing.assert_array_equal(
+            np.asarray(mol.data["OQP::CASPT2_REFERENCE_MO"], dtype=float), ref_mo)
+        results.append(collect())
+    # Same orbitals in -> same semicanonical orbitals and CASCI reference out;
+    # anything else means the variants did not run on one reference and the
+    # comparison is void.
+    for _, ref, mo_sc in results[1:]:
+        np.testing.assert_allclose(ref, results[0][1], rtol=0, atol=1.0e-12)
+        np.testing.assert_allclose(mo_sc, results[0][2], rtol=0, atol=1.0e-12)
+    results = [(e, ref) for e, ref, _ in results]
+    return results
+
+
 def _both_engines(tmp_path, tag, method, ci, pt2_common, **kw):
-    dense = _run(tmp_path, f"{tag}_dense", method=method, ci=ci,
-                 pt2={**pt2_common, "engine": "dense"}, **kw)
-    direct = _run(tmp_path, f"{tag}_direct", method=method, ci=ci,
-                  pt2={**pt2_common, "engine": "direct"}, **kw)
-    return (np.sort(np.asarray(dense.mol.energies, dtype=float)),
-            np.sort(np.asarray(direct.mol.energies, dtype=float)))
+    (e_dense, _), (e_direct, _) = _pt2_on_shared_reference(
+        tmp_path, tag, [{**pt2_common, "engine": "dense"},
+                        {**pt2_common, "engine": "direct"}],
+        method=method, ci=ci, **kw)
+    return e_dense, e_direct
 
 
 @pytest.mark.parametrize("method,nroot,extra", [
@@ -101,7 +155,7 @@ def test_direct_engine_matches_dense_h4(tmp_path, method, nroot, extra):
     e_dense, e_direct = _both_engines(
         tmp_path, f"eq_{method}_{nroot}", method, ci, pt2,
         system=_H4, basis="sto-3g", cas=_CAS22)
-    np.testing.assert_allclose(e_direct, e_dense, atol=1.0e-10)
+    np.testing.assert_allclose(e_direct, e_dense, rtol=0, atol=1.0e-10)
 
 
 def test_direct_engine_matches_dense_frozen_core_lih(tmp_path):
@@ -113,7 +167,7 @@ def test_direct_engine_matches_dense_frozen_core_lih(tmp_path):
         system=_LIH, basis="sto-3g",
         cas={"active_electrons": "2", "active_orbitals": "2", "frozen_core": "1",
              "max_det": "2000"})
-    np.testing.assert_allclose(e_direct, e_dense, atol=1.0e-10)
+    np.testing.assert_allclose(e_direct, e_dense, rtol=0, atol=1.0e-10)
 
 
 def test_direct_engine_full_active_zero_correction(tmp_path):
@@ -178,15 +232,12 @@ def test_direct_engine_nproc_parallel_matches_serial(tmp_path):
     ci = {"nroot": "3", "target_spin": "singlet"}
     pt2 = {"reference": "casci", "target_roots": "0,1,2", "nroot": "3",
            "edshft": "0.02"}
-    e_serial = np.sort(np.asarray(_run(
-        tmp_path, "np1", method="mcqdpt2", system=_H4, basis="sto-3g",
-        cas=_CAS22, ci=ci, pt2={**pt2, "nproc": "1"}).mol.energies, dtype=float))
     # nproc=2 with 3 singlet references falls below the 4*nproc chunking
     # threshold and must transparently run serial -- same numbers, no crash.
-    e_par = np.sort(np.asarray(_run(
-        tmp_path, "np2", method="mcqdpt2", system=_H4, basis="sto-3g",
-        cas=_CAS22, ci=ci, pt2={**pt2, "nproc": "2"}).mol.energies, dtype=float))
-    np.testing.assert_allclose(e_par, e_serial, atol=1.0e-12)
+    (e_serial, _), (e_par, _) = _pt2_on_shared_reference(
+        tmp_path, "np", [{**pt2, "nproc": "1"}, {**pt2, "nproc": "2"}],
+        method="mcqdpt2", system=_H4, basis="sto-3g", cas=_CAS22, ci=ci)
+    np.testing.assert_allclose(e_par, e_serial, rtol=0, atol=1.0e-12)
 
     # exercise the real pool path directly on the streaming layer
     from oqp.library.qdpt2_direct import _stream_all, _stream_chunk
@@ -247,15 +298,11 @@ def test_fortran_kernel_matches_python_streaming(tmp_path, method, nroot, extra)
         pt2.update({"target_roots": ",".join(str(i) for i in range(nroot)),
                     "nroot": str(nroot)})
     pt2.update(extra)
-    e_py = np.sort(np.asarray(_run(
-        tmp_path, f"fk_py_{method}{nroot}", method=method, system=_H4,
-        basis="sto-3g", cas=_CAS22, ci=ci,
-        pt2={**pt2, "engine": "direct"}).mol.energies, dtype=float))
-    e_f = np.sort(np.asarray(_run(
-        tmp_path, f"fk_f_{method}{nroot}", method=method, system=_H4,
-        basis="sto-3g", cas=_CAS22, ci=ci,
-        pt2={**pt2, "engine": "fortran"}).mol.energies, dtype=float))
-    np.testing.assert_allclose(e_f, e_py, atol=1.0e-10)
+    (e_py, _), (e_f, _) = _pt2_on_shared_reference(
+        tmp_path, f"fk_{method}{nroot}",
+        [{**pt2, "engine": "direct"}, {**pt2, "engine": "fortran"}],
+        method=method, system=_H4, basis="sto-3g", cas=_CAS22, ci=ci)
+    np.testing.assert_allclose(e_f, e_py, rtol=0, atol=1.0e-10)
 
 
 def test_fortran_kernel_threads_match_serial(tmp_path):
@@ -268,8 +315,6 @@ def test_fortran_kernel_threads_match_serial(tmp_path):
     kw = dict(method="xmcqdpt2", system=_C2H4, basis="sto-3g",
               cas={"active_electrons": "2", "active_orbitals": "2",
                    "frozen_core": "7", "max_det": "5000"}, ci=ci)
-    e1 = np.sort(np.asarray(_run(
-        tmp_path, "fk_t1", pt2={**pt2, "nproc": "1"}, **kw).mol.energies, dtype=float))
-    e4 = np.sort(np.asarray(_run(
-        tmp_path, "fk_t4", pt2={**pt2, "nproc": "4"}, **kw).mol.energies, dtype=float))
-    np.testing.assert_allclose(e4, e1, atol=1.0e-12)
+    (e1, _), (e4, _) = _pt2_on_shared_reference(
+        tmp_path, "fk_t", [{**pt2, "nproc": "1"}, {**pt2, "nproc": "4"}], **kw)
+    np.testing.assert_allclose(e4, e1, rtol=0, atol=1.0e-12)
