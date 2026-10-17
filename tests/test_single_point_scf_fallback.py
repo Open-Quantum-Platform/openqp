@@ -4,6 +4,8 @@ import types
 import unittest
 from pathlib import Path
 
+import numpy as np
+
 from oqp_module_isolation import isolate_modules
 
 
@@ -121,11 +123,33 @@ def install_single_point_stubs():
 
 
 class FakeData(dict):
+    """Tag store with the failure behaviour of OQPData.
+
+    A missing tag raises AttributeError, as OQPData.__getitem__ does.  Tags in
+    ``fail_reads``/``fail_writes`` raise RuntimeError, to inject a failure
+    that is not the absence of a tag.
+    """
+
     def __init__(self):
         super().__init__()
         self.convergers = []
         self.diis_types = []
         self.sd_scf_flags = []
+        self.fail_reads = set()
+        self.fail_writes = set()
+
+    def __missing__(self, key):
+        raise AttributeError(f"Key `{key}` not found in QOP data")
+
+    def __getitem__(self, key):
+        if key in self.fail_reads:
+            raise RuntimeError(f"injected read failure for {key}")
+        return super().__getitem__(key)
+
+    def __setitem__(self, key, value):
+        if key in self.fail_writes:
+            raise RuntimeError(f"injected write failure for {key}")
+        super().__setitem__(key, value)
 
     def set_scf_converger_type(self, converger):
         self.convergers.append(converger)
@@ -149,8 +173,15 @@ class FakeMol:
         self.mol_energy = types.SimpleNamespace(energy=-1.0, SCF_converged=False)
         self.energies = []
 
+    def get_atoms(self):
+        return np.array([8.0, 1.0, 1.0])
+
     def write_molden(self, filename):
         raise AssertionError("save_molden is disabled in this test")
+
+
+ALPHA_TAGS = ('OQP::VEC_MO_A', 'OQP::E_MO_A', 'OQP::DM_A', 'OQP::FOCK_A')
+BETA_TAGS = ('OQP::VEC_MO_B', 'OQP::E_MO_B', 'OQP::DM_B', 'OQP::FOCK_B')
 
 
 class SlottedMolEnergy:
@@ -173,6 +204,10 @@ class TestSinglePointScfFallback(unittest.TestCase):
     def make_calculator(self):
         calc = self.single_point.SinglePoint.__new__(self.single_point.SinglePoint)
         calc.mol = FakeMol()
+        # An SCF that ran has allocated the alpha solution tags (scf.F90
+        # tags_alpha); the stability safeguard snapshots them.
+        for n, tag in enumerate(ALPHA_TAGS):
+            calc.mol.data[tag] = np.array([1.0 + n, 2.0 + n])
         calc.method = "hf"
         calc.td = "rpa"
         calc.init_scf = "no"
@@ -594,6 +629,209 @@ class TestSinglePointScfFallback(unittest.TestCase):
                 self.assertTrue(converged)
                 self.assertIn("trah", calc.mol.data.convergers)
                 self.assertEqual(calc.mol.mol_energy.energy, -2.5)
+
+
+class ReadOnlyDavidsonMolEnergy:
+    """mol_energy whose Davidson flag can be read but not written back."""
+    __slots__ = ("energy", "SCF_converged")
+
+    def __init__(self):
+        self.energy = -1.0
+        self.SCF_converged = False
+
+    @property
+    def Davidson_converged(self):
+        return False
+
+
+class UnreadableDavidsonMolEnergy:
+    """mol_energy whose Davidson flag passes hasattr() but fails the read.
+
+    hasattr() propagates any error other than AttributeError by itself, so
+    only the read that follows it was ever guarded by ``except Exception``.
+    """
+    __slots__ = ("energy", "SCF_converged", "reads")
+
+    def __init__(self):
+        self.energy = -1.0
+        self.SCF_converged = False
+        self.reads = 0
+
+    @property
+    def Davidson_converged(self):
+        self.reads += 1
+        if self.reads > 1:
+            raise RuntimeError("injected mol_energy read failure")
+        return False
+
+
+class TestScfStabilitySafeguardFailuresAreVisible(unittest.TestCase):
+    """Every failure inside the opt-in TRAH stability safeguard must raise.
+
+    Each of these used to be swallowed by ``except Exception: pass`` (or
+    ``return False``), so the run continued with a partially restored or
+    mis-flagged SCF state and no trace in the log.
+    """
+
+    setUp = TestSinglePointScfFallback.setUp
+    make_calculator = TestSinglePointScfFallback.make_calculator
+
+    def stability_calculator(self, scf_type="rhf", trah_lowers=False):
+        """Stability pass where TRAH rewrites every SCF tag.
+
+        With ``trah_lowers=False`` TRAH finds no lower solution, so the
+        safeguard must restore the pre-TRAH tags and energy.
+        """
+        calc = self.make_calculator()
+        calc.stability = True
+        calc.mol.config["scf"]["type"] = scf_type
+        if scf_type != "rhf":
+            for n, tag in enumerate(BETA_TAGS):
+                calc.mol.data[tag] = np.array([-1.0 - n, -2.0 - n])
+        self.pre_trah = {tag: np.array(value).copy()
+                         for tag, value in calc.mol.data.items()
+                         if tag.startswith("OQP::")}
+
+        def scf():
+            calc.scf_calls += 1
+            calc.mol.mol_energy.SCF_converged = True
+            if calc.scf_calls == 1:
+                calc.mol.mol_energy.energy = -2.0
+                return
+            calc.mol.mol_energy.energy = -2.5 if trah_lowers else -1.99999999
+            for tag in self.pre_trah:
+                calc.mol.data[tag] = np.array([99.0, 99.0])
+
+        calc.scf = scf
+        return calc
+
+    def test_noop_restores_every_tag_and_the_energy(self):
+        for scf_type in ("rhf", "uhf", "rohf"):
+            with self.subTest(scf_type=scf_type):
+                calc = self.stability_calculator(scf_type)
+                self.assertTrue(calc._run_scf())
+                self.assertIn("trah", calc.mol.data.convergers)
+                for tag, value in self.pre_trah.items():
+                    np.testing.assert_array_equal(calc.mol.data[tag], value, tag)
+                self.assertEqual(calc.mol.mol_energy.energy, -2.0)
+
+    def test_failed_tag_restore_raises(self):
+        # A partial restore paired TRAH orbitals with the pre-TRAH energy.
+        calc = self.stability_calculator()
+
+        def scf():
+            calc.scf_calls += 1
+            calc.mol.mol_energy.SCF_converged = True
+            calc.mol.mol_energy.energy = -2.0 if calc.scf_calls == 1 else -1.99999999
+            if calc.scf_calls == 2:
+                calc.mol.data["OQP::DM_A"] = np.array([99.0, 99.0])
+                calc.mol.data.fail_writes.add("OQP::DM_A")
+
+        calc.scf = scf
+        with self.assertRaisesRegex(RuntimeError, "injected write failure for OQP::DM_A"):
+            calc._run_scf()
+
+    def test_rhf_snapshot_skips_only_the_unallocated_beta_tags(self):
+        calc = self.make_calculator()
+        calc.mol.config["scf"]["type"] = "rhf"
+        self.assertEqual(sorted(calc._snapshot_scf_state()), sorted(ALPHA_TAGS))
+
+    def test_open_shell_snapshot_requires_beta_tags(self):
+        for scf_type in ("uhf", "rohf"):
+            with self.subTest(scf_type=scf_type):
+                calc = self.make_calculator()
+                calc.mol.config["scf"]["type"] = scf_type
+                for tag in BETA_TAGS[:-1]:
+                    calc.mol.data[tag] = np.zeros(2)
+                with self.assertRaisesRegex(AttributeError, "OQP::FOCK_B"):
+                    calc._snapshot_scf_state()
+
+    def test_snapshot_requires_alpha_tags_even_for_rhf(self):
+        calc = self.make_calculator()
+        del calc.mol.data["OQP::FOCK_A"]
+        with self.assertRaisesRegex(AttributeError, "OQP::FOCK_A"):
+            calc._snapshot_scf_state()
+
+    def test_snapshot_read_failure_raises(self):
+        # Not an absent tag: dropping it would make the restore keep the
+        # TRAH value for that tag.
+        calc = self.make_calculator()
+        calc.mol.config["scf"]["type"] = "uhf"
+        for tag in BETA_TAGS:
+            calc.mol.data[tag] = np.zeros(2)
+        calc.mol.data.fail_reads.add("OQP::DM_B")
+        with self.assertRaisesRegex(RuntimeError, "injected read failure for OQP::DM_B"):
+            calc._snapshot_scf_state()
+
+    def test_failed_petite_disable_raises(self):
+        calc = self.make_calculator()
+        calc.mol.data.fail_writes.add("OQP::sym_petite_enable")
+        with self.assertRaisesRegex(RuntimeError, "sym_petite_enable"):
+            calc._set_petite_enabled(False)
+
+    def test_failed_petite_disable_stops_the_stability_stage(self):
+        # TRAH must not run with the petite reduction on symmetry-broken
+        # densities.
+        calc = self.stability_calculator()
+        calc.mol.symmetry_metadata = {"integral_symmetry": {"status": "active"}}
+        calc.mol.data["OQP::sym_petite_enable"] = np.array([1], dtype=np.int64)
+        calc.mol.data.fail_writes.add("OQP::sym_petite_enable")
+        with self.assertRaisesRegex(RuntimeError, "sym_petite_enable"):
+            calc._run_scf()
+        self.assertNotIn("trah", calc.mol.data.convergers)
+
+    def test_petite_state_absent_flag_is_off_but_unreadable_flag_raises(self):
+        calc = self.make_calculator()
+        calc.mol.symmetry_metadata = {"integral_symmetry": {"status": "active"}}
+        self.assertFalse(calc._petite_is_staged())
+
+        calc.mol.data["OQP::sym_petite_enable"] = np.array([1], dtype=np.int64)
+        calc.mol.data.fail_reads.add("OQP::sym_petite_enable")
+        with self.assertRaisesRegex(RuntimeError, "sym_petite_enable"):
+            calc._petite_is_staged()
+
+    def test_failed_mol_energy_restore_raises(self):
+        calc = self.stability_calculator()
+        calc.mol.mol_energy = ReadOnlyDavidsonMolEnergy()
+        with self.assertRaises(AttributeError):
+            calc._run_scf()
+
+    def test_failed_mol_energy_snapshot_raises(self):
+        calc = self.stability_calculator()
+        calc.mol.mol_energy = UnreadableDavidsonMolEnergy()
+        with self.assertRaisesRegex(RuntimeError, "injected mol_energy read failure"):
+            calc._run_scf()
+
+    def test_scf_features_do_not_hide_an_atom_read_failure(self):
+        calc = self.make_calculator()
+        calc.mol.config["input"] = {"functional": ""}
+
+        def broken_get_atoms():
+            raise RuntimeError("injected get_atoms failure")
+
+        calc.mol.get_atoms = broken_get_atoms
+        with self.assertRaisesRegex(RuntimeError, "injected get_atoms failure"):
+            calc._scf_features()
+
+    def test_ml_selector_falls_back_only_when_the_model_is_absent(self):
+        name = "oqp.library.scf_selector_model"
+        previous = sys.modules.pop(name, None)
+        self.addCleanup(
+            lambda: sys.modules.__setitem__(name, previous)
+            if previous is not None else sys.modules.pop(name, None))
+
+        calc = self.make_calculator()
+        self.assertEqual(calc._select_converger("ml", False), ("diis", False))
+
+        model = types.ModuleType(name)
+
+        def broken_predict(features):
+            raise RuntimeError("injected selector failure")
+
+        setattr(model, "predict", broken_predict)
+        sys.modules[name] = model
+        with self.assertRaisesRegex(RuntimeError, "injected selector failure"):
+            calc._select_converger("ml", False)
 
 
 if __name__ == "__main__":
