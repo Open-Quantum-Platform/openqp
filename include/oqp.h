@@ -11,6 +11,7 @@ void oqp_simplex_qp_solve_avoid(int64_t n, const double *h, const double *g,
 
 /* Internal ECP-integral self-test: err[0..9] (see tests/fortran/ecp_selftest.F90). */
 void oqp_ecp_selftest(double *err);
+void mrsf_pair_selftest(double *error, int32_t *checks, int32_t *failures);
 
 /* Internal TDHF Davidson residual self-test (tests/fortran/rpa_residual_selftest.F90).
    Arrays are column-major: w_l, w_r, v_l, v_r (n, ndsr); q (n, ndsr, 2). */
@@ -127,6 +128,7 @@ struct tddft_parameters {
     int64_t z_solver;
     int64_t gmres_dim;
     bool umrsf;
+    bool pair_cache;
 };
 
 struct control_parameters {
@@ -808,6 +810,7 @@ void tdhf_umrsf_energy(struct oqp_handle_t *inf);
 void tdhf_umrsf_z_vector(struct oqp_handle_t *inf);
 void tdhf_umrsf_gradient(struct oqp_handle_t *inf);
 void mrsf_xc_sweep_selftest(struct oqp_handle_t *inf, double *error, double *moving_norm);
+void umrsf_bra_reuse_selftest(double *error, int *checks);
 void tdhf_mrsf_ekt_ip(struct oqp_handle_t *inf);
 void tdhf_mrsf_ekt_ea(struct oqp_handle_t *inf);
 void tdhf_mrsf_z_vector(struct oqp_handle_t *inf);
