@@ -1669,7 +1669,7 @@ class OQPData:
         self._data.tddft.cam_mu = cam_mu
 
     def set_tdhf_pair_cache(self, pair_cache):
-        """Reuse fixed spin-pair contractions in the MRSF energy response"""
+        """Reuse fixed spin-pair contractions in the MRSF and UMRSF energy response"""
         self._data.tddft.pair_cache = pair_cache
 
     def set_tdhf_spc_coco(self, spc_coco):

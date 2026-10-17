@@ -89,11 +89,8 @@ contains
     nsh = basis%nshell
     nmatrix = ubound(this%d3, 2) ! 7 ! spin pair copuling A': bo2v, bo1v, bco1, bco2, o21v, co12; A: ball
 
-    compact=.false.
-    select type(this)
-    type is(int2_mrsf_data_t)
-      compact=this%general_only
-    end select
+    ! Both MRSF and UMRSF energy caches request the single dynamic image.
+    compact=this%general_only
     call ensure_mrsf_fp32()
     if(compact.and.g_mrsf_fp32/=0) &
       call show_message('Compact MRSF exchange requires FP64 accumulation',with_abort)
@@ -407,11 +404,14 @@ contains
     type(int2_storage_t), intent(inout) :: buf
     integer :: i, j, k, l, n, v, c
     real(kind=dp) :: val, xval, cval
-    integer :: mythread
+    integer :: mythread, last_pair, last_mixed, general_channel
 
     mythread = buf%thread_id
 
     if (.not.this%tamm_dancoff) return
+    last_pair=merge(0,8,this%general_only)
+    last_mixed=merge(8,10,this%general_only)
+    general_channel=merge(1,11,this%general_only)
 
     associate ( f3 => this%f3(:,:,:,:,mythread), &
                 d3 => this%d3, &
@@ -436,7 +436,7 @@ contains
           ! Coulomb (columns 1:8): the 8 permutational contributions collapse
           ! to 4 distinct Fock targets, each reading one symmetric ds slab:
           ! f(ij)+=c[d(kl)+d(lk)], f(ji) likewise, f(kl)+=c[d(ij)+d(ji)], f(lk) likewise.
-          do c = 1, 8
+          do c = 1, last_pair
             do v = 1, nf
               f3(v,c,i,j) = f3(v,c,i,j) + cval*ds(v,c,k,l)
               f3(v,c,j,i) = f3(v,c,j,i) + cval*ds(v,c,k,l)
@@ -446,7 +446,7 @@ contains
           end do
 
           ! Exchange (columns 1:8 and the general column 11).
-          do c = 1, 8
+          do c = 1, last_pair
             do v = 1, nf
               f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,j,l)
               f3(v,c,k,i) = f3(v,c,k,i) - xval*d3(v,c,l,j)
@@ -459,19 +459,19 @@ contains
             end do
           end do
           do v = 1, nf
-            f3(v,11,i,k) = f3(v,11,i,k) - xval*d3(v,11,j,l)
-            f3(v,11,k,i) = f3(v,11,k,i) - xval*d3(v,11,l,j)
-            f3(v,11,i,l) = f3(v,11,i,l) - xval*d3(v,11,j,k)
-            f3(v,11,l,i) = f3(v,11,l,i) - xval*d3(v,11,k,j)
-            f3(v,11,j,k) = f3(v,11,j,k) - xval*d3(v,11,i,l)
-            f3(v,11,k,j) = f3(v,11,k,j) - xval*d3(v,11,l,i)
-            f3(v,11,j,l) = f3(v,11,j,l) - xval*d3(v,11,i,k)
-            f3(v,11,l,j) = f3(v,11,l,j) - xval*d3(v,11,k,i)
+            f3(v,general_channel,i,k) = f3(v,general_channel,i,k) - xval*d3(v,11,j,l)
+            f3(v,general_channel,k,i) = f3(v,general_channel,k,i) - xval*d3(v,11,l,j)
+            f3(v,general_channel,i,l) = f3(v,general_channel,i,l) - xval*d3(v,11,j,k)
+            f3(v,general_channel,l,i) = f3(v,general_channel,l,i) - xval*d3(v,11,k,j)
+            f3(v,general_channel,j,k) = f3(v,general_channel,j,k) - xval*d3(v,11,i,l)
+            f3(v,general_channel,k,j) = f3(v,general_channel,k,j) - xval*d3(v,11,l,i)
+            f3(v,general_channel,j,l) = f3(v,general_channel,j,l) - xval*d3(v,11,i,k)
+            f3(v,general_channel,l,j) = f3(v,general_channel,l,j) - xval*d3(v,11,k,i)
           end do
 
           ! Mixed alpha/beta spin-pair channels use the GAMESS-compatible
           ! exchange permutation for UMRSF open-shell pair densities.
-          do c = 9, 10
+          do c = 9, last_mixed
             do v = 1, nf
               f3(v,c,i,l) = f3(v,c,i,l) - xval*d3(v,c,k,j)
               f3(v,c,l,i) = f3(v,c,l,i) - xval*d3(v,c,j,k)
@@ -492,14 +492,14 @@ contains
           i = buf%ids(1,n); j = buf%ids(2,n); k = buf%ids(3,n); l = buf%ids(4,n)
           xval = buf%ints(n) * this%scale_exchange
           do v = 1, nf
-            f3(v,11,i,k) = f3(v,11,i,k) - xval*d3(v,11,j,l)
-            f3(v,11,k,i) = f3(v,11,k,i) - xval*d3(v,11,l,j)
-            f3(v,11,i,l) = f3(v,11,i,l) - xval*d3(v,11,j,k)
-            f3(v,11,l,i) = f3(v,11,l,i) - xval*d3(v,11,k,j)
-            f3(v,11,j,k) = f3(v,11,j,k) - xval*d3(v,11,i,l)
-            f3(v,11,k,j) = f3(v,11,k,j) - xval*d3(v,11,l,i)
-            f3(v,11,j,l) = f3(v,11,j,l) - xval*d3(v,11,i,k)
-            f3(v,11,l,j) = f3(v,11,l,j) - xval*d3(v,11,k,i)
+            f3(v,general_channel,i,k) = f3(v,general_channel,i,k) - xval*d3(v,11,j,l)
+            f3(v,general_channel,k,i) = f3(v,general_channel,k,i) - xval*d3(v,11,l,j)
+            f3(v,general_channel,i,l) = f3(v,general_channel,i,l) - xval*d3(v,11,j,k)
+            f3(v,general_channel,l,i) = f3(v,general_channel,l,i) - xval*d3(v,11,k,j)
+            f3(v,general_channel,j,k) = f3(v,general_channel,j,k) - xval*d3(v,11,i,l)
+            f3(v,general_channel,k,j) = f3(v,general_channel,k,j) - xval*d3(v,11,l,i)
+            f3(v,general_channel,j,l) = f3(v,general_channel,j,l) - xval*d3(v,11,i,k)
+            f3(v,general_channel,l,j) = f3(v,general_channel,l,j) - xval*d3(v,11,k,i)
           end do
         end do
       end if
@@ -4335,7 +4335,7 @@ contains
     logical :: bab,bcd,bsame
     integer :: i, j, k, l, n, v, c
     real(kind=dp) :: val, xval, cval
-    integer :: mythread
+    integer :: mythread, last_pair, last_mixed, general_channel
 
     bab=shell_block%shells(1)==shell_block%shells(2)
     bcd=shell_block%shells(3)==shell_block%shells(4)
@@ -4343,6 +4343,9 @@ contains
     mythread = thread_id
 
     if (.not.this%tamm_dancoff) return
+    last_pair=merge(0,8,this%general_only)
+    last_mixed=merge(8,10,this%general_only)
+    general_channel=merge(1,11,this%general_only)
 
     associate ( f3 => this%f3(:,:,:,:,mythread), &
                 d3 => this%d3, &
@@ -4399,7 +4402,7 @@ contains
           ! Coulomb (columns 1:8): the 8 permutational contributions collapse
           ! to 4 distinct Fock targets, each reading one symmetric ds slab:
           ! f(ij)+=c[d(kl)+d(lk)], f(ji) likewise, f(kl)+=c[d(ij)+d(ji)], f(lk) likewise.
-          do c = 1, 8
+          do c = 1, last_pair
             do v = 1, nf
               f3(v,c,i,j) = f3(v,c,i,j) + cval*ds(v,c,k,l)
               f3(v,c,j,i) = f3(v,c,j,i) + cval*ds(v,c,k,l)
@@ -4409,7 +4412,7 @@ contains
           end do
 
           ! Exchange (columns 1:8 and the general column 11).
-          do c = 1, 8
+          do c = 1, last_pair
             do v = 1, nf
               f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,j,l)
               f3(v,c,k,i) = f3(v,c,k,i) - xval*d3(v,c,l,j)
@@ -4422,19 +4425,19 @@ contains
             end do
           end do
           do v = 1, nf
-            f3(v,11,i,k) = f3(v,11,i,k) - xval*d3(v,11,j,l)
-            f3(v,11,k,i) = f3(v,11,k,i) - xval*d3(v,11,l,j)
-            f3(v,11,i,l) = f3(v,11,i,l) - xval*d3(v,11,j,k)
-            f3(v,11,l,i) = f3(v,11,l,i) - xval*d3(v,11,k,j)
-            f3(v,11,j,k) = f3(v,11,j,k) - xval*d3(v,11,i,l)
-            f3(v,11,k,j) = f3(v,11,k,j) - xval*d3(v,11,l,i)
-            f3(v,11,j,l) = f3(v,11,j,l) - xval*d3(v,11,i,k)
-            f3(v,11,l,j) = f3(v,11,l,j) - xval*d3(v,11,k,i)
+            f3(v,general_channel,i,k) = f3(v,general_channel,i,k) - xval*d3(v,11,j,l)
+            f3(v,general_channel,k,i) = f3(v,general_channel,k,i) - xval*d3(v,11,l,j)
+            f3(v,general_channel,i,l) = f3(v,general_channel,i,l) - xval*d3(v,11,j,k)
+            f3(v,general_channel,l,i) = f3(v,general_channel,l,i) - xval*d3(v,11,k,j)
+            f3(v,general_channel,j,k) = f3(v,general_channel,j,k) - xval*d3(v,11,i,l)
+            f3(v,general_channel,k,j) = f3(v,general_channel,k,j) - xval*d3(v,11,l,i)
+            f3(v,general_channel,j,l) = f3(v,general_channel,j,l) - xval*d3(v,11,i,k)
+            f3(v,general_channel,l,j) = f3(v,general_channel,l,j) - xval*d3(v,11,k,i)
           end do
 
           ! Mixed alpha/beta spin-pair channels use the GAMESS-compatible
           ! exchange permutation for UMRSF open-shell pair densities.
-          do c = 9, 10
+          do c = 9, last_mixed
             do v = 1, nf
               f3(v,c,i,l) = f3(v,c,i,l) - xval*d3(v,c,k,j)
               f3(v,c,l,i) = f3(v,c,l,i) - xval*d3(v,c,j,k)
@@ -4491,14 +4494,14 @@ contains
 
           xval = val * this%scale_exchange
           do v = 1, nf
-            f3(v,11,i,k) = f3(v,11,i,k) - xval*d3(v,11,j,l)
-            f3(v,11,k,i) = f3(v,11,k,i) - xval*d3(v,11,l,j)
-            f3(v,11,i,l) = f3(v,11,i,l) - xval*d3(v,11,j,k)
-            f3(v,11,l,i) = f3(v,11,l,i) - xval*d3(v,11,k,j)
-            f3(v,11,j,k) = f3(v,11,j,k) - xval*d3(v,11,i,l)
-            f3(v,11,k,j) = f3(v,11,k,j) - xval*d3(v,11,l,i)
-            f3(v,11,j,l) = f3(v,11,j,l) - xval*d3(v,11,i,k)
-            f3(v,11,l,j) = f3(v,11,l,j) - xval*d3(v,11,k,i)
+            f3(v,general_channel,i,k) = f3(v,general_channel,i,k) - xval*d3(v,11,j,l)
+            f3(v,general_channel,k,i) = f3(v,general_channel,k,i) - xval*d3(v,11,l,j)
+            f3(v,general_channel,i,l) = f3(v,general_channel,i,l) - xval*d3(v,11,j,k)
+            f3(v,general_channel,l,i) = f3(v,general_channel,l,i) - xval*d3(v,11,k,j)
+            f3(v,general_channel,j,k) = f3(v,general_channel,j,k) - xval*d3(v,11,i,l)
+            f3(v,general_channel,k,j) = f3(v,general_channel,k,j) - xval*d3(v,11,l,i)
+            f3(v,general_channel,j,l) = f3(v,general_channel,j,l) - xval*d3(v,11,i,k)
+            f3(v,general_channel,l,j) = f3(v,general_channel,l,j) - xval*d3(v,11,k,i)
           end do
               end do
             end do
@@ -4637,6 +4640,120 @@ contains
       sigma(pair%slot(i),:)=sigma(pair%slot(i),:)+y(i,:)
     end do
   end subroutine
+
+  ! UMRSF: the same correction from six SOMO images, alpha and beta separately.
+  logical function umrsf_pair_allowed(infos,ca,cb,cam,petite,limit_bytes) result(on)
+    use types, only: information
+    implicit none
+    type(information),intent(in)::infos
+    real(dp),intent(in)::ca(:,:),cb(:,:)
+    logical,intent(in)::cam,petite
+    integer(8),intent(in),optional::limit_bytes
+    integer(8)::limit
+    integer::n
+    on=.false.
+    if(.not.infos%tddft%pair_cache)return
+    if(.not.infos%tddft%umrsf.or.cam.or.petite.or.infos%control%mrsf_fp32/=0)return
+    if(infos%tddft%mult/=1.and.infos%tddft%mult/=3)return
+    if(infos%mol_prop%nelec_a-infos%mol_prop%nelec_b/=2)return
+    if(abs(infos%tddft%hfscale)<=epsilon(1.0_dp))return
+    n=size(ca,1)
+    limit=256_8*1024_8*1024_8
+    if(present(limit_bytes))limit=limit_bytes
+    ! Bound the persistent quadratic correction, not total process memory.
+    if(32_8*int(n-2,8)**2>limit)return
+    on=.true.
+  end function
+
+  subroutine umrsf_pair_setup(pair,infos,driver,ca,cb,scale)
+    use types, only: information
+    use int2_compute, only: int2_compute_t
+    use messages, only: show_message,with_abort
+    implicit none
+    type(mrsf_pair_t),intent(out)::pair
+    type(information),intent(in)::infos
+    type(int2_compute_t),intent(inout)::driver
+    real(dp),intent(in)::ca(:,:),cb(:,:),scale
+    type(int2_umrsf_data_t)::data
+    real(dp),allocatable,target::density(:,:,:,:)
+    real(dp),allocatable::images(:,:,:)
+    integer::n,o1,o2,k,mu,nu,ok
+    n=size(ca,1);o2=infos%mol_prop%nelec_a;o1=o2-1
+    allocate(density(6,11,n,n),images(n,n,6),stat=ok)
+    if(ok/=0)call show_message('UMRSF pair setup: cannot allocate matrices',with_abort)
+    density=0
+    do nu=1,n
+      do mu=1,n
+        density(1,11,mu,nu)=ca(mu,o1)*ca(nu,o1)
+        density(2,11,mu,nu)=ca(mu,o2)*ca(nu,o2)
+        density(3,11,mu,nu)=ca(mu,o1)*ca(nu,o2)
+        density(4,11,mu,nu)=cb(mu,o1)*cb(nu,o1)
+        density(5,11,mu,nu)=cb(mu,o2)*cb(nu,o2)
+        density(6,11,mu,nu)=cb(mu,o1)*cb(nu,o2)
+      end do
+    end do
+    data%d3=>density;data%general_only=.true.
+    data%scale_exchange=scale;data%scale_coulomb=scale
+    call driver%run(data)
+    do k=1,6
+      images(:,:,k)=-data%f3(k,1,:,:,1)
+    end do
+    call umrsf_pair_matrix(pair,infos,ca,cb,images)
+    call data%clean()
+  end subroutine
+
+  subroutine umrsf_pair_matrix(pair,infos,ca,cb,images)
+    use types, only: information
+    use messages, only: show_message,with_abort
+    implicit none
+    type(mrsf_pair_t),intent(out)::pair
+    type(information),intent(in)::infos
+    real(dp),intent(in)::ca(:,:),cb(:,:),images(:,:,:)
+    real(dp),allocatable::b(:,:,:,:),tmp(:,:)
+    integer::n,nc,nv,na,m,i,j,a,v1,v2,ok,k
+    real(dp)::sgn,cc,vv,cv,d
+    n=size(ca,1);nc=infos%mol_prop%nelec_b;na=nc+2;nv=n-na;m=2*(nc+nv)
+    allocate(pair%matrix(m,m),pair%slot(m),b(n,n,6,2),tmp(n,n),stat=ok)
+    if(ok/=0)call show_message('UMRSF pair matrix: cannot allocate correction',with_abort)
+    ! Opposite-spin SOMO images supply CC/VV; same-spin images supply CO/OV.
+    do k=1,6
+      call dgemm('t','n',n,n,n,1.0_dp,ca,n,images(:,:,k),n,0.0_dp,tmp,n)
+      call dgemm('n','n',n,n,n,1.0_dp,tmp,n,ca,n,0.0_dp,b(:,:,k,1),n)
+      call dgemm('t','n',n,n,n,1.0_dp,cb,n,images(:,:,k),n,0.0_dp,tmp,n)
+      call dgemm('n','n',n,n,n,1.0_dp,tmp,n,cb,n,0.0_dp,b(:,:,k,2),n)
+    end do
+    pair%matrix=0
+    sgn=merge(1.0_dp,-1.0_dp,infos%tddft%mult==1)
+    cc=sgn*infos%tddft%spc_coco/infos%tddft%hfscale
+    vv=sgn*infos%tddft%spc_ovov/infos%tddft%hfscale
+    cv=sgn*infos%tddft%spc_coov/infos%tddft%hfscale
+    do i=1,nc
+      pair%slot(i)=i;pair%slot(nc+i)=na+i
+      do j=1,nc
+        pair%matrix(i,j)=cc*b(i,j,5,1)
+        pair%matrix(i,nc+j)=-cc*b(i,j,6,1)
+        pair%matrix(nc+i,j)=-cc*b(j,i,6,1)
+        pair%matrix(nc+i,nc+j)=cc*b(i,j,4,1)
+      end do
+    end do
+    do i=1,nv
+      a=na+i;v1=2*nc+i;v2=v1+nv
+      pair%slot(v1)=(a-nc-1)*na+na-1
+      pair%slot(v2)=pair%slot(v1)+1
+      do j=1,nv
+        pair%matrix(v1,2*nc+j)=vv*b(a,na+j,2,2)
+        pair%matrix(v1,2*nc+nv+j)=-vv*b(a,na+j,3,2)
+        pair%matrix(v2,2*nc+j)=-vv*b(na+j,a,3,2)
+        pair%matrix(v2,2*nc+nv+j)=vv*b(a,na+j,1,2)
+      end do
+      do j=1,nc
+        d=0.5_dp*cv*(b(j,a,3,1)-b(a,j,3,1)+b(j,a,6,2)-b(a,j,6,2))
+        pair%matrix(j,v2)=d;pair%matrix(v2,j)=d
+        pair%matrix(nc+j,v1)=-d;pair%matrix(v1,nc+j)=-d
+      end do
+    end do
+  end subroutine
+
 
 
   ! Project the sole dynamic exchange image; static spin-pair terms are added separately.

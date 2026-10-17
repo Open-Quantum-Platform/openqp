@@ -399,7 +399,8 @@ contains
     use int2_compute, only: int2_compute_t
     use tdhf_mrsf_lib, only: mrsf_general_mntoia
     use tdhf_mrsf_lib, only: int2_mrsf_data_t, int2_umrsf_data_t, &
-      mrsf_pair_t,mrsf_pair_allowed,mrsf_pair_setup,mrsf_pair_apply
+      mrsf_pair_t,mrsf_pair_allowed,mrsf_pair_setup,mrsf_pair_apply, &
+      umrsf_pair_allowed,umrsf_pair_setup
     use tdhf_lib, only: sym_response_project, &
       int2_td_data_t
     use tdhf_lib, only: &
@@ -1000,12 +1001,23 @@ contains
     ! The device session replaces the native sigma build, so it would never use
     ! the cache. A mid-run decline falls back to the full native contraction.
     use_pair=.false.
-    if(.not.use_sig)use_pair=mrsf_pair_allowed(infos,mo_a,mo_b,dft.and.infos%dft%cam_flag,int2_driver%petite)
-    if(use_pair)then
+    if(.not.use_sig)then
+      if(umrsf)then
+        use_pair=umrsf_pair_allowed(infos,mo_a,mo_b,dft.and.infos%dft%cam_flag,int2_driver%petite)
+      else
+        use_pair=mrsf_pair_allowed(infos,mo_a,mo_b,dft.and.infos%dft%cam_flag,int2_driver%petite)
+      end if
+    end if
+    if(use_pair.and.umrsf)then
+      call umrsf_pair_setup(pair_kernel,infos,int2_driver,mo_a,mo_b,scale_exch)
+      write(iw,'(2X,A)') 'UMRSF pair cache: 1 dynamic exchange; quadratic spin-pair matrix'
+    else if(use_pair)then
       call mrsf_pair_setup(pair_kernel,infos,int2_driver,mo_a,scale_exch)
       write(iw,'(2X,A)') 'MRSF pair cache: 1 dynamic exchange; quadratic spin-pair matrix'
     else if(infos%tddft%pair_cache.and.use_sig)then
       write(iw,'(2X,A)') 'MRSF pair cache: not used with the device sigma route'
+    else if(infos%tddft%pair_cache.and.umrsf)then
+      write(iw,'(2X,A)') 'UMRSF pair cache: not applicable to this calculation; standard contraction'
     else if(infos%tddft%pair_cache)then
       write(iw,'(2X,A)') 'MRSF pair cache: not applicable to this calculation; standard contraction'
     end if
@@ -1077,6 +1089,7 @@ contains
         if (umrsf) then
           call int2_udata_st%clean()
           int2_udata_st%d3 => mrsf_density(:iv,:,:,:)
+          int2_udata_st%general_only = use_pair
           int2_udata_st%tamm_dancoff = tamm_dancoff
           int2_udata_st%scale_exchange = scale_exch
           int2_udata_st%scale_coulomb = scale_exch
