@@ -34,6 +34,8 @@ module tdhf_umrsf_gradient_mod
   private
   public :: tdhf_umrsf_gradient_C, tdhf_umrsf_gradient, tdhf_umrsf_build_response_gradient
 
+  public :: umrsf_bra_density, umrsf_bra_image
+
   !> ------- Stage-2 XC context) -------
   !> Set ONCE per gradient in umrsf_grad_run_gates (DFT runs only). The reference UKS XC kernel
   !> f_xc[ρ_ref] enters the response gradient ONLY through the reference-orbital relaxation (the
@@ -675,7 +677,7 @@ contains
       gta = 2.0_dp*matmul(famoa, talpha)
       gtb = 2.0_dp*matmul(famob, tbeta)
       call umrsf_timing_log(iw, 'raw generalized Fock', twall, tcpu)
-      ! ---- G̃ 2e channel-adjoint: ANALYTIC (default, 2 int2 builds) / FD oracle / GATE ----
+      ! ---- G̃ 2e channel-adjoint: ANALYTIC (default, 1 int2 build) / FD oracle / GATE ----
       if (dbg_w2e) then
         write(iw,'(2x,a)') 'UMRSF response stage: 2e generalized Fock'
         call flush(iw)
@@ -1192,11 +1194,13 @@ contains
 
 !###############################################################################
 !> ANALYTIC 11-channel 2e generalized Fock  g2e^σ_pq = ∂ω_2e/∂U^σ_pq  (BOTH spins, one call),
-!> replacing the FD oracle umrsf_g2e_onesided (4·nbf² int2 builds → 2 builds). Derivation +
+!> replacing the FD oracle umrsf_g2e_onesided (4·nbf² int2 builds → 1 build). Derivation +
 !> Verified against the CAS/finite-difference gate of the derivation notes (worst 5.25e-12 ≤ 1e-9).
 !>   ω_2e = Σ_k ⟨B_k, F_k⟩,  F_k = s_k int2[D]_k,  D=umrsfcbc, B=umrsf_bra_density,  int2_umrsf
 !>   is CHANNEL-DIAGONAL & SELF-ADJOINT (J/K of 8-fold-sym ERIs) ⇒ for the ket-derivative term
-!>   ⟨B_k, s_k int2[∂D_k]⟩ = ⟨GB_k, ∂D_k⟩ with GB_k = s_k int2[B]_k (precomputed once).
+!>   ⟨B_k, s_k int2[∂D_k]⟩ = ⟨GB_k, ∂D_k⟩ with GB_k = s_k int2[B]_k. B is a scaled, signed
+!>   channel permutation of D (B(1:8)=D(5:8,1:4)/2, B(9:10)=-D(9:10), B(11)=D(11)), so GB_k
+!>   is the same map applied to F (umrsf_bra_image); no second int2 build.
 !>   g2e = V_σᵀ Γ_σ ,  Γ_σ = Σ_k [⟨F_k,∂B_k/∂V_σ⟩ + ⟨GB_k,∂D_k/∂V_σ⟩].
 !> Each channel density is V_l A_k V_rᵀ (sparse amplitude core A_k; ket core A, bra core AB;
 !> spin pairing aa=1,3,5,7 / bb=2,4,6,8 / ab=9,10,11). Gradient of ⟨M,V_l A V_rᵀ⟩:
@@ -1212,11 +1216,11 @@ contains
     type(int2_compute_t), intent(inout) :: idrv
     real(kind=dp), intent(in) :: va(:,:), vb(:,:), xamp(:), scale_exch
     real(kind=dp), intent(out) :: g2ea(:,:), g2eb(:,:)
-    real(kind=dp), allocatable :: xmat(:,:), fk(:,:,:), gbk(:,:,:)
+    real(kind=dp), allocatable :: xmat(:,:), fk(:,:,:)
     real(kind=dp), allocatable :: acore(:,:,:), abcore(:,:,:), ga(:,:), gb(:,:)
     real(kind=dp), allocatable :: mc(:,:), vacc(:,:)
-    real(kind=dp), allocatable, target :: densd(:,:,:,:), densb(:,:,:,:)
-    type(int2_umrsf_data_t), target :: udd, udb
+    real(kind=dp), allocatable, target :: densd(:,:,:,:)
+    type(int2_umrsf_data_t), target :: udd
     real(kind=dp), parameter :: isqrt2 = 1.0_dp/sqrt(2.0_dp)
     integer :: nbf, nocca, noccb, mrst, o1, o2, i, j, k, pass, ls, rs
     integer :: lspin(11), rspin(11)
@@ -1227,27 +1231,22 @@ contains
     nbf = size(va,1)
     nocca = infos%mol_prop%nelec_a ; noccb = infos%mol_prop%nelec_b
     mrst = infos%tddft%mult ; o1 = nocca-1 ; o2 = nocca
-    allocate(xmat(nbf,nbf), fk(nbf,nbf,11), gbk(nbf,nbf,11), &
+    allocate(xmat(nbf,nbf), fk(nbf,nbf,11), &
              acore(nbf,nbf,11), abcore(nbf,nbf,11), ga(nbf,nbf), gb(nbf,nbf), &
              mc(nbf,nbf), vacc(nbf,nbf), &
-             densd(1,11,nbf,nbf), densb(1,11,nbf,nbf), source=0.0_dp)
+             densd(1,11,nbf,nbf), source=0.0_dp)
 
-    ! ---- channel densities D=umrsfcbc(ket), B=umrsf_bra_density(bra) ----
+    ! The bra densities are a scaled, signed channel permutation of the ket densities.
     call iatogen(xamp, xmat, nocca, noccb)
     call umrsfcbc(infos, va, vb, xmat, densd(1,:,:,:))
-    call umrsf_bra_density(infos, va, vb, xmat, densb(1,:,:,:))
 
-    ! ---- F_k = s_k int2[D]_k  and  GB_k = s_k int2[B]_k  (2 int2 builds) ----
+    ! Contract the ket once; obtain each bra image by linearity below.
+    ! Keep the original ket screening bound and all derivative contributions.
     udd = int2_umrsf_data_t(d3=densd(1:1,:,:,:), tamm_dancoff=.true., &
                             scale_exchange=scale_exch, scale_coulomb=scale_exch)
     call idrv%run(udd)
     do k = 1, 11 ; fk(:,:,k) = udd%f3(1,k,:,:,1) ; end do
     if (mrst == 3) fk(:,:,1:10) = -fk(:,:,1:10)
-    udb = int2_umrsf_data_t(d3=densb(1:1,:,:,:), tamm_dancoff=.true., &
-                            scale_exchange=scale_exch, scale_coulomb=scale_exch)
-    call idrv%run(udb)
-    do k = 1, 11 ; gbk(:,:,k) = udb%f3(1,k,:,:,1) ; end do
-    if (mrst == 3) gbk(:,:,1:10) = -gbk(:,:,1:10)
 
     ! ---- amplitude cores A_k (ket), AB_k (bra) : density_k = V_l A_k V_rᵀ ----
     do j = nocca+1, nbf                                   ! virt-row channels
@@ -1291,8 +1290,11 @@ contains
     do k = 1, 11
       ls = lspin(k) ; rs = rspin(k)
       do pass = 1, 2
-        if (pass == 1) then ; mc = fk(:,:,k) ; vacc = abcore(:,:,k)   ! bra
-        else                ; mc = gbk(:,:,k) ; vacc = acore(:,:,k)   ! ket
+        if (pass == 1) then
+          mc = fk(:,:,k) ; vacc = abcore(:,:,k)
+        else
+          call umrsf_bra_image(fk, k, mc)
+          vacc = acore(:,:,k)
         end if
         if (ls==1 .and. rs==1) then          ! aa
           ga = ga + matmul(mc, matmul(va, transpose(vacc))) &
@@ -1309,7 +1311,7 @@ contains
 
     g2ea = matmul(transpose(va), ga)
     g2eb = matmul(transpose(vb), gb)
-    deallocate(xmat, fk, gbk, acore, abcore, ga, gb, mc, vacc, densd, densb)
+    deallocate(xmat, fk, acore, abcore, ga, gb, mc, vacc, densd)
   end subroutine umrsf_g2e_analytic
 
 
@@ -1378,6 +1380,24 @@ contains
   end subroutine umrsf_orbital_grad
 
 !###############################################################################
+  ! B(1:8)=D(5:8,1:4)/2, B(9:10)=-D(9:10), B(11)=D(11).
+  ! Channels 1:8 share J-K; channels 9:10 retain their transposed exchange.
+  ! The triplet sign is common to every channel within each permutation.
+  subroutine umrsf_bra_image(ket_image, channel, bra_image)
+    real(kind=dp), intent(in) :: ket_image(:,:,:)
+    integer, intent(in) :: channel
+    real(kind=dp), intent(out) :: bra_image(:,:)
+    integer, parameter :: partner(8) = [5,6,7,8,1,2,3,4]
+    select case (channel)
+    case (1:8)
+      bra_image = 0.5_dp*ket_image(:,:,partner(channel))
+    case (9:10)
+      bra_image = -ket_image(:,:,channel)
+    case (11)
+      bra_image = ket_image(:,:,11)
+    end select
+  end subroutine umrsf_bra_image
+
 !> @brief Response 2-PDM bra densities B_k = adjoint(umrsfmntoia) applied to the
 !>        amplitude X. With the ket densities D_k = umrsfcbc(X) and the int2_umrsf
 !>        channel J/K patterns, the 2e response energy is omega_2e = sum_k <B_k, F_k>,

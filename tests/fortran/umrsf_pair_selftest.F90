@@ -14,7 +14,7 @@ contains
     type(information),target::inf
     type(basis_set),pointer::basis
     type(int2_umrsf_data_t)::old,new,stat
-    type(umrsf_pair_t)::pair
+    type(mrsf_pair_t)::pair
     type(int2_storage_t)::buf
     real(dp),allocatable,target::den(:,:,:,:),sd(:,:,:,:)
     real(dp),allocatable::c(:,:),cb(:,:),x(:,:),aold(:,:),anew(:,:),work(:,:),b(:,:,:),image(:,:,:)
@@ -159,7 +159,7 @@ contains
                   if(maxval(abs(reference-anew(:,v)))>2e-10_dp)failures=failures+1
                 end block
               end do
-              call umrsf_pair_apply(pair,x,anew)
+              call mrsf_pair_apply(pair,x,anew)
               delta=maxval(abs(aold-anew))
               error=max(error,delta);checks=checks+1
               if(delta>2e-10_dp)failures=failures+1

@@ -26,7 +26,8 @@ def test_mrsf_gradient_requests_probe_only_moving_grid_response():
     assert "grid_correction" in body
     assert "include_ground_state=.false." in body
     assert "include_weight_derivative=.true." in body
-    assert "weight_derivative_only=.true." in body
+    assert "weight_derivative_only=.true." not in body
+    assert body.count("call utddft_xc_gradient(") == 1
     assert "use mod_dft_gridint_grad, only: derexc_blk" in body
     assert "call derexc_blk" in body
     assert "include_ground_state=.true." not in body
