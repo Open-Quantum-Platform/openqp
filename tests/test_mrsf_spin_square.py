@@ -22,12 +22,11 @@ from pathlib import Path
 
 import pytest
 
+# The native and end-to-end tests must fail, not skip, when oqp is missing.
 try:
     import oqp                      # noqa: F401  (must precede numpy: ILP64)
-    from oqp.pyoqp import Runner
-    HAVE_OQP = True
-except Exception:                   # pragma: no cover - source-only checkout
-    HAVE_OQP = False
+except ImportError:                 # oracle-only tests still run
+    oqp = None
 
 import numpy as np
 
@@ -243,8 +242,8 @@ def test_oracle_quintet_target_is_pure(nocca, nbf):
     assert spin_square_general(psi, nbf) == pytest.approx(6.0, abs=1e-12)
 
 
-@pytest.mark.skipif(not HAVE_OQP, reason="compiled oqp package not importable")
 def test_native_umrsf_rohf_limit_and_core_virtual_coupling():
+    assert oqp is not None, "compiled oqp package not importable"
     error = oqp.ffi.new("double *")
     checks = oqp.ffi.new("int *")
     # A missing entry point must fail instead of skipping a stale build.
@@ -285,6 +284,9 @@ conv=1.0e-10
 maxit=100
 """
 
+# <S^2> is printed with f9.4: the printed value differs from the computed one
+# by at most half a unit in the last place, 5e-5.
+PRINT_ATOL = 6e-5
 S2_LINE = re.compile(r"^\s*<S\^2> =\s+(-?\d+\.\d+)\s*$", re.M)
 NOCCA, NOCCB = 5, 3        # CH2 triplet ROHF reference: 8 electrons
 
@@ -300,13 +302,13 @@ def _state_vectors(bvec, nstate):
     return vectors
 
 
-@pytest.mark.skipif(not HAVE_OQP, reason="compiled oqp package not importable")
 @pytest.mark.parametrize("mult", [1, 3])
 def test_ch2_mrsf_printed_spin_square_matches_determinant_oracle(mult):
     with tempfile.TemporaryDirectory(prefix="mrsf_s2_") as tmp:
         path = Path(tmp) / "ch2.inp"
         path.write_text(CH2_INPUT.format(mult=mult))
         log = path.with_suffix(".log")
+        from oqp.pyoqp import Runner
         runner = Runner(input_file=str(path), log=str(log))
         runner.run()
         bvec = np.array(runner.mol.data["OQP::td_bvec_mo"], copy=True)
@@ -319,7 +321,7 @@ def test_ch2_mrsf_printed_spin_square_matches_determinant_oracle(mult):
     assert len(printed) == nstate, printed
 
     oracle = [spin_square(mrsf_state(v, mult, NOCCA, NOCCB, nbf), nbf) for v in vectors]
-    np.testing.assert_allclose(printed, oracle, atol=1.5e-4)
+    np.testing.assert_allclose(printed, oracle, atol=PRINT_ATOL)
     if mult == 1:
         # Nonzero C->V weight: the former hard-coded 0 cannot pass.
         assert max(oracle) > 1e-2, oracle
@@ -327,7 +329,6 @@ def test_ch2_mrsf_printed_spin_square_matches_determinant_oracle(mult):
         np.testing.assert_allclose(oracle, 2.0, atol=1e-10)
 
 
-@pytest.mark.skipif(not HAVE_OQP, reason="compiled oqp package not importable")
 def test_ch2_quintet_printed_spin_square_matches_determinant_oracle():
     nstate = 3
     deck = CH2_INPUT.format(mult=5).replace("nstate=4", f"nstate={nstate}")
@@ -335,6 +336,7 @@ def test_ch2_quintet_printed_spin_square_matches_determinant_oracle():
         path = Path(tmp) / "ch2.inp"
         path.write_text(deck)
         log = path.with_suffix(".log")
+        from oqp.pyoqp import Runner
         runner = Runner(input_file=str(path), log=str(log))
         runner.run()
         bvec = np.array(runner.mol.data["OQP::td_bvec_mo"], copy=True)
@@ -346,4 +348,4 @@ def test_ch2_quintet_printed_spin_square_matches_determinant_oracle():
     assert len(printed) == nstate, printed
     oracle = [spin_square_general(quintet_state(v, NOCCA, NOCCB, nbf), nbf) for v in vectors]
     np.testing.assert_allclose(oracle, 6.0, atol=1e-10)
-    np.testing.assert_allclose(printed, oracle, atol=1.5e-4)
+    np.testing.assert_allclose(printed, oracle, atol=PRINT_ATOL)
