@@ -75,6 +75,10 @@ module mod_dft_gridint
     logical :: hasBeta = .false.
     !< .T./.F.  - wfA and wfB are MO vectors/densities
     logical :: isWFVecs = .true.
+    !< Density-driven (isWFVecs=.F.) LDA/GGA consumers that read only
+    !< D*phi (moV), never D*grad(phi) (moG1), may set this to skip the
+    !< gradient part of the AO->"MO" transform. Ignored for meta-GGA.
+    logical :: valueOnlyMOs = .false.
 
     integer :: numAOs = 0
     integer :: maxPts = 0
@@ -157,6 +161,7 @@ module mod_dft_gridint
     logical :: hasBeta = .false.
     logical :: isWFVecs = .true.   !< .TRUE.  - wfA and wfB are MO vectors
                                    !< .FALSE. - wfA and wfB are densities
+    logical :: valueOnlyMOs = .false. !< compMOs transforms AO values only
     integer :: numAOs = 0 !< number of AOs
     integer :: numAOs_p = 0 !< number of pruned AOs
     integer :: numShells_p = 0 !< number of shells in shells_p
@@ -479,6 +484,10 @@ contains
 !   Manage density/MO vectors
     self%isWFVecs = xco%isWFVecs
     self%wfAlpha => xco%wfAlpha
+    ! compRhoAO/compDRhoAO use D*phi only; compTauAO and every MO-driven
+    ! density routine also need the transformed AO gradients.
+    self%valueOnlyMOs = xco%valueOnlyMOs .and. .not. xco%isWFVecs &
+                        .and. self%funTyp /= OQP_FUNTYP_MGGA
 
     self%numOccAlpha = xco%numOccAlpha
 
@@ -996,6 +1005,7 @@ contains
     integer :: nVecs, nPts
 
     nVecs = min(self%numAOVecs, 4) ! Don't transform second derivatives
+    if (self%valueOnlyMOs) nVecs = 1
     nPts  = ubound(self%aoMem,2)
 
     associate( nAlpha   => self%numOccAlpha &
