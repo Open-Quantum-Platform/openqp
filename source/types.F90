@@ -232,7 +232,7 @@ module types
     integer(c_int64_t) :: z_solver = 0     !< z-vector solver: 0 (CG), 1 (GMRES legacy), 2 (MINRES), 3 (AUTO)
     integer(c_int64_t) :: gmres_dim = 50   !< The Restart dimension of GMRES 
     logical(c_bool) :: umrsf = .false.     !< UMRSF branch calculations switch in td_mrsf_energy module
-    logical(c_bool) :: pair_cache = .false.!< Reuse fixed spin-pair contractions in the MRSF energy response
+    logical(c_bool) :: pair_cache = .false.!< Reuse fixed spin-pair contractions in the MRSF and UMRSF energy response
   end type tddft_parameters
 
   type, public, bind(c) :: mpi_communicator
