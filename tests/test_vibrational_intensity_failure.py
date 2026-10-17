@@ -93,8 +93,23 @@ class VibrationalIntensityFailure(unittest.TestCase):
         runner.mol.config["tdhf"]["cv4os"] = "true"
         with self.assertRaisesRegex(ValueError, r"Unknown option: tdhf\.cv4os"):
             runner.run()
-        self.assertNotEqual(
-            runner.mol.vibrational_intensity_metadata.get("status"), "failed")
+
+    def test_failure_after_success_leaves_no_stale_intensities(self):
+        # A caller that reuses the molecule and catches the exception must
+        # not read the previous run's intensities as this run's result.
+        runner = self._runner("h2_vib_rerun")
+        runner.run()
+        self.assertEqual(runner.mol.vibrational_intensity_metadata.get("status"), "computed")
+        self.assertGreater(len(runner.mol.infrared_intensities), 0)
+        runner.mol.config["tdhf"]["cv4os"] = "true"
+        with self.assertRaisesRegex(ValueError, r"Unknown option: tdhf\.cv4os"):
+            runner.run()
+        mol = runner.mol
+        self.assertEqual(mol.vibrational_intensity_metadata, {})
+        self.assertEqual(mol.infrared_intensities.size, 0)
+        self.assertEqual(mol.raman_activities.size, 0)
+        self.assertEqual(mol.infrared_mode_dipole_derivatives.shape, (0, 3))
+        self.assertEqual(mol.raman_mode_polarizability_derivatives.shape, (0, 3, 3))
 
     def test_clean_config_computes_intensities(self):
         # Control: the same run without the injected key must reach the

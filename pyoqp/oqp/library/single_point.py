@@ -2207,6 +2207,9 @@ class Hessian(Calculator):
     def _compute_vibrational_intensities(self, modes):
         """Compute IR/Raman intensities using native OpenQP property kernels."""
 
+        # A failure below propagates; results from an earlier run on this
+        # molecule must not survive it labelled 'computed'.
+        self.mol.reset_vibrational_intensities()
         modes = np.ascontiguousarray(np.asarray(modes, dtype=np.float64))
         coord0 = np.asarray(self.mol.get_system(), dtype=float).reshape((-1, 3))
         ncoord = coord0.size
@@ -2226,14 +2229,8 @@ class Hessian(Calculator):
         for idx in range(ncoord if analytic_dip is None or analytic_pol is None else 0):
             disp = np.zeros(ncoord, dtype=float)
             disp[idx] = displacement
-            # No try/except here. Every failure of a displaced child run -- an
-            # input-schema rejection of the copied config, a non-converged
-            # SCF, a native property kernel error -- means the intensities
-            # requested by runtype=hess cannot be formed. Catching it and
-            # recording status='failed' let the run finish with empty IR and
-            # Raman arrays and exit 0; the real message (e.g. "Unknown option:
-            # tdhf.cv4os") reached neither the log nor the exit status, and
-            # only a regression comparison noticed the missing numbers.
+            # No try/except: any child failure (rejected config, unconverged
+            # SCF, kernel error) means the requested intensities cannot exist.
             dip_plus, polar_plus = self._native_property_tensors_at((flat0 + disp).reshape(coord0.shape))
             dip_minus, polar_minus = self._native_property_tensors_at((flat0 - disp).reshape(coord0.shape))
             dipole_derivs[:, idx] = (dip_plus - dip_minus) / (2.0 * displacement)
