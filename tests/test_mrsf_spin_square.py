@@ -23,10 +23,14 @@ from pathlib import Path
 import pytest
 
 # The native and end-to-end tests must fail, not skip, when oqp is missing.
+# A source checkout without liboqp raises RuntimeError from resolve_oqp_root()
+# at import; the oracle-only tests must still be collected and run there.
 try:
     import oqp                      # noqa: F401  (must precede numpy: ILP64)
-except ImportError:                 # oracle-only tests still run
+    OQP_IMPORT_ERROR = None
+except (ImportError, RuntimeError) as exc:
     oqp = None
+    OQP_IMPORT_ERROR = exc
 
 import numpy as np
 
@@ -243,7 +247,7 @@ def test_oracle_quintet_target_is_pure(nocca, nbf):
 
 
 def test_native_umrsf_rohf_limit_and_core_virtual_coupling():
-    assert oqp is not None, "compiled oqp package not importable"
+    assert oqp is not None, f"compiled oqp package not importable: {OQP_IMPORT_ERROR!r}"
     error = oqp.ffi.new("double *")
     checks = oqp.ffi.new("int *")
     # A missing entry point must fail instead of skipping a stale build.
