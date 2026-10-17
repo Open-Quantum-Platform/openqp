@@ -37,6 +37,7 @@ list(APPEND SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/ecp_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/rpa_residual_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/umrsf_bra_reuse_selftest.F90"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/mrsf_spin_square_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/mp2_gradient_density_test.F90"
 )
 

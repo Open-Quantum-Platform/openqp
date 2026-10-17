@@ -3903,11 +3903,66 @@ contains
 
 !###############################################################################
 
+!> Compute the <S^2> expectation value of a ROHF MRSF-TDDFT response state
+!>
+!> All MRSF configurations except core->virtual (C->V) are spin adapted: the
+!> E+ - E- (singlet) and E+ + E- (triplet) combinations of the O->O, C->O and
+!> O->V spin flips are exact S = 0 and S = 1 functions.  A C->V pair has four
+!> open shells (C, O1, O2, V); its triplet combination is a pure triplet, while
+!> its singlet combination is sqrt(2/3) S=0 + sqrt(1/3) S=2, i.e. <S^2> = 2.
+!> S^2 does not couple different spatial occupations, so
+!>
+!>   singlet: <S^2> = 2 w_CV,   w_CV = sum_{i<=noccb, j>2} X(i,j)**2 / |X|**2
+!>   triplet: <S^2> = 2
+!>
+!> (Dier, Dittmer, Rikus, Dreuw, Neugebauer, ChemRxiv 2026,
+!> doi:10.26434/chemrxiv.15010307, Eqs. 24-26).  bvec_mo uses the packed
+!> layout X(i,j), i = alpha-occupied, j = beta-virtual counted from noccb+1.
+!>
+  pure subroutine mrsfssq(ss, bvec_mo, nocca, noccb, nbf, mrsfs)
+
+    use precision, only: dp
+
+    implicit none
+
+    real(kind=dp), intent(out) :: ss
+    real(kind=dp), intent(in) :: bvec_mo(:)
+    integer, intent(in) :: nocca, noccb, nbf
+    logical, intent(in) :: mrsfs
+
+    real(kind=dp) :: total, cv
+    integer :: j
+
+    if (.not. mrsfs) then
+      ss = 2.0_dp
+      return
+    end if
+
+    total = sum(bvec_mo(1:nocca*(nbf-noccb))**2)
+    cv = 0.0_dp
+    do j = 3, nbf-noccb
+      cv = cv + sum(bvec_mo((j-1)*nocca+1:(j-1)*nocca+noccb)**2)
+    end do
+    ss = 0.0_dp
+    if (total > 0.0_dp) ss = 2.0_dp*cv/total
+
+  end subroutine mrsfssq
+
+!###############################################################################
+
 !> Compute the <S^2> expectation value of a UMRSF-TDDFT response state
 !>
-!> UMRSF analogue of the MRSF spin-square evaluation: accumulates <S^2>
-!> for state js from the response amplitudes bvec_mo and the diagonal
-!> alpha/beta MO overlaps, for singlet (mrsfs) or triplet (mrsft) targets.
+!> UMRSF analogue of mrsfssq: accumulates <S^2> for state js from the
+!> response amplitudes bvec_mo and the diagonal alpha/beta MO overlaps
+!> d_k = <alpha_k|beta_k> (corresponding-orbital model), for singlet (mrsfs)
+!> or triplet (mrsft) targets.  With a = sum_{k<=noccb} d_k**2 and
+!> b = prod_{k<=noccb} d_k**2, every amplitude contributes its E+ diagonal
+!> element plus lambda times the E+/E- coupling (lambda = -1 singlet, +1
+!> triplet).  S^2 = Nb - sum_pq a+_{q,b} a+_{p,a} a_{q,a} a_{p,b} contains at
+!> most one alpha<->beta exchange, and with diagonal overlaps it couples E+ and
+!> E- only when they differ by one exchange (O->O, C->O, O->V).  A C->V pair
+!> differs in C, O1, O2 and V, so its E+/E- coupling vanishes and both
+!> multiplicities get the diagonal nocca-1-a+d_i**2 (= 2 in the ROHF limit).
 !>
   subroutine umrsfssqu(ss, mo_a, mo_b, smat, wrk1, wrk2, nbf, nbf2, xvec_dim, js, &
                        norb, bvec_mo, nocca, noccb, mrsfs, mrsft)
@@ -3956,8 +4011,7 @@ contains
         do j = 1, norb-noccb
           ! cv
           if ((j > 2).and.(i <= noccb)) then
-            ss = ss + (nocca-1-a + (wrk2(i))**2 - b /  &
-            (max(abs(wrk2(i)), tol))**2) * (bvec_mo(i,j,js))**2
+            ss = ss + (nocca-1-a + (wrk2(i))**2) * (bvec_mo(i,j,js))**2
           ! co
           else if (i <= noccb) then
             ss = ss + (nocca-1-a + (wrk2(i))**2 - (wrk2(j+noccb))**2 &
@@ -3973,7 +4027,8 @@ contains
              (max(abs(wrk2(noccb+j)), tol))**2)) &
              * (bvec_mo(i,j,js))**2
 
-            f = f+half*(-1+a*(wrk2(noccb+j))**2)*(bvec_mo(i,j,js))**2
+            ! <G+|G-> = b d_O**2 normalizes (G+ + G-)/2 (1 in the ROHF limit)
+            f = f+half*(-1+b*(wrk2(noccb+j))**2)*(bvec_mo(i,j,js))**2
           end if
         end do
       end do
@@ -3985,9 +4040,7 @@ contains
         do j = 1, norb-noccb
           ! cv
           if ((j > 2).and.(i <= noccb)) then
-            ss = ss + (nocca-1 - a + (wrk2(i))**2 &
-             + b * (1.0d0 / max(abs(wrk2(i)), tol))**2) &
-             * (bvec_mo(i,j,js))**2
+            ss = ss + (nocca-1 - a + (wrk2(i))**2) * (bvec_mo(i,j,js))**2
           ! co
           else if (i <= noccb) then
             ss = ss + (nocca-1 - a + (wrk2(i))**2 - (wrk2(j+noccb))**2 &
