@@ -118,11 +118,7 @@ class Molecule:
         self.hessian_metadata = {}
         self.modes = np.zeros(0)  # 3Natom-6, 3Natom
         self.inertia = np.zeros(0)  # 3
-        self.infrared_intensities = np.zeros(0)
-        self.raman_activities = np.zeros(0)
-        self.vibrational_intensity_metadata = {}
-        self.infrared_mode_dipole_derivatives = np.zeros((0, 3))
-        self.raman_mode_polarizability_derivatives = np.zeros((0, 3, 3))
+        self.reset_vibrational_intensities()
         self.symmetry_metadata = {}
         self.mrsf_ekt_results_by_kind = {}
         # State-tracking tags loaded from a guess are transport history, not a
@@ -184,6 +180,14 @@ class Molecule:
             setter = lambda self, val, t=tag: self.data.__setitem__(t, val)
             setattr(self.__class__, f'get_{name}', getter)
             setattr(self.__class__, f'set_{name}', setter)
+
+    def reset_vibrational_intensities(self):
+        """Empty the IR/Raman results so none outlives the run that made them."""
+        self.infrared_intensities = np.zeros(0)
+        self.raman_activities = np.zeros(0)
+        self.vibrational_intensity_metadata = {}
+        self.infrared_mode_dipole_derivatives = np.zeros((0, 3))
+        self.raman_mode_polarizability_derivatives = np.zeros((0, 3, 3))
 
     def get_atoms(self):
         """
