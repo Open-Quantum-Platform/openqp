@@ -976,13 +976,13 @@ class SinglePoint(Calculator):
             mult = int(cfg.get('scf', {}).get('multiplicity', 1))
         except (TypeError, ValueError):
             mult = 1
-        try:
-            z = self.mol.get_atoms()
-            tm = bool(((z >= 21) & (z <= 30)).any() or ((z >= 39) & (z <= 48)).any()
-                      or ((z >= 57) & (z <= 80)).any())
-            natom = int(len(z))
-        except Exception:
-            tm, natom = False, 0
+        # No fallback: a molecule without atoms cannot reach the SCF, and a
+        # silent (tm=False, natom=0) answer would steer the converger choice
+        # for the hard transition-metal class without any trace in the log.
+        z = self.mol.get_atoms()
+        tm = bool(((z >= 21) & (z <= 30)).any() or ((z >= 39) & (z <= 48)).any()
+                  or ((z >= 57) & (z <= 80)).any())
+        natom = int(len(z))
         try:
             charge = int(cfg.get('input', {}).get('charge', 0))
         except (TypeError, ValueError):
@@ -1010,12 +1010,18 @@ class SinglePoint(Calculator):
         primary = 'diis'   # C-DIIS: best default
 
         if mode == 'ml':
+            # Only the absence of the optional distilled model selects the
+            # rule fallback. A model that is present but fails to import or
+            # to predict is a defect and must stop the run.
             try:
                 from oqp.library.scf_selector_model import predict as _ml_predict  # distilled, optional
+            except ModuleNotFoundError as exc:
+                if exc.name != 'oqp.library.scf_selector_model':
+                    raise
+                used = 'ML(no model -> rules)'
+            else:
                 primary = _ml_predict(f)
                 used = 'ML-model'
-            except Exception:
-                used = 'ML(no model -> rules)'
 
         # Stability following is opt-in: it runs only when the user sets
         # scf.stability in the input. The SCF manager never enables it on its
@@ -1208,11 +1214,7 @@ class SinglePoint(Calculator):
                 # Stable (no lower solution found) or the verification did not
                 # converge: restore the original converged orbitals unchanged.
                 self._restore_scf_state(snapshot)
-                for attr, value in mol_energy_snapshot.items():
-                    try:
-                        setattr(self.mol.mol_energy, attr, value)
-                    except Exception:
-                        pass
+                self._restore_mol_energy_state(mol_energy_snapshot)
                 # Symmetric solution kept: the petite reduction is valid again.
                 if petite_staged:
                     self._set_petite_enabled(True)
@@ -1231,10 +1233,12 @@ class SinglePoint(Calculator):
         return converged
 
     # Wavefunction tags that define an SCF solution (alpha + beta channels).
-    _scf_state_tags = (
-        'OQP::VEC_MO_A', 'OQP::E_MO_A', 'OQP::DM_A', 'OQP::FOCK_A',
+    _scf_beta_state_tags = (
         'OQP::VEC_MO_B', 'OQP::E_MO_B', 'OQP::DM_B', 'OQP::FOCK_B',
     )
+    _scf_state_tags = (
+        'OQP::VEC_MO_A', 'OQP::E_MO_A', 'OQP::DM_A', 'OQP::FOCK_A',
+    ) + _scf_beta_state_tags
 
     def _petite_is_staged(self):
         """True when both metadata and the live native flag are active.
@@ -1247,38 +1251,55 @@ class SinglePoint(Calculator):
         if (not meta or
                 meta.get('integral_symmetry', {}).get('status') != 'active'):
             return False
+        # OQPData raises AttributeError for a tag that is not allocated, and
+        # the native consumers treat an absent flag exactly as 0.  Any other
+        # error (an unreadable or malformed flag) propagates: answering False
+        # would keep the petite reduction on during the symmetry-breaking
+        # TRAH stage.
         try:
-            flag = np.asarray(
-                self.mol.data['OQP::sym_petite_enable']).ravel()
-            return bool(flag.size and int(flag[0]) != 0)
-        except Exception:
+            raw = self.mol.data['OQP::sym_petite_enable']
+        except AttributeError:
             return False
+        flag = np.asarray(raw).ravel()
+        return bool(flag.size and int(flag[0]) != 0)
 
     def _set_petite_enabled(self, enabled):
-        import numpy as np
-        try:
-            self.mol.data['OQP::sym_petite_enable'] = \
-                np.array([1 if enabled else 0], dtype=np.int64)
-        except Exception:
-            pass
+        # No fallback: if the flag cannot be written, TRAH would run with the
+        # petite-list reduction on symmetry-broken densities.
+        self.mol.data['OQP::sym_petite_enable'] = \
+            np.array([1 if enabled else 0], dtype=np.int64)
 
     def _snapshot_scf_state(self):
-        """Deep-copy the tags that define the current converged SCF solution."""
+        """Deep-copy the tags that define the current converged SCF solution.
+
+        Every alpha tag is required.  The beta tags are required for UHF and
+        ROHF; an RHF run never allocates them (scf.F90 reserves ``tags_beta``
+        only for scftype >= 2), so for RHF their absence -- AttributeError
+        from OQPData -- is the one expected case.  Any other error stops the
+        safeguard instead of leaving a tag out of the snapshot, which would
+        make a later restore silently keep the TRAH value for that tag.
+        """
+        scf_type = str(self.mol.config.get('scf', {}).get('type', 'rhf')).lower()
+        beta_optional = scf_type == 'rhf'
         snap = {}
         for tag in self._scf_state_tags:
             try:
-                snap[tag] = np.array(self.mol.data[tag]).copy()
-            except Exception:
-                pass
+                value = self.mol.data[tag]
+            except AttributeError:
+                if beta_optional and tag in self._scf_beta_state_tags:
+                    continue
+                raise
+            snap[tag] = np.array(value).copy()
         return snap
 
     def _restore_scf_state(self, snap):
-        """Write a previously captured SCF solution back into the molecule."""
+        """Write a previously captured SCF solution back into the molecule.
+
+        A write that fails must stop the run: continuing would leave a mixture
+        of TRAH and pre-TRAH tags paired with the pre-TRAH energy.
+        """
         for tag, value in snap.items():
-            try:
-                self.mol.data[tag] = value
-            except Exception:
-                pass
+            self.mol.data[tag] = value
 
     _mol_energy_state_attrs = (
         'energy',
@@ -1289,18 +1310,16 @@ class SinglePoint(Calculator):
     def _snapshot_mol_energy_state(self):
         """Capture scalar energy/convergence metadata that must match SCF tags."""
         mol_energy = self.mol.mol_energy
-        snap = {}
-        try:
-            snap.update(getattr(mol_energy, '__dict__', {}))
-        except Exception:
-            pass
+        snap = dict(getattr(mol_energy, '__dict__', {}))
         for attr in self._mol_energy_state_attrs:
             if attr not in snap and hasattr(mol_energy, attr):
-                try:
-                    snap[attr] = getattr(mol_energy, attr)
-                except Exception:
-                    pass
+                snap[attr] = getattr(mol_energy, attr)
         return snap
+
+    def _restore_mol_energy_state(self, snap):
+        """Write captured energy/convergence metadata back; failures propagate."""
+        for attr, value in snap.items():
+            setattr(self.mol.mol_energy, attr, value)
 
     def excitation(self, ref_energy):
         if is_tb_method(self.method):
