@@ -120,29 +120,52 @@ contains
   end subroutine par_env_t_init
 
 !##################################
-!> @brief How many ranks of this communicator share the caller's node.
+!> @brief Processor-local rank count for replicated-memory budgets.
 !>
 !> Anything that sizes a replicated allocation against the machine's memory
 !> needs this: available memory is reported per node, but a replicated array
 !> is paid for once per rank on that node, so a per-rank estimate compared
 !> against a node-wide limit passes on every rank at once and still exceeds
-!> the node.  Returns 1 without MPI, or when MPI cannot answer.
+!> the node. Match processor identities instead of trusting a shared-memory
+!> split, which can incorrectly report singleton groups for co-located ranks.
+!> Duplicate processor names on distinct nodes conservatively overcount them.
+!> Broadcast one fixed-size name at a time: no allocation or new communicator
+!> is needed in a memory-budget query. Returns 1 without MPI; MPI errors are fatal.
+!> Collective on self%comm when MPI is enabled: every rank must call it.
   function par_env_t_local_size(self) result(n)
     class(par_env_t), intent(inout) :: self
     integer :: n
 #ifdef ENABLE_MPI
-    integer(PARALLEL_INT) :: node_comm, local_n, ierr
+    integer(PARALLEL_INT) :: world_n, name_len, root, ierr, abort_ierr
+    character(len=MPI_MAX_PROCESSOR_NAME) :: local_name, received_name
 #endif
     n = 1
 #ifdef ENABLE_MPI
     if (.not. self%use_mpi) return
-    call MPI_Comm_split_type(self%comm, MPI_COMM_TYPE_SHARED, &
-                             int(0, kind=PARALLEL_INT), MPI_INFO_NULL, &
-                             node_comm, ierr)
-    if (ierr /= 0) return
-    call MPI_Comm_size(node_comm, local_n, ierr)
-    if (ierr == 0 .and. local_n >= 1) n = int(local_n)
-    call MPI_Comm_free(node_comm, ierr)
+    world_n = 0
+    call MPI_Comm_size(self%comm, world_n, ierr)
+    if (ierr /= MPI_SUCCESS .or. world_n < 1) goto 900
+    local_name = ''
+    name_len = 0
+    call MPI_Get_processor_name(local_name, name_len, ierr)
+    if (ierr /= MPI_SUCCESS .or. name_len < 1 .or. name_len > MPI_MAX_PROCESSOR_NAME) goto 900
+    if (name_len < MPI_MAX_PROCESSOR_NAME) local_name(name_len+1:) = ''
+    if (len_trim(local_name) == 0) goto 900
+    n = 0
+    do root = int(0, kind=PARALLEL_INT), world_n - int(1, kind=PARALLEL_INT)
+      ! Only the root's input matters; avoid cached-rank or extra Comm_rank state.
+      received_name = local_name
+      call MPI_Bcast(received_name, int(MPI_MAX_PROCESSOR_NAME, kind=PARALLEL_INT), &
+                     MPI_CHARACTER, root, self%comm, ierr)
+      if (ierr /= MPI_SUCCESS .or. len_trim(received_name) == 0) goto 900
+      if (received_name == local_name) n = n + 1
+    end do
+    if (n < 1 .or. n > int(world_n)) goto 900
+    return
+900 continue
+    ! self%comm may itself be invalid; terminate the valid world group.
+    call MPI_Abort(MPI_COMM_WORLD, int(1, kind=PARALLEL_INT), abort_ierr)
+    error stop 'cannot determine MPI rank count for memory accounting'
 #endif
   end function par_env_t_local_size
 !##################################

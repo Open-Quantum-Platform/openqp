@@ -575,6 +575,41 @@ def test_analytic_and_numerical_routes_agree_through_the_public_dispatch(tmp_pat
 
 
 @needs_native_gradient
+@pytest.mark.parametrize("route", ["analytic", "auto"])
+def test_named_sc_nevpt2_reaches_the_analytic_gradient(tmp_path, route):
+    """`method=sc-nevpt2` / `scnevpt2` with h0 and contraction left unset is
+    the same calculation as `method=caspt2` + `h0=dyall, contraction=strong`,
+    so the public `runtype=grad` dispatch must hand it the same analytic
+    SC-NEVPT2 derivative -- not the CASPT2 derivative (which refuses strong
+    contraction) and, under `auto`, not central differences."""
+    from oqp.library.single_point import SinglePoint, Gradient
+
+    implicit = {k: v for k, v in _SC_NEVPT2.items()
+                if k not in ("h0", "contraction", "variant")}
+    spellings = {
+        "caspt2": dict(_SC_NEVPT2),
+        "sc-nevpt2": dict(implicit),
+        "scnevpt2": dict(implicit),
+    }
+    grads = {}
+    for method, pt2 in spellings.items():
+        pt2["gradient"] = route
+        runner = _runner(tmp_path, f"named_{method}_{route}", system=_H4,
+                         basis="sto-3g", cas=_H4_CAS22, pt2=pt2,
+                         runtype="grad", extra={"input": {"method": method}})
+        SinglePoint(runner.mol).energy()
+        grads[method] = np.asarray(
+            Gradient(runner.mol).gradient(), dtype=float).reshape(-1)
+        log = open(runner.mol.log).read()
+        assert "central differences" not in log, method
+        assert "PT2 numerical gradient" not in log, method
+    assert np.abs(grads["caspt2"]).max() > 1.0e-3
+    for method in ("sc-nevpt2", "scnevpt2"):
+        assert np.allclose(grads[method], grads["caspt2"], rtol=0.0,
+                           atol=1.0e-10), method
+
+
+@needs_native_gradient
 def test_run_reports_its_own_stationarity_and_symmetry_diagnostics(tmp_path):
     """The self-checks the derivation depends on are reported, and pass.
 

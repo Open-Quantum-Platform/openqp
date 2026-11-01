@@ -7,7 +7,7 @@ def test_ecp_spherical_path_uses_cartesian_to_spherical_transform():
     text = (ROOT / "source/ecp.F90").read_text()
     c2s = (ROOT / "source/integrals/cart2sph.F90").read_text()
     assert "subroutine transform_ecp_matrix" in text
-    # libecpint blocks are pure-power Cartesian (bas_norm_matrix folds
+    # Raw ECP blocks (ecp_raw_ints) are pure-power Cartesian (bas_norm_matrix folds
     # shells_pnrm2 only for Cartesian shells, bfnrm=1 for pure ones), so the
     # ECP reduction must use cart2sph_mat, which folds shells_pnrm2 along
     # each transformed index. cart2sph_mat_unit here loses the fold and was

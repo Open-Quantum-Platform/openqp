@@ -1,13 +1,17 @@
 module vibrational_intensities_mod
 
   use iso_c_binding, only: c_double, c_int64_t, c_ptr, c_f_pointer
+  use physical_constants, only: IR_INTENSITY_AU_TO_KM_MOL
 
   implicit none
 
   private
   public :: vibrational_intensities_native_C
 
-  real(c_double), parameter :: IR_INTENSITY_CONVERSION = 42.255d0
+  ! dipole_derivs are in atomic units (e) and the modes are Cartesian displacements
+  ! per unit sqrt(amu)*bohr, so |d mu/d Q|^2 is in e^2/amu.  The former 42.255 is the
+  ! (D/A)^2/amu factor and made every intensity 23.07 times too small.
+  real(c_double), parameter :: IR_INTENSITY_CONVERSION = IR_INTENSITY_AU_TO_KM_MOL
 
 contains
 

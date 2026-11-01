@@ -1,0 +1,8 @@
+# QM/MM surface hopping in the unified form: namd(...) names the state and the
+# complete hopping scheme, md(...) owns the nuclear controls, qmmm(...) owns
+# the embedding.  Formaldehyde (QM) in 5 TIP3P waters (MM), non-periodic.
+# velocity=zero keeps the two steps reproducible.
+mrsf(nstate=2)/bhhlyp/6-31g* namd(S1,scheme=Overlap,nacme_check=baeck_an,nacme_policy=warn)
+md(nstep=2,dt=0.5,velocity=zero,seed=3,trajectory_interval=1,trajectory_file="H2CO-water-scheme.namd.trj",restart_file="H2CO-water-scheme.namd.restart.npz")
+qmmm(pdb_file="formaldehyde_water.pdb",forcefield_files="formaldehyde.xml tip3p.xml",qm_atoms="0-3",cutoff=NoCutoff)
+geom="../geometries/CH2O-2bc62dda4b8a.xyz"

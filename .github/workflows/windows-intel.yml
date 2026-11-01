@@ -65,7 +65,6 @@ jobs:
             --config-settings=cmake.define.ENABLE_MPI=OFF `
             --config-settings=cmake.define.ENABLE_OPENMP=ON `
             --config-settings=cmake.define.USE_LIBINT=OFF `
-            --config-settings=cmake.define.ENABLE_OPENTRAH=OFF `
             --config-settings=cmake.define.BUILD_TESTING=OFF
       - name: Check the DFT-D4 stack shipped
         run: |

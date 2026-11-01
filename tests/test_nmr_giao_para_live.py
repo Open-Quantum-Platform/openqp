@@ -26,6 +26,8 @@ import textwrap
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import child_env
+
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "fixtures" / "nmr" / "giao_reference.json"
 
@@ -59,7 +61,7 @@ def _input(functional):
     grid = "[dftgrid]\nrad_type=mhl\nrad_npts=99\nang_npts=302\n\n" if functional else ""
     return (f"[input]\nsystem=\n{GEOM}\ncharge=0\nruntype=energy\n{fxc}"
             f"basis=sto-3g\nmethod=hf\n\n[guess]\ntype=huckel\n\n"
-            f"[scf]\nmultiplicity=1\ntype=rhf\n\n{grid}[properties]\nscf_prop=\n")
+            f"[scf]\nmultiplicity=1\ntype=rhf\nverbose=2\n\n{grid}[properties]\nscf_prop=\n")
 
 
 class GIAOParaShieldingTests(unittest.TestCase):
@@ -91,8 +93,7 @@ class GIAOParaShieldingTests(unittest.TestCase):
             """))
             env = dict(os.environ)
             env["OPENQP_ROOT"] = cls.root
-            env["PYTHONPATH"] = os.pathsep.join(
-                p for p in (str(ROOT / "pyoqp"), env.get("PYTHONPATH", "")) if p)
+            env = child_env(env)
             proc = subprocess.run([sys.executable, str(script)], cwd=wd, env=env,
                                   capture_output=True, text=True, timeout=240)
             if not log.exists():
@@ -103,7 +104,8 @@ class GIAOParaShieldingTests(unittest.TestCase):
     def _parse(text):
         nat_m = re.search(r"GIAO_SHIELDING_DEBUG_NATOM\s+(\d+)", text)
         if not nat_m:
-            raise AssertionError("GIAO_SHIELDING_DEBUG markers not found")
+            raise AssertionError(
+                "GIAO_SHIELDING_DEBUG markers not found (the records require verbose>1)")
         nat = int(nat_m.group(1))
         unc = [[[0.0] * 3 for _ in range(3)] for _ in range(nat)]
         cpl = [[[0.0] * 3 for _ in range(3)] for _ in range(nat)]

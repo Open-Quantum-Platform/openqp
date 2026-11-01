@@ -57,6 +57,8 @@ contains
     use mod_dft, only: dft_initialize, dftclean
     use mathlib, only: symmetrize_matrix
     use mod_dft_molgrid, only: dft_grid_t
+    use mod_dft_gridint_response_cache, only: response_cache_t
+    use mod_dft_gridint_grad, only: derexc_blk
     use mod_dft_gridint_tdxc_grad, only: utddft_xc_gradient
     use mathlib, only: unpack_matrix
     use tdhf_sf_gradient_mod, only: sf_1e_grad, sf_2e_grad
@@ -75,12 +77,13 @@ contains
     integer :: mrst
     character(len=12) :: target_label
     character(len=16) :: method_name
-    logical :: roref = .false.
+    logical :: roref
 
     type(dft_grid_t) :: molGrid
+    type(response_cache_t), target :: ao_cache
 
   ! General data
-    logical :: dft
+    logical :: dft, log_was_open
     integer :: scf_type, mol_mult
 
     real(kind=dp), allocatable :: p(:,:,:), v(:,:,:), d(:,:,:), spc(:,:,:)
@@ -104,13 +107,15 @@ contains
             'MRSF requires a triplet ROHF/UHF internal reference (mult=3).', with_abort)
 
     scf_type = infos%control%scftype
-    if (scf_type==3) roref = .true.
+    roref = scf_type == 3
 
     mrst = infos%tddft%mult
     target_label = mrsf_state_label(mrst, infos%tddft%target_state)
 
   ! Files open
-    open (unit=iw, file=infos%log_filename, position="append")
+    inquire(unit=iw, opened=log_was_open)
+    if (.not. log_was_open) &
+      open(unit=iw, file=infos%log_filename, position='append')
   !
     call print_module_info('MRSF_Grad','Computing Gradient of '//trim(method_name))
 !
@@ -179,7 +184,59 @@ contains
            nmtx=1, &
            !threshold=1.0d-15, &
            threshold=0.0d0, &
-           infos=infos)
+           infos=infos, &
+           include_ground_state=.false., cache=ao_cache)
+
+      ! Lee Eq. (3.16) identifies P=T+Z as the relaxed linear XC probe.
+      ! The call above contains the established ground-state and fixed-grid
+      ! AO/basis terms, but it does not differentiate the normalized
+      ! atom-centred quadrature weights or the motion of each grid slice with
+      ! its owner atom.  Add only those two moving-grid contributions in a
+      ! separate sweep.  Combining the ground-state and probe responses here
+      ! would differentiate a different quantity and double count terms.
+      block
+        real(kind=dp), allocatable :: grid_correction(:,:), grid_d(:,:,:), &
+                                      grid_p(:,:,:)
+        allocate(grid_correction(3,infos%mol_prop%natom), &
+                 grid_d(nbf,nbf,2), grid_p(nbf,nbf,2), source=0.0_dp)
+        ! utddft_xc_gradient temporarily applies AO normalization factors to
+        ! its density arguments.  Copies avoid a second normalization round
+        ! trip changing the arrays used later by mrsf_2e_grad.
+        grid_d = d
+        grid_p = p
+        call utddft_xc_gradient(basis=basis, &
+             molGrid=molGrid, &
+             dedft=grid_correction, &
+             da=grid_d(:,:,1), &
+             db=grid_d(:,:,2), &
+             pa=grid_p(:,:,1:1), &
+             pb=grid_p(:,:,2:2), &
+             nmtx=1, &
+             threshold=0.0_dp, &
+             infos=infos, &
+             include_ground_state=.false., &
+             include_weight_derivative=.true., &
+             weight_derivative_only=.true., cache=ao_cache)
+        infos%atoms%grad = infos%atoms%grad + grid_correction
+
+        ! The total excited-state energy also contains the ROKS reference
+        ! energy.  Add its complete finite-grid XC gradient with the dedicated
+        ! ground-state consumer.  This includes both partition-weight and
+        ! owner-motion terms without entering the linear-probe-only response.
+        grid_correction = 0.0_dp
+        block
+          real(kind=dp) :: xc_electronic, xc_kinetic
+          xc_electronic = 0.0_dp
+          xc_kinetic = 0.0_dp
+          call derexc_blk(basis=basis, molGrid=molGrid, &
+               da=grid_d(:,:,1), db=grid_d(:,:,2), &
+               dedft=grid_correction, totele=xc_electronic, &
+               totkin=xc_kinetic, mxAngMom=basis%mxam+2, nbf=nbf, &
+               dft_threshold=0.0_dp, urohf=.true., infos=infos, cache=ao_cache)
+        end block
+        infos%atoms%grad = infos%atoms%grad + grid_correction
+        deallocate(grid_correction, grid_d, grid_p)
+      end block
 
       call dftclean(infos)
       call measure_time(print_total=1, log_unit=iw)
@@ -198,7 +255,7 @@ contains
 !   Print timings
     call measure_time(print_total=1, log_unit=iw)
 
-    close(iw)
+    if (.not. log_was_open) close(iw)
 
   end subroutine tdhf_mrsf_gradient
 
@@ -298,21 +355,19 @@ contains
     end if
 
     if (allocated(gcomp)) deallocate(gcomp)
-    allocate(gcomp, source=grd2_mrsf_compute_data_t( d2 = d &
-                                    , p2 = p &
-                                    , spc2 = spc &
-                                    , nbf = basis%nbf &
-                                    , hfscale = scale_exch &
-                                    , hfscale2 = scale_exch2 &
-                                    , spcscale = [infos%tddft%spc_coco, &
-                                                  infos%tddft%spc_ovov, &
-                                                  infos%tddft%spc_coov] &
-                                    , mrst = infos%tddft%mult ))
-
-    call gcomp%init()
-
+    allocate(grd2_mrsf_compute_data_t :: gcomp)
     select type (gcomp)
-    class is (grd2_mrsf_compute_data_t)
+    type is (grd2_mrsf_compute_data_t)
+      gcomp%d2 => d
+      gcomp%p2 => p
+      gcomp%spc2 => spc
+      gcomp%nbf = basis%nbf
+      gcomp%hfscale = scale_exch
+      gcomp%hfscale2 = scale_exch2
+      gcomp%spcscale = [infos%tddft%spc_coco, &
+                      infos%tddft%spc_ovov, infos%tddft%spc_coov]
+      gcomp%mrst = infos%tddft%mult
+      call gcomp%init()
       call gcomp%build_cart(basis)
     end select
 
@@ -394,6 +449,20 @@ contains
   subroutine grd2_mrsf_compute_data_t_clean(this)
     implicit none
     class(grd2_mrsf_compute_data_t), target, intent(inout) :: this
+
+    ! Release owned Cartesian copies; the caller owns the input densities.
+    if (allocated(this%d2a_c)) deallocate(this%d2a_c)
+    if (allocated(this%d2b_c)) deallocate(this%d2b_c)
+    if (allocated(this%p2a_c)) deallocate(this%p2a_c)
+    if (allocated(this%p2b_c)) deallocate(this%p2b_c)
+    if (allocated(this%ball_c)) deallocate(this%ball_c)
+    if (allocated(this%bo2v_c)) deallocate(this%bo2v_c)
+    if (allocated(this%bo1v_c)) deallocate(this%bo1v_c)
+    if (allocated(this%bco1_c)) deallocate(this%bco1_c)
+    if (allocated(this%bco2_c)) deallocate(this%bco2_c)
+    if (allocated(this%o21v_c)) deallocate(this%o21v_c)
+    if (allocated(this%co12_c)) deallocate(this%co12_c)
+    if (allocated(this%cart_off)) deallocate(this%cart_off)
   end subroutine
 
 !###############################################################################
@@ -413,7 +482,8 @@ contains
 
     real(kind=dp) :: xcfact, xcfact2, coulfact, df1, dq1, dt2, bfn
     real(kind=dp) :: qfspcp1, qfspcp2, qfspcp3, sgnk
-    real(kind=dp) :: db1, db2, dc1, dc2, dc3, dc4, dd1, dd2, dd3, dd4
+    ! dc3/dc4/dd3/dd4 removed: same products as dc1/dc2/dd1/dd2, factors swapped.
+    real(kind=dp) :: db1, db2, dc1, dc2, dd1, dd2
     real(kind=dp), pointer, dimension(:,:) :: &
       ball, bo2v, bo1v, bco1, bco2, co12, o21v, &
       d2a, d2b, p2a, p2b
@@ -430,6 +500,27 @@ contains
     qfspcp1 = this%spcscale(1)
     qfspcp2 = this%spcscale(2)
     qfspcp3 = this%spcscale(3)
+
+!   The spin-pair-coupling channels belong to the FULL-ERI pass only.
+!   With a range-separated (CAM) functional grd2_driver runs this digest
+!   twice: pass 1 over the full operator, pass 2 over the erf-attenuated
+!   short-range one.  It re-points coulscale/hfscale/hfscale2/mu per pass,
+!   but spcscale is ours and it does not touch it -- so without this guard
+!   the six SPC contractions (co12, o21v, bco1*bo2v, bco2*bo1v) are added in
+!   BOTH passes.  The energy adds them in pass 1 ONLY: int2_mrsf_data_t_update's
+!   cur_pass==2 branch digests slot 7 (ball) alone, so slots 1-6 never receive
+!   an attenuated-pass contribution.  Adding them again against the attenuated
+!   derivative integrals therefore puts a term in the gradient that has no
+!   counterpart in the energy, and MRSF analytic gradients disagreed with
+!   finite differences by up to ~1e-3 Hartree/Bohr for any range-separated
+!   functional -- state-dependently, in proportion to the state's
+!   closed->open (spin-pair) character.  Global hybrids never run pass 2,
+!   which is why only CAM-type functionals were affected.
+    if (this%attenuated) then
+      qfspcp1 = 0.0_dp
+      qfspcp2 = 0.0_dp
+      qfspcp3 = 0.0_dp
+    end if
 
     sgnk = 1.0_dp
     if (this%mrst==3) sgnk = -1.0_dp
@@ -488,27 +579,23 @@ contains
             end if
 
             if (qfspcp1 /= 0.0_dp) then
-              db1 =  co12(i1,k1)*co12(l1,j1) &
-                   + co12(i1,l1)*co12(k1,j1) &
-                   + co12(j1,k1)*co12(l1,i1) &
-                   + co12(j1,l1)*co12(k1,i1) &
-                   + co12(l1,j1)*co12(i1,k1) &
-                   + co12(k1,j1)*co12(i1,l1) &
-                   + co12(l1,i1)*co12(j1,k1) &
-                   + co12(k1,i1)*co12(j1,l1)
+              ! Groups 5-8 repeat groups 1-4 with the factors exchanged,
+              ! so the block is twice the first four.
+              db1 = 2.0_dp*(co12(i1,k1)*co12(l1,j1) &
+                          + co12(i1,l1)*co12(k1,j1) &
+                          + co12(j1,k1)*co12(l1,i1) &
+                          + co12(j1,l1)*co12(k1,i1))
 
               df1 = df1 + sgnk*qfspcp1*db1
             end if
 
             if (qfspcp2 /= 0.0_dp) then
-              db2 =  o21v(i1,k1)*o21v(l1,j1) &
-                   + o21v(i1,l1)*o21v(k1,j1) &
-                   + o21v(j1,k1)*o21v(l1,i1) &
-                   + o21v(j1,l1)*o21v(k1,i1) &
-                   + o21v(l1,j1)*o21v(i1,k1) &
-                   + o21v(k1,j1)*o21v(i1,l1) &
-                   + o21v(l1,i1)*o21v(j1,k1) &
-                   + o21v(k1,i1)*o21v(j1,l1)
+              ! Groups 5-8 repeat groups 1-4 with the factors exchanged,
+              ! so the block is twice the first four.
+              db2 = 2.0_dp*(o21v(i1,k1)*o21v(l1,j1) &
+                          + o21v(i1,l1)*o21v(k1,j1) &
+                          + o21v(j1,k1)*o21v(l1,i1) &
+                          + o21v(j1,l1)*o21v(k1,i1))
 
               df1 = df1 + sgnk*qfspcp2*db2
             end if
@@ -532,62 +619,19 @@ contains
                    + bco2(l1,i1)*bo1v(k1,j1) &
                    + bco2(k1,i1)*bo1v(l1,j1)
 
-              dc3 =  bo2v(i1,k1)*bco1(j1,l1) &
-                   + bo2v(i1,l1)*bco1(j1,k1) &
-                   + bo2v(j1,k1)*bco1(i1,l1) &
-                   + bo2v(j1,l1)*bco1(i1,k1) &
-                   + bo2v(l1,j1)*bco1(k1,i1) &
-                   + bo2v(k1,j1)*bco1(l1,i1) &
-                   + bo2v(l1,i1)*bco1(k1,j1) &
-                   + bo2v(k1,i1)*bco1(l1,j1)
+              ! dd1/dd2 are products of index-symmetric sums: the eight
+              ! written terms factor into two multiplies each.
+              dd1 = (bco1(i1,j1)+bco1(j1,i1))*(bo2v(l1,k1)+bo2v(k1,l1)) &
+                  + (bco1(l1,k1)+bco1(k1,l1))*(bo2v(i1,j1)+bo2v(j1,i1))
 
-              dc4 =  bo1v(i1,k1)*bco2(j1,l1) &
-                   + bo1v(i1,l1)*bco2(j1,k1) &
-                   + bo1v(j1,k1)*bco2(i1,l1) &
-                   + bo1v(j1,l1)*bco2(i1,k1) &
-                   + bo1v(l1,j1)*bco2(k1,i1) &
-                   + bo1v(k1,j1)*bco2(l1,i1) &
-                   + bo1v(l1,i1)*bco2(k1,j1) &
-                   + bo1v(k1,i1)*bco2(l1,j1)
+              dd2 = (bco2(i1,j1)+bco2(j1,i1))*(bo1v(l1,k1)+bo1v(k1,l1)) &
+                  + (bco2(l1,k1)+bco2(k1,l1))*(bo1v(i1,j1)+bo1v(j1,i1))
 
-              dd1 =  bco1(i1,j1)*bo2v(l1,k1) &
-                   + bco1(i1,j1)*bo2v(k1,l1) &
-                   + bco1(j1,i1)*bo2v(l1,k1) &
-                   + bco1(j1,i1)*bo2v(k1,l1) &
-                   + bco1(l1,k1)*bo2v(i1,j1) &
-                   + bco1(k1,l1)*bo2v(i1,j1) &
-                   + bco1(l1,k1)*bo2v(j1,i1) &
-                   + bco1(k1,l1)*bo2v(j1,i1)
-
-              dd2 =  bco2(i1,j1)*bo1v(l1,k1) &
-                   + bco2(i1,j1)*bo1v(k1,l1) &
-                   + bco2(j1,i1)*bo1v(l1,k1) &
-                   + bco2(j1,i1)*bo1v(k1,l1) &
-                   + bco2(l1,k1)*bo1v(i1,j1) &
-                   + bco2(k1,l1)*bo1v(i1,j1) &
-                   + bco2(l1,k1)*bo1v(j1,i1) &
-                   + bco2(k1,l1)*bo1v(j1,i1)
-
-              dd3 =  bo2v(i1,j1)*bco1(l1,k1) &
-                   + bo2v(i1,j1)*bco1(k1,l1) &
-                   + bo2v(j1,i1)*bco1(l1,k1) &
-                   + bo2v(j1,i1)*bco1(k1,l1) &
-                   + bo2v(l1,k1)*bco1(i1,j1) &
-                   + bo2v(k1,l1)*bco1(i1,j1) &
-                   + bo2v(l1,k1)*bco1(j1,i1) &
-                   + bo2v(k1,l1)*bco1(j1,i1)
-
-              dd4 =  bo1v(i1,j1)*bco2(l1,k1) &
-                   + bo1v(i1,j1)*bco2(k1,l1) &
-                   + bo1v(j1,i1)*bco2(l1,k1) &
-                   + bo1v(j1,i1)*bco2(k1,l1) &
-                   + bo1v(l1,k1)*bco2(i1,j1) &
-                   + bo1v(k1,l1)*bco2(i1,j1) &
-                   + bo1v(l1,k1)*bco2(j1,i1) &
-                   + bo1v(k1,l1)*bco2(j1,i1)
-
-              df1  = df1 + sgnk*qfspcp3*(-dc1-dc2-dc3-dc4 &
-                                         +dd1+dd2+dd3+dd4)
+              ! dc3/dc4/dd3/dd4 carried the same products as dc1/dc2/dd1/dd2
+              ! with the two factors exchanged, so the sum below is just twice
+              ! the first four. Verified to 2e-16 relative over a random index
+              ! sweep; see tests/test_mrsf_gradient_digest_identities.py.
+              df1  = df1 + sgnk*qfspcp3*2.0_dp*(-dc1-dc2+dd1+dd2)
             end if
 
             dabmax = max(dabmax, abs(df1))
@@ -599,7 +643,5 @@ contains
       end do
     end do
   end subroutine grd2_mrsf_compute_data_t_get_density
-
-!###############################################################################
 
 end module tdhf_mrsf_gradient_mod

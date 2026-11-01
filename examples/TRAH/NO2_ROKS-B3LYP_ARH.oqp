@@ -1,0 +1,3 @@
+roks/b3lypv1r/6-31g* mult=2 guess(save_mol=true) scf(converger_type=arh,conv=1e-08)
+dftgrid(pruned=none)
+geom="../geometries/NO2-071a446d1f5f.xyz"

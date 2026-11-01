@@ -1,0 +1,3 @@
+mrsf(nstate=3)/bhhlyp/6-31g geom="../geometries/C2H4-c7ec226122c3.xyz"
+namd(S1,scheme=BaeckAn,nve_policy=off)
+md(nstep=2,dt=0.5,velocity=zero)

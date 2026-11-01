@@ -35,6 +35,14 @@ def parray(strng):
     return list([int(s.split()[0]), int(s.split()[1])] for s in strng.split(',')) if strng else ()
 
 
+def tlf_order(value):
+    """Require exact state-overlap minors; truncated TLF is not supported."""
+    text = str(value).strip().lower()
+    if text in ('0', 'notlf', 'no_tlf', 'no-tlf', 'exact', 'none', 'no', 'off'):
+        return 0
+    raise ValueError("tdhf.tlf is fixed at 0 (exact state-overlap minors)")
+
+
 def string(strng):
     """Handle string parameters"""
     return strng.lower()
@@ -107,6 +115,10 @@ OQP_CONFIG_SCHEMA = {
         'qm_atoms': {'type': str, 'default': ''},
         'cutoff': {'type': str, 'default': 'NoCutoff'},
         'embedding': {'type': str, 'default': 'electrostatic'},
+        'ewald_tol': {'type': str, 'default': ''},
+        'lj_switch': {'type': bool, 'default': 'False'},
+        'h_lj': {'type': bool, 'default': 'False'},
+        'mm_charge_width': {'type': str, 'default': ''},
         'temperature': {'type': float, 'default': '300.0'},
         'ensemble': {'type': str, 'default': 'nve'},
         'friction': {'type': float, 'default': '1.0'},
@@ -123,10 +135,24 @@ OQP_CONFIG_SCHEMA = {
         'qm_atoms_xyz': {'type': optional_string, 'default': ''},
         'qm_list': {'type': optional_string, 'default': ''},
         # Frontier (M1) charge treatment across a covalent QM/MM cut for ESPF
-        # embedding: none (default = full-field, the validated ESPF baseline;
-        # ESPF's charge-operator coupling already suppresses spill-out) | rcd |
-        # rc | z1 (optional redistribution refinements).
-        'frontier_scheme': {'type': str, 'default': 'none'},
+        # embedding: rcd (default; qmmm_connectivity.DEFAULT_FRONTIER_SCHEME) |
+        # rc | z1 | none (full M1 charge next to the link hydrogen; the ESPF
+        # energy is unbounded below, issue #551).
+        'frontier_scheme': {'type': str, 'default': 'rcd'},
+        # Active / frozen atoms, following ORCA's %qmmm ActiveAtoms: the atoms a
+        # QM/MM optimisation may move and a QM/MM MD may propagate.  Indices are
+        # 0-based and a range may be written first:last (ORCA) or first-last;
+        # 'name:P,OP1' selects by PDB atom name.  frozen_atoms takes atoms back
+        # out of the set (a backbone), active_radius adds whole MM residues
+        # within that distance in angstrom of the QM region (ORCA's
+        # ActiveCore_Extension), and active_from_pdb reads the selection from the
+        # B-factor column of pdb_file, 1 = active (Use_Active_InfoFromPDB).
+        # The defaults change nothing: an optimisation moves the QM region only,
+        # dynamics propagates every atom.  See oqp/library/qmmm_active.py.
+        'active_atoms': {'type': str, 'default': ''},
+        'frozen_atoms': {'type': str, 'default': ''},
+        'active_radius': {'type': float, 'default': '0.0'},
+        'active_from_pdb': {'type': bool, 'default': 'False'},
     },
     # Finite nonperiodic solvent containment.  Lengths are angstrom and the
     # force constant is kcal mol^-1 angstrom^-2 at the user boundary; the NAMD
@@ -150,6 +176,24 @@ OQP_CONFIG_SCHEMA = {
         'force_constant': {'type': float, 'default': '5.0'},
         'atoms': {'type': str, 'default': ''},
     },
+    # FlexiBLE QM/MM boundary (Shen and Glover, J. Chem. Phys. 155, 224112
+    # (2021)) between QM and MM solvent molecules of one residue kind.  alpha
+    # is per angstrom, point is angstrom, atoms are 0-based; see
+    # oqp/library/flexible_boundary.py.
+    'flexible': {
+        'enabled': {'type': bool, 'default': 'False'},
+        'alpha': {'type': float, 'default': '0.0'},
+        'temperature': {'type': float, 'default': '0.0'},
+        'center': {'type': string, 'default': 'solute'},
+        'atoms': {'type': str, 'default': ''},
+        'point': {'type': farray, 'default': '0.0,0.0,0.0'},
+        'anchor': {'type': str, 'default': 'O'},
+        'resnames': {'type': sarray, 'default': 'hoh,wat,sol,tip3,tip3p'},
+        'threshold': {'type': float, 'default': '0.01'},
+        'scale': {'type': float, 'default': '0.1'},
+        'max_iterations': {'type': int, 'default': '20'},
+        'keep_below_threshold': {'type': bool, 'default': 'False'},
+    },
     'input': {
         'charge': {'type': int, 'default': '0'},
         'basis': {'type': string, 'default': '6-31g*'},
@@ -162,6 +206,10 @@ OQP_CONFIG_SCHEMA = {
         # utils/perf_levels.py; explicit input keys override the preset. Set perf=-1
         # to disable the preset entirely (leave every knob at its control default).
         'perf': {'type': int, 'default': '1'},
+        # verbose: log detail for the whole run -- 0 quiet, 1 normal (default),
+        # 2 detailed, 3 debug (see oqp.utils.log_format).  The older spelling
+        # [scf] verbose is still honoured.
+        'verbose': {'type': int, 'default': '1'},
         'system': {'type': str, 'default': ''},
         'system2': {'type': str, 'default': ''},
         'ispher': {'type': ispher_mode, 'default': 'auto'},
@@ -189,6 +237,7 @@ OQP_CONFIG_SCHEMA = {
     },
     'mp2': {
         'variant': {'type': string, 'default': 'mp2'},
+        'transform': {'type': string, 'default': 'auto'},
         'same_spin_scale': {'type': float, 'default': '1.0'},
         'opposite_spin_scale': {'type': float, 'default': '1.0'},
     },
@@ -384,6 +433,11 @@ OQP_CONFIG_SCHEMA = {
         'rstctmo': {'type': bool, 'default': 'False'},
         'converger_type': {'type': string, 'default': 'diis'},
         'scal_rel': {'type': int, 'default': '0'},
+        # DKH decoupling basis: 1 = decontracted (primitive) basis with the
+        # correction projected onto the contracted basis (default); 0 = legacy
+        # decoupling directly in the contracted basis (non-variational for
+        # contracted relativistic basis sets).
+        'scal_rel_decontract': {'type': int, 'default': '1'},
         'stability': {'type': bool, 'default': 'False'},
         'soscf_lvl_shift': {'type': float, 'default': '0'},
         'alternative_scf': {'type': string, 'default': 'trah'},
@@ -399,6 +453,7 @@ OQP_CONFIG_SCHEMA = {
         'trh_gred': {'type': float, 'default': '0.001'},
         'trh_lred': {'type': float, 'default': '0.0001'},
         'trh_impl': {'type': string, 'default': 'auto'},
+        'trh_arh': {'type': int, 'default': '-1'},
     },
 
     'dftgrid': {
@@ -411,7 +466,9 @@ OQP_CONFIG_SCHEMA = {
         'rad_npts': {'type': int, 'default': '96'},
         'ang_npts': {'type': int, 'default': '302'},
         'partfun': {'type': string, 'default': 'ssf'},
-        'pruned': {'type': string, 'default': 'SG2'},
+        # 'auto' resolves in resolve_dftgrid_pruned(): SG2 while rad_npts and
+        # ang_npts keep their defaults, else the unpruned rad_npts x ang_npts grid.
+        'pruned': {'type': string, 'default': 'auto'},
         'grid_ao_pruned': {'type': bool, 'default': 'True'},
         'grid_ao_threshold': {'type': float, 'default': '1.0e-15'},
         'grid_ao_sparsity_ratio': {'type': float, 'default': '0.9'},
@@ -429,7 +486,12 @@ OQP_CONFIG_SCHEMA = {
         'target': {'type': int, 'default': '1'},
         'zvconv': {'type': float, 'default': '1.0e-6'},
         'nvdav': {'type': int, 'default': '50'},
-        'tlf': {'type': int, 'default': '2'},
+        # State-overlap minor determinants for NACME/NAMD: 0 = exact
+        # (Gaussian-elimination minors, no truncation; default), 1/2 =
+        # first/second-order truncated Leibniz formula (JCTC 15, 882).  The
+        # truncation assumes nearly orthonormal consecutive MOs and collapses
+        # when near-degenerate occupied orbitals rotate between steps.
+        'tlf': {'type': tlf_order, 'default': '0'},
         'hfscale': {'type': float, 'default': '-1.0'},
         'cam_alpha': {'type': float, 'default': '-1.0'},
         'cam_beta': {'type': float, 'default': '-1.0'},
@@ -469,6 +531,8 @@ OQP_CONFIG_SCHEMA = {
         'save_ci_vectors': {'type': bool, 'default': 'False'},
         'save_rdm': {'type': bool, 'default': 'False'},
         'target_spin': {'type': string, 'default': 'any'},
+        'irrep': {'type': string, 'default': 'any'},
+        'irrep_min_purity': {'type': float, 'default': '0.5'},
     },
     'cas': {
         'active_electrons': {'type': int, 'default': '0'},
@@ -498,6 +562,11 @@ OQP_CONFIG_SCHEMA = {
         'ci_print_threshold': {'type': float, 'default': '5.0e-2'},
         'save_ci_vectors': {'type': bool, 'default': 'False'},
         'save_rdm': {'type': bool, 'default': 'False'},
+        # Spatial-symmetry filter on the returned roots. 'any' leaves root
+        # selection exactly as it was; an irrep name of the detected point
+        # group keeps only roots whose dominant irrep is that one.
+        'irrep': {'type': string, 'default': 'any'},
+        'irrep_min_purity': {'type': float, 'default': '0.5'},
     },
     'casscf': {
         'max_macro_iterations': {'type': int, 'default': '20'},
@@ -567,8 +636,13 @@ OQP_CONFIG_SCHEMA = {
     'pt2': {
         'variant': {'type': string, 'default': 'auto'},
         'reference': {'type': string, 'default': 'casscf'},
-        'h0': {'type': string, 'default': 'fock'},
-        'contraction': {'type': string, 'default': 'uncontracted'},
+        # Blank means "the method's own": caspt2/MRMP2 -> fock + uncontracted,
+        # nevpt2 -> dyall + uncontracted, sc-nevpt2 -> dyall + strong
+        # (PT2_METHOD_IMPLIED in oqp.utils.input_checker).  A concrete default
+        # here is indistinguishable from a user value, so `method=nevpt2`
+        # without `h0` was read as an explicit `h0=fock` and refused.
+        'h0': {'type': string, 'default': ''},
+        'contraction': {'type': string, 'default': ''},
         'frozen': {'type': string, 'default': 'auto'},
         'multistate': {'type': string, 'default': 'auto'},
         'xms': {'type': bool, 'default': 'False'},
@@ -615,9 +689,23 @@ OQP_CONFIG_SCHEMA = {
         # GIAO is recognized explicitly but gated until the integral/response
         # implementation and benchmarks are complete.
         'nmr_gauge': {'type': string, 'default': 'cgo'},
+        # ACID cube grid, in bohr.  The defaults resolve a ring current
+        # comfortably; coarsen them for a quick look at a large molecule.
+        'acid_spacing': {'type': float, 'default': '0.2'},
+        'acid_padding': {'type': float, 'default': '5.0'},
         'td_prop': {'type': bool, 'default': 'False'},
         'grad': {'type': iarray, 'default': '0'},
+        # Per-manifold gradient selectors, read only by a spin-orbit run.  A
+        # plain 'grad' index cannot say which spin ladder it means once a run
+        # solves two, so the manifold is named by the key.
+        'grad_s': {'type': iarray, 'default': ''},
+        'grad_t': {'type': iarray, 'default': ''},
         'nac': {'type': str, 'default': ''},
+        # Spin-orbit coupling as a step of a properties/data run.  Consumed by
+        # the Python driver only (like tdhf nstate_s/nstate_t), so it never
+        # reaches the native control block; runtype=soc remains the standalone
+        # SOC entry point and [md] soc the one inside surface hopping.
+        'soc': {'type': bool, 'default': 'False'},
         'export': {'type': bool, 'default': 'False'},
         'title': {'type': str, 'default': ''},
         'back_door': {'type': bool, 'default': False}
@@ -648,6 +736,16 @@ OQP_CONFIG_SCHEMA = {
         # penalty and escalate to BaekA only when needed; multistate searches
         # select BaekA directly. Other backends map auto to their penalty path.
         'meci_search': {'type': str, 'default': 'auto'},
+        # qmmm_output: optimised full-system PDB (default <project>_opt.pdb).
+        'qmmm_output': {'type': str, 'default': ''},
+        # Aliases of the [qmmm] selection keys, so a deck written with either
+        # spelling keeps running: qmmm_radius -- the released name of the
+        # movable shell -- is [qmmm] active_radius, qmmm_active is active_atoms
+        # and qmmm_freeze is frozen_atoms.  [qmmm] wins when both are given, and
+        # only the [qmmm] spelling reaches the dynamics drivers.
+        'qmmm_radius': {'type': float, 'default': '0.0'},
+        'qmmm_active': {'type': str, 'default': ''},
+        'qmmm_freeze': {'type': str, 'default': ''},
         # MECP objective.  ``auto`` selects SQP on the native optimizer, which
         # it replaces outright, and the augmented Lagrangian on the backends
         # that supply their own optimizer.  Both converge the energy gap; the
@@ -706,6 +804,14 @@ OQP_CONFIG_SCHEMA = {
         # Optional real Cartesian Hessian used to initialize native P-RFO.
         # ``model`` preserves the inexpensive Schlegel-model default.
         'init_hessian': {'type': str, 'default': 'model'},
+        'model_hessian': {'type': str, 'default': 'auto'},
+        'hessian_update': {'type': str, 'default': 'auto'},
+        'gpr_history': {'type': int, 'default': '8'},
+        'gpr_length_scale': {'type': float, 'default': '0.5'},
+        'ts_search': {'type': str, 'default': 'prfo'},
+        'ts_product': {'type': str, 'default': ''},
+        'ts_guess': {'type': str, 'default': ''},
+        'neb_interpolation': {'type': str, 'default': 'linear'},
         'spring': {'type': float, 'default': '0.05'},
         'climb': {'type': bool, 'default': 'True'},
         'fmax': {'type': float, 'default': '2e-3'},
@@ -735,7 +841,10 @@ OQP_CONFIG_SCHEMA = {
         'optep': {'type': bool, 'default': 'False'},
     },
     'hess': {
-        'type': {'type': string, 'default': 'numerical'},
+        # auto: native analytic Hessian where it is supported (ground-state
+        # HF/DFT without solvent, QM/MM, scalar relativity, meta-GGA, ...;
+        # see input_checker.resolve_hessian_type), numerical otherwise.
+        'type': {'type': string, 'default': 'auto'},
         'state': {'type': int, 'default': '0'},
         'dx': {'type': float, 'default': '0.01'},
         'nproc': {'type': int, 'default': '1'},
@@ -758,14 +867,22 @@ OQP_CONFIG_SCHEMA = {
 
     },
     'md': {
+        # Internal marker set by the split concise/Python md(...) interface.
+        # It lets the QM/MM driver distinguish explicit common MD controls
+        # from schema defaults while retaining old qmmm.n_steps inputs.
+        'common_controls': {'type': bool, 'default': 'False'},
+        'common_control_keys': {'type': str, 'default': ''},
         'nstep': {'type': int, 'default': '100'},
         'dt': {'type': float, 'default': '0.5'},            # fs
         'active': {'type': int, 'default': '1'},            # initial active excited state (1-based)
-        'substep': {'type': int, 'default': '200'},         # electronic sub-steps per nuclear step
+        'substep': {'type': int, 'default': '50000'},         # electronic sub-steps per nuclear step
         'decoherence': {'type': string, 'default': 'edc'},  # 'edc' | 'off'
         'edc_c': {'type': float, 'default': '0.1'},         # EDC constant C (Hartree)
-        'thrshe': {'type': float, 'default': '0.1'},        # energy-gap hop gate (Hartree)
-        'tdc': {'type': string, 'default': 'fd'},           # 'fd' (finite diff) | 'npi' (pending)
+        # Default hop-gap ceiling: 10 eV in Hartree.
+        'thrshe': {'type': float, 'default': '0.367493'},  # 10 eV in Hartree
+        'tdc': {'type': string, 'default': 'npi'},           # 'fd' | 'npi' | 'baeck_an'
+        # 'auto' resolves to isotropic rescaling.
+        'rescale': {'type': string, 'default': 'auto'}, # 'auto' | 'isotropic'
         # Opt in only: an overlap-triggered root relabel is a method-specific
         # heuristic, not part of standard FSSH, and can otherwise be mistaken
         # for a stochastic hop at a genuine conical intersection.
@@ -778,23 +895,46 @@ OQP_CONFIG_SCHEMA = {
         'seed': {'type': int, 'default': '0'},
         'rng_stream': {'type': int, 'default': '1'},        # independent counter-RNG stream / trajectory id
         'first_hop_step': {'type': int, 'default': '1'},    # first overlap-defined interval
-        'nacme_check': {'type': str, 'default': 'baeck_an'}, # 'off' | 'baeck_an' magnitude-only TD-BA audit
-        'ba_gap_max': {'type': float, 'default': '0.0734986443513'}, # Ha (2 eV), TD-BA pair gate
-        'nacme_gate': {'type': str, 'default': 'off'},      # 'off' | 'warn' | 'error'
-        'nacme_gate_invariant_tol': {'type': float, 'default': '1.0e-10'},
-        'nacme_gate_abs_tol': {'type': float, 'default': '1.0e-4'}, # au^-1
-        'nacme_gate_rel_tol': {'type': float, 'default': '1.0'},
-        'nacme_gate_consecutive': {'type': int, 'default': '3'},
-        'nve_gate': {'type': str, 'default': 'warn'},      # 'off' | 'warn' | 'error'
-        'nve_gate_abs_tol': {'type': float, 'default': '5.0e-3'}, # total drift, Ha
-        'nve_gate_step_tol': {'type': float, 'default': '1.0e-3'}, # step change, Ha
-        'nve_gate_transition_tol': {'type': float, 'default': '1.0e-6'}, # hop/trivial jump, Ha
-        'nve_gate_consecutive': {'type': int, 'default': '3'},
-        'trajectory_interval': {'type': int, 'default': '0'}, # 0 = automatic, approximately every 10 fs
-        'restart_interval': {'type': int, 'default': '0'},    # 0 = automatic, approximately every 10 fs
+        'nacme_check': {'type': str, 'default': 'off'}, # 'off' | 'baeck_an'
+        'ba_gap_max': {'type': float, 'default': '0.0734986443513'}, # Ha (2 eV), TD-BA pair cutoff
+        'nacme_policy': {'type': str, 'default': 'off'},      # 'off' | 'warn' | 'error'
+        'nacme_policy_invariant_tol': {'type': float, 'default': '1.0e-10'},
+        'nacme_policy_abs_tol': {'type': float, 'default': '1.0e-4'}, # au^-1
+        'nacme_policy_rel_tol': {'type': float, 'default': '1.0'},
+        'nacme_policy_consecutive': {'type': int, 'default': '3'},
+        'nve_policy': {'type': str, 'default': 'warn'},      # 'off' | 'warn' | 'error'
+        'nve_policy_abs_tol': {'type': float, 'default': '5.0e-3'}, # total drift, Ha
+        'nve_policy_step_tol': {'type': float, 'default': '1.0e-3'}, # step change, Ha
+        'nve_policy_transition_tol': {'type': float, 'default': '1.0e-6'}, # hop/trivial jump, Ha
+        'nve_policy_consecutive': {'type': int, 'default': '3'},
+        # Numerical-continuity treatment described as cases A--D in the
+        # analytic-NAC NAMD study. ``on`` fixes the validated production
+        # settings as one set; ``manual`` exposes the case-specific controls.
+        'continuity': {'type': str, 'default': 'on'},       # on | manual
+        'mo_reuse': {'type': bool, 'default': 'true'},  # reuse previous-step orbitals as the SCF guess
+        'scf_guess_retry': {'type': bool, 'default': 'true'},  # one fresh-guess retry after failed continuation SCF
+        'scf_fail': {'type': str, 'default': 'escalate'},  # escalate | restart (GAMESS-style restart boundary)
+        'ref_follow': {'type': str, 'default': 'soscf'},   # off | soscf | diis_vshift: SOMO-preserving SCF continuation
+        'ref_switch_rescale': {'type': bool, 'default': 'true'},  # conserve total energy across a reference switch
+        'somo_tol': {'type': float, 'default': '0.5'},   # SOMO overlap threshold for a reference switch event
+        'state_check': {'type': bool, 'default': 'true'}, # diagnose loss from the retained state space
+        'state_tol': {'type': float, 'default': '0.7'},  # retained-space projection-norm threshold
+        'disc_rescale': {'type': bool, 'default': 'true'}, # rescale velocities across any non-hop total-energy discontinuity > disc_tol
+        'disc_tol': {'type': float, 'default': '0.002'},  # Hartree
+        'disc_substeps': {'type': int, 'default': '10'},   # >0: repeat a step whose total-energy jump exceeds disc_tol with this many nuclear substeps
+        'trajectory_interval': {'type': int, 'default': '1'},  # steps; 0 = automatic, approximately every 10 fs
+        'restart_interval': {'type': int, 'default': '10'},    # steps; 0 = automatic, approximately every 10 fs
         'trajectory_file': {'type': str, 'default': ''},
+        'energy_file': {'type': str, 'default': ''},          # ground-state BOMD energy table
         'restart_file': {'type': str, 'default': ''},
         'restart': {'type': bool, 'default': 'False'},
+        # Full-system phase-space snapshots (oqp.utils.md_snapshot): positions,
+        # velocities and cell of every atom.  ``snapshot`` starts a QM/MM run
+        # (ground-state MD or surface hopping) from one; ``snapshot_interval``
+        # makes ground-state QM/MM MD write a numbered one every N steps
+        # (0 = none), e.g. the initial conditions of a swarm of trajectories.
+        'snapshot': {'type': str, 'default': ''},
+        'snapshot_interval': {'type': int, 'default': '0'},
         # NAMD owns its ensemble control: qmmm.ensemble belongs to the separate
         # ground-state OpenMM MD driver and must not silently thermostat FSSH.
         'ensemble': {'type': string, 'default': 'nve'},
@@ -834,6 +974,39 @@ OQP_CONFIG_SCHEMA = {
     },
 }
 
+# Pruned DFT grid presets understood by dft_set_options (source/dftlib/dft.F90).
+DFTGRID_PRESETS = ('SG0', 'SG1', 'SG2', 'SG3')
+# Preset that pruned=auto selects when the grid size is left at its default.
+DFTGRID_AUTO_PRESET = 'SG2'
+# Spellings of the unpruned rad_npts x ang_npts grid.
+DFTGRID_UNPRUNED_SPELLINGS = frozenset({'', 'none', 'off', 'false', 'no'})
+
+
+def resolve_dftgrid_pruned(dftgrid):
+    """Return the grid that a [dftgrid] section selects: a preset name or 'none'.
+
+    A pruned preset (SG0-SG3) defines its own radial and angular grids, so
+    dft_set_options never reads rad_npts / ang_npts for the atoms it covers.
+    With a fixed preset default, an input that set only rad_npts / ang_npts was
+    therefore silently run on the preset grid.  The default is now ``auto``:
+    the SG2 preset while rad_npts and ang_npts keep their schema defaults, and
+    the unpruned rad_npts x ang_npts grid as soon as either is changed.  An
+    explicit preset or an explicit unpruned spelling is returned unchanged.
+    """
+    raw = dftgrid.get('pruned', 'auto')
+    value = '' if raw is None else str(raw).strip()
+    if value.lower() in DFTGRID_UNPRUNED_SPELLINGS:
+        return 'none'
+    if value.lower() != 'auto':
+        return value.upper()
+    schema = OQP_CONFIG_SCHEMA['dftgrid']
+    sizes_are_default = all(
+        int(dftgrid.get(key, schema[key]['default'])) == int(schema[key]['default'])
+        for key in ('rad_npts', 'ang_npts')
+    )
+    return DFTGRID_AUTO_PRESET if sizes_are_default else 'none'
+
+
 TA_DIMENSIONS_LENGTH = 12
 
 
@@ -865,7 +1038,7 @@ class OQPData:
     _td_types = ('rpa', 'tda', 'sf', 'mrsf', 'umrsf', 'mrsf_ekt_ip', 'mrsf_ekt_ea')
     _rad_grid_types = {'mhl': 0, 'log3': 1, 'ta': 2, 'becke': 3}
     _diis_types = {'none': 1, 'cdiis': 2, 'ediis': 3, 'adiis': 4, 'vdiis': 5}
-    _dftgrid_partition_functions = {'ssf': 0, 'becke': 1, 'erf': 2,
+    _dftgrid_partition_functions = {'ssf': 0, 'erf': 1, 'becke': 2,
                                     'sstep2': 3, 'sstep3': 4, 'sstep4': 5, 'sstep5': 6}
     _handlers = {
         "input": {
@@ -875,6 +1048,7 @@ class OQPData:
             "system2": "set_system2",
             "qmmm_flag": "set_qmmm_flag",
             "soc_2e":     "set_soc_2e",
+            "verbose":    "set_input_verbose",
         },
         "guess": {
         },
@@ -883,6 +1057,7 @@ class OQPData:
             "epsilon": "set_pcm_epsilon",
         },
         "mp2": {
+            "transform": "set_mp2_transform",
             "same_spin_scale": "set_mp2_same_spin_scale",
             "opposite_spin_scale": "set_mp2_opposite_spin_scale",
         },
@@ -930,6 +1105,7 @@ class OQPData:
             "active_basis": "set_scf_active_basis",
             "rstctmo": "set_scf_rstctmo",
             "scal_rel": "set_scf_scal_rel",
+            "scal_rel_decontract": "set_scf_scal_rel_decontract",
             "converger_type": "set_scf_converger_type",
             "soscf_lvl_shift": "set_soscf_lvl_shift",
             "verbose": "set_scf_verbose",
@@ -943,6 +1119,7 @@ class OQPData:
             "trh_gred": "set_trah_global_red_factor",
             "trh_lred": "set_trah_local_red_factor",
             "trh_impl": "set_trah_impl",
+            "trh_arh": "set_trah_arh",
             "sd_scf": "set_sd_scf"
         },
         "dftgrid": {
@@ -987,6 +1164,7 @@ class OQPData:
         },
         "qmmm": {
             "forcefield": "set_qmmm_forcefield",
+            "forcefield_files": "set_qmmm_forcefield_files",
             "nonbondedmethod": "set_qmmm_nonbondedmethod",
             "constraints": "set_qmmm_constraints",
             "rigidwater": "set_qmmm_rigidwater",
@@ -1077,20 +1255,20 @@ class OQPData:
     def __setitem__(self, key, value):
         """Set data in molecule"""
 
-        if key in dir(self._data.mol_prop):
-            self._data.mol_prop[key] = value
-
-        if key in dir(self._data.mol_energy):
-            self._data.mol_energy[key] = value
-
-        if key in dir(self._data.mpiinfo):
-            setattr(self._data.mpiinfo, key, value)
-
-        if key in dir(self._data.tddft):
-            setattr(self._data.tddft, key, value)
-
-        if key in dir(self._data.elshell):
-            setattr(self._data.elshell, key, value)
+        # A key naming a member of a native parameter struct is written to
+        # that member (to every struct that has it, e.g. ``debug_mode`` in
+        # tddft and mpiinfo) and is NOT also stored as a tag: the value is
+        # then a struct scalar such as a bool, which tagarray cannot store,
+        # and the tag would be unreadable anyway because __getitem__ resolves
+        # struct members first.
+        assigned = False
+        for struct in (self._data.mol_prop, self._data.mol_energy,
+                       self._data.mpiinfo, self._data.tddft,
+                       self._data.elshell):
+            if key in dir(struct):
+                setattr(struct, key, value)
+                assigned = True
+        if assigned:
             return
 
         if isinstance(value, np.ndarray):
@@ -1105,11 +1283,18 @@ class OQPData:
         else:
             _value = np.array(value)
 
+        # A tag write that cannot be stored must fail loudly: the caller
+        # (SCF-state restore, petite flag, ...) would otherwise continue
+        # with the previous contents of the tag.
         try:
             typeid = self.typemap.index(_value.dtype)
-            self._setitem_internal(key, _value, typeid)
-        except:
-            print(f"The type of your data is not allowed: {_value.dtype.name}")
+        except ValueError:
+            raise TypeError(
+                f"OQP data tag `{key}` cannot store dtype {_value.dtype.str!r}; "
+                "cast to one of the supported tagarray types "
+                "(int8..int64, uint8..uint64, float32, float64, "
+                "complex64, complex128, S1)") from None
+        self._setitem_internal(key, _value, typeid)
 
     def _setitem_internal(self, key, value, typeid):
         code = bytes(key, 'ascii')
@@ -1120,8 +1305,17 @@ class OQPData:
         ndims = ffi.new('int32_t *', len(np.shape(value)))
         data_ptr = ffi.new('void **')
         data_size = lib.oqp_alloc(self._data, req, type_id, ndims, dims, data_ptr)
+        if data_size == -1:
+            raise RuntimeError(f"Cannot store OQP data tag `{key}`: handle not initialized")
+        if data_size == -3:
+            raise ValueError(
+                f"Cannot store OQP data tag `{key}`: tagarray refused to create "
+                "the record (invalid tag, invalid dimensions or record "
+                "conflict)")
         if data_size < 0:
-            raise AttributeError("Cannot allocate memory to store object in QOP data")
+            raise MemoryError(
+                f"Cannot allocate OQP data tag `{key}` with shape {shape} "
+                f"(oqp_alloc returned {data_size})")
 
         elem_size = np.dtype(self.typemap[typeid]).itemsize
         ffi.memmove(data_ptr[0], value, data_size * elem_size)
@@ -1220,8 +1414,12 @@ class OQPData:
         self._data.control.conv = conv
 
     def set_scf_scal_rel(self, scal_rel):
-        """Set SCF convergence threshold"""
+        """Set the scalar-relativistic one-electron Hamiltonian (0 none, 1 DKH1, 2 DKH2)"""
         self._data.control.scal_rel = scal_rel
+
+    def set_scf_scal_rel_decontract(self, flag):
+        """Set the DKH decoupling basis (1 decontracted + projection, 0 contracted/legacy)"""
+        self._data.control.scal_rel_decontract = 1 if int(flag) else 0
 
     def set_scf_incremental(self, flag):
         """Set incremental Fock matrix build"""
@@ -1309,21 +1507,41 @@ class OQPData:
                 0: DIIS
                 1: BFGS/SOSCF
                 2: TRAH
+                2 with trh_arh_only: ARH (augmented Roothaan-Hall trust
+                   region, the TRAH driver with the model Hessian in every step)
         """
+        self._data.control.trh_arh_only = converger_type == "arh"
         if converger_type in ("diis", "auto", "ml"):   # auto/ml resolved by the SCF manager (_run_scf); default DIIS here
             self._data.control.converger_type = 0
         elif converger_type == "soscf":
             self._data.control.converger_type = 1
-        elif converger_type == "trah":
+        elif converger_type in ("trah", "arh"):
             self._data.control.converger_type = 2
 
     def set_soscf_lvl_shift(self, soscf_lvl_shift):
         """SOSCF level-shift parameter."""
         self._data.control.soscf_lvl_shift = soscf_lvl_shift
 
+    def set_input_verbose(self, verbose):
+        """Log verbosity for the whole run, ``[input] verbose`` (0 quiet .. 3 debug)."""
+        self._verbose_input = int(verbose)
+        self._apply_verbose()
+
     def set_scf_verbose(self, verbose):
-        """Controls output verbosity"""
-        self._data.control.verbose = verbose
+        """Older spelling of the log verbosity, ``[scf] verbose``."""
+        self._verbose_scf = int(verbose)
+        self._apply_verbose()
+
+    def _apply_verbose(self):
+        """Push the resolved level to every native print gate."""
+        from oqp.utils.log_format import VERBOSE_DEBUG, resolve_verbosity
+        level = resolve_verbosity({
+            'input': {'verbose': getattr(self, '_verbose_input', 1)},
+            'scf': {'verbose': getattr(self, '_verbose_scf', 1)},
+        })
+        self._data.control.verbose = level
+        # The MRSF developer dumps had their own switch that no input could set.
+        self._data.tddft.debug_mode = level >= VERBOSE_DEBUG
 
     def set_trah_stability(self, flag: bool):
         """Enable/disable Hessian/eigenspectrum stability analysis before TRAH."""
@@ -1386,18 +1604,43 @@ class OQPData:
         if not (0.0 < f < 1.0):
             raise ValueError("local_red_factor must be in (0,1)")
         self._data.control.trh_lred = float(f)
+    def set_trah_arh(self, n) -> None:
+        """TRAH Hessian: 0 = exact response; n > 0 = augmented Roothaan-Hall
+        model built from the last n (density, Fock) pairs (no Fock build per
+        micro-iteration; the stability check keeps the exact Hessian);
+        -1 (default) = 20 for ROHF/ROKS and UHF/UKS, exact response for RHF."""
+        n = int(n)
+        if n < -1:
+            raise ValueError("trh_arh must be -1 (by reference), 0 or positive")
+        self._data.control.trh_arh = n
+
     def set_trah_impl(self, trh_impl) -> None:
         """
         Select the TRAH implementation.
         Valid values:
           auto   : native Fortran trust-region augmented-Hessian solver
           native : native Fortran trust-region augmented-Hessian solver
-          otr    : external OpenTrustRegion library
+
+        The external OpenTrustRegion backend has been removed, so "otr" is no
+        longer accepted and raises instead of silently selecting the native
+        solver.
         """
-        impl_map = {"otr": 0, "native": 1, "auto": 1}
+        impl_map = {"native": 1, "auto": 1}
         if not isinstance(trh_impl, str):
             raise TypeError("trh_impl must be a string")
-        self._data.control.trh_impl = impl_map[trh_impl.strip().lower()]
+        key = trh_impl.strip().lower()
+        if key not in impl_map:
+            # Not a KeyError: parse_section() wraps every handler in
+            # `except KeyError: continue` to skip keys it has no handler for,
+            # and that also swallows a KeyError raised inside the handler --
+            # the value would silently fall through to the Fortran default
+            # instead of being rejected.
+            raise ValueError(
+                "trh_impl must be one of %s; got %r. The external "
+                "OpenTrustRegion backend was removed."
+                % (sorted(impl_map), trh_impl)
+            )
+        self._data.control.trh_impl = impl_map[key]
 
     def set_sd_scf(self, sd_scf):
         """prevent running the first SD-SCF calculation"""
@@ -1418,6 +1661,20 @@ class OQPData:
     def set_qmmm_forcefield(self, forcefield):
         """Handle QM/MM calculation forcefield"""
         qmmm.force_field = forcefield
+
+    def set_qmmm_forcefield_files(self, forcefield_files):
+        """``[qmmm] forcefield_files`` is the force field of the active QM/MM
+        drivers (optimisation, MD, NAMD).  When given it also builds the
+        PDB-based QM molecule (``[input] system = file.pdb ...``), which
+        otherwise used only the legacy ``[qmmm] forcefield`` and so could not
+        recognise a residue defined by a custom XML.  The [qmmm] section is
+        applied before [input], and ``forcefield`` before this key, so the
+        builder sees it.  Only the builder's force field is set: the
+        configuration itself, which the NAMD restart identity hashes, is left
+        as written."""
+        files = qmmm.resolve_forcefield_files(forcefield_files, qmmm.input_dir)
+        if files:
+            qmmm.force_field = files
 
     def set_qmmm_rigidwater(self, rigidwater):
         """Handle QM/MM calculation rigidWater"""
@@ -1564,6 +1821,14 @@ class OQPData:
         """Set standalone MP2 same-spin scale."""
         self._data.dft.MP2SS_Scale = scale
 
+    def set_mp2_transform(self, transform):
+        """Select automatic, direct-J or packed MP2 energy transformations."""
+        modes = {"auto": 0, "direct": 1, "n5": 2}
+        key = str(transform).strip().lower()
+        if key not in modes:
+            raise ValueError("mp2.transform must be auto, direct, or n5")
+        self._data.control.mp2_transform = modes[key]
+
     def set_mp2_opposite_spin_scale(self, scale):
         """Set standalone MP2 opposite-spin scale."""
         self._data.dft.MP2OS_Scale = scale
@@ -1656,16 +1921,24 @@ class OQPData:
         self._data.dft.dft_partfun = OQPData._dftgrid_partition_functions[partfun]
 
     def set_dftgrid_pruned(self, pruned):
-        """Set pruned grid"""
-        pruned_list = ['SG0', 'SG1', 'SG2', 'SG3']
+        """Set the pruned grid preset, or the unpruned rad_npts x ang_npts grid.
+
+        ``pruned`` must already be resolved by resolve_dftgrid_pruned();
+        apply_config does that, because ``auto`` depends on rad_npts/ang_npts.
+        """
         # "", none, off, false, no: use the unpruned (rad_npts x ang_npts) grid.
-        if pruned.strip().lower() not in ("", "none", "off", "false", "no"):
-            pruned = pruned.upper()
-            if pruned in pruned_list:
-                self._data.dft.grid_pruned = True
-                self._data.dft.grid_pruned_name = pruned.ljust(16)[:16].upper().encode("ascii")
-            else:
-                print(f"{pruned} grid is not valid. Available options are: {', '.join(pruned_list)}")
+        if pruned.strip().lower() in DFTGRID_UNPRUNED_SPELLINGS:
+            # Reset explicitly: a Molecule that is re-configured (MD, NAMD,
+            # API set()) must not keep the preset of an earlier configuration.
+            self._data.dft.grid_pruned = False
+            self._data.dft.grid_pruned_name = b"".ljust(16)
+            return
+        pruned = pruned.upper()
+        if pruned in DFTGRID_PRESETS:
+            self._data.dft.grid_pruned = True
+            self._data.dft.grid_pruned_name = pruned.ljust(16)[:16].upper().encode("ascii")
+        else:
+            print(f"{pruned} grid is not valid. Available options are: {', '.join(DFTGRID_PRESETS)}")
 
     def set_dftgrid_hfscale(self, hfscale):
         """Set HF exact exchange scalar in DFT calculation"""
@@ -1724,13 +1997,16 @@ class OQPData:
         The latter has to be read from the input file
         """
         lib.oqp_set_harmonic_active(ispher_mode(config['input'].get('ispher', 'auto')) != 'false')
+        if 'dftgrid' in config:
+            # Record the grid that will actually run, so the native setter, the
+            # printed/saved configuration and every later reader agree.
+            config['dftgrid']['pruned'] = resolve_dftgrid_pruned(config['dftgrid'])
         for section in config:
             self.parse_section(config, section)
 
         molecule = self._data
 
-        # Native TRAH is the default implementation. Explicit trh_impl=otr still
-        # selects the external OpenTrustRegion implementation when it is compiled.
+        # Native TRAH is the only implementation; 'auto' resolves to it.
         trh_choice = str(config.get('scf', {}).get('trh_impl', 'auto')).strip().lower()
         if trh_choice == 'auto':
             molecule.control.trh_impl = 1

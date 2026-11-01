@@ -1,0 +1,46 @@
+# SF-TDDFT/6-31G*/BHHLYP gradient of the lowest spin-flip state of HOCl
+# from a ROHF triplet reference on a deliberately coarse (30,86) XC grid.
+# The state energy is evaluated on a finite atom-centred quadrature whose
+# points move with their atoms and whose partition weights depend on the
+# nuclear positions. The analytic gradient must therefore contain the
+# moving-grid terms of both the ROKS reference XC energy and the relaxed
+# response density; without them this gradient was wrong by 8e-4 Ha/bohr.
+# The reference agrees with five-point finite differences of the state
+# energy (step 1e-3 bohr) to 3e-8 Ha/bohr.
+[input]
+system=
+    8   0.000000000   0.000000000   0.000000000
+    1   0.970000000   0.000000000   0.000000000
+   17  -0.411700000   1.783100000   0.000000000
+charge=0
+runtype=grad
+method=tdhf
+functional=bhhlyp
+basis=6-31g*
+ispher=true
+
+[guess]
+type=sap
+
+[scf]
+type=rohf
+multiplicity=3
+conv=1e-10
+maxit=200
+
+[dftgrid]
+rad_npts=30
+ang_npts=86
+pruned=
+
+[symmetry]
+enabled=false
+
+[tdhf]
+type=sf
+nstate=3
+conv=1e-12
+zvconv=1e-14
+
+[properties]
+grad=1

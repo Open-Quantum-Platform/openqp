@@ -1,0 +1,21 @@
+# One ODP umbrella window in ground-state QM/MM MD: formaldehyde (QM) in 5
+# TIP3P waters, Langevin NVT at 300 K, three steps.
+#
+#   odp(...)         the umbrella along the projection of two distances
+#                    (1-based atoms) onto the path from reference_r to
+#                    reference_p; center is this window's position on it.
+#   droplet(...)     keeps the waters inside a 3 A sphere around the solute.
+#   solute_com(...)  holds the solute centre of mass in place.
+#
+# total_energy.npz records the unbiased potential, each bias term and the ODP
+# coordinate of every step.  For a free-energy profile run one window per
+# center (with its own window= label and directory), then pass every
+# total_energy.npz to oqp.library.odp.odp_wham, e.g. with
+# examples/ODP/odp_wham.py.  Requires OpenMM.
+hf/sto-3g
+md(nstep=3,dt=0.5,ensemble=nvt,temperature=300,friction=5.0,seed=7,trajectory_interval=1,restart_interval=3)
+qmmm(pdb_file="formaldehyde_water.pdb",forcefield_files="formaldehyde.xml tip3p.xml",qm_atoms="0-3")
+droplet(enabled=true,radius=3.0,buffer=0.5,force_constant=2.0,max_penetration=5.0)
+solute_com(enabled=true,force_constant=1.0,atoms="0-3")
+odp(enabled=true,cv="distance(1,5); distance(2,5)",scale="1.0,1.0",reference_r="7.6,5.3",reference_p="5.3,6.4",center=0.2,k_parallel=0.1,k_perpendicular=0.02,window=2)
+geom="formaldehyde_water.pdb"

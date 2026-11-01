@@ -1,7 +1,7 @@
 module tdhf_mrsf_lib
 
     use precision, only : dp, sp
-    use int2_compute, only: int2_fock_data_t, int2_storage_t
+    use int2_compute, only: int2_fock_data_t, int2_storage_t, int2_shell_block_t
     use basis_tools, only: basis_set
     use oqp_linalg
 
@@ -9,7 +9,7 @@ module tdhf_mrsf_lib
 
       real(kind=dp), allocatable :: f3(:,:,:,:,:)
       real(kind=dp), pointer :: d3(:,:,:,:) => null()
-      real(kind=dp), allocatable :: ds(:,:,:,:) !< symmetrized Coulomb density (comps 1:4), precomputed once
+      real(kind=dp), allocatable :: ds(:,:,:,:) !< symmetrized Coulomb density (comps 1:4 MRSF, 1:8 UMRSF), precomputed once
       real(kind=sp), allocatable :: ds_sp(:,:,:,:) !< FP32 copy of ds (opt-in OQP_MRSF_FP32)
       real(kind=sp), allocatable :: d3_sp(:,:,:,:) !< FP32 copy of d3 (opt-in OQP_MRSF_FP32)
       real(kind=sp), allocatable :: f3s(:,:,:,:,:) !< FP32 Fock accumulator (opt-in OQP_MRSF_FP32)
@@ -20,6 +20,7 @@ module tdhf_mrsf_lib
         procedure :: parallel_start => int2_mrsf_data_t_parallel_start
         procedure :: parallel_stop => int2_mrsf_data_t_parallel_stop
         procedure :: init_screen => int2_mrsf_data_t_init_screen
+        procedure :: consume_shell => int2_mrsf_consume_shell
         procedure :: update => int2_mrsf_data_t_update
         procedure :: clean => int2_mrsf_data_t_clean
 
@@ -29,6 +30,7 @@ module tdhf_mrsf_lib
 
     contains
 
+        procedure :: consume_shell => int2_umrsf_consume_shell
         procedure :: update => int2_umrsf_data_t_update
 
     end type
@@ -62,8 +64,16 @@ contains
     class(int2_mrsf_data_t), target, intent(inout) :: this
     type(basis_set), intent(in) :: basis
     integer, intent(in) :: nthreads
-    integer :: nbf, nsh, nmatrix, mu, nu
+    integer :: nbf, nsh, nmatrix, mu, nu, ncoul
 
+    this%shell_blocks=.false.
+    this%shell_block_min=256
+    select type(this)
+    type is(int2_mrsf_data_t)
+      this%shell_blocks=.true.
+    type is(int2_umrsf_data_t)
+      this%shell_blocks=.true.
+    end select
     nbf = basis%nbf
     this%fockdim = nbf*(nbf+1) / 2
     this%nfocks = ubound(this%d3,1)
@@ -80,14 +90,20 @@ contains
                source=0.0d0)
 
       ! Precompute the symmetrized Coulomb density ds(:,c,mu,nu)=d3(mu,nu)+d3(nu,mu)
-      ! for the Coulomb components (1:4) once per run. d3 is constant over the
-      ! Davidson sigma build, so this lets the digestion kernel read a single
-      ! (symmetric) slab per integral instead of summing two scattered d3 reads.
+      ! for the Coulomb components once per run (1:4 for MRSF, the alpha/beta
+      ! pairs 1:8 for UMRSF). d3 is constant over the Davidson sigma build, so
+      ! this lets the digestion kernel read a single (symmetric) slab per
+      ! integral instead of summing two scattered d3 reads.
+      ncoul = 4
+      select type (this)
+      type is (int2_umrsf_data_t)
+        ncoul = 8
+      end select
       if (allocated(this%ds)) deallocate(this%ds)
-      allocate(this%ds(this%nfocks, 4, nbf, nbf))
+      allocate(this%ds(this%nfocks, ncoul, nbf, nbf))
       do nu = 1, nbf
         do mu = 1, nbf
-          this%ds(:,:,mu,nu) = this%d3(:,1:4,mu,nu) + this%d3(:,1:4,nu,mu)
+          this%ds(:,:,mu,nu) = this%d3(:,1:ncoul,mu,nu) + this%d3(:,1:ncoul,nu,mu)
         end do
       end do
 
@@ -122,19 +138,18 @@ contains
 
     implicit none
 
-    integer :: f3last, t
+    integer :: t
     class(int2_mrsf_data_t), intent(inout) :: this
 
     if (this%cur_pass /= this%num_passes) return
 
-    f3last = size(shape(this%f3))
-
     ! Reduce the FP64 accumulator across threads first. This holds the pass-2
     ! (CAM short-range exchange) contributions, and is zero in the FP32
     ! pass-1-only case -- so the subsequent add is exact in both cases.
-    if (this%nthreads /= 1) then
-      this%f3(:,:,:,:,1) = sum(this%f3, dim=f3last)
-    end if
+    ! Each vector/component/AO slab is contiguous; stream whole thread slabs.
+    do t = 2, size(this%f3,5)
+      this%f3(:,:,:,:,1) = this%f3(:,:,:,:,1) + this%f3(:,:,:,:,t)
+    end do
     ! Then add the FP32 per-thread accumulator (folded to FP64) when present.
     if (allocated(this%f3s)) then
       do t = 1, this%nthreads
@@ -156,8 +171,8 @@ contains
 
     class(int2_mrsf_data_t), intent(inout) :: this
 
-    deallocate(this%f3)
-    deallocate(this%dsh)
+    if (allocated(this%f3)) deallocate(this%f3)
+    if (allocated(this%dsh)) deallocate(this%dsh)
     if (allocated(this%ds)) deallocate(this%ds)
     if (allocated(this%ds_sp)) deallocate(this%ds_sp)
     if (allocated(this%d3_sp)) deallocate(this%d3_sp)
@@ -178,8 +193,29 @@ contains
 
     sized = ubound(this%d3,2)
 
-!   Form shell density
-    call shell_den_screen_mrsf(this%dsh, this%d3(:,sized,:,:), basis)
+!   Form shell density.
+!   The Schwarz density bound must majorize EVERY density slot this data
+!   type's update kernel contracts (all seven: bo2v/bo1v/bco1/bco2/o21v/
+!   co12/ball), because one screening decision skips a shell quartet for all
+!   of them at once.  A bound built from the summed `ball` alone is NOT a
+!   majorant: its internal cancellations can be small exactly where the
+!   mixed spin-pair densities (co12/o21v) are large, and the driver then
+!   drops real aco12/ao21v contributions.  The Davidson energy stage largely
+!   hid this behind multi-trial-vector union bounds, but the single-density
+!   Z-vector RHS build did not: the spin-pair Lagrangian went wrong and MRSF
+!   analytic gradients disagreed with finite differences by up to ~4e-3
+!   Hartree/Bohr (state-dependently) while every energy stayed exact.
+!   Fold the per-slot bounds with an elementwise max instead.
+    block
+      real(kind=dp), allocatable :: dsh_tmp(:,:)
+      integer :: c
+      allocate(dsh_tmp, mold=this%dsh)
+      this%dsh = 0.0_dp
+      do c = 1, sized
+        call shell_den_screen_mrsf(dsh_tmp, this%d3(:,c,:,:), basis)
+        this%dsh = max(this%dsh, dsh_tmp)
+      end do
+    end block
     this%max_den = maxval(abs(this%dsh))
 
   end subroutine
@@ -206,7 +242,11 @@ contains
       do jsh = 1, ish
         minj = basis%ao_offset(jsh)
         maxj = minj+basis%naos(jsh)-1
-        dsh(ish,jsh) = maxval(abs(da(:,minj:maxj,mini:maxi)))
+        ! The digestion kernel reads both orientations of a non-symmetric
+        ! density (d3(:,:,j,l) and d3(:,:,l,j)), so the bound must cover the
+        ! (jsh,ish) AND (ish,jsh) blocks; co12/o21v are not symmetric.
+        dsh(ish,jsh) = max(maxval(abs(da(:,minj:maxj,mini:maxi))), &
+                           maxval(abs(da(:,mini:maxi,minj:maxj))))
         dsh(jsh,ish) = dsh(ish,jsh)
       end do
     end do
@@ -340,7 +380,7 @@ contains
 
     class(int2_umrsf_data_t), intent(inout) :: this
     type(int2_storage_t), intent(inout) :: buf
-    integer :: i, j, k, l, n
+    integer :: i, j, k, l, n, v, c
     real(kind=dp) :: val, xval, cval
     integer :: mythread
 
@@ -350,75 +390,95 @@ contains
 
     associate ( f3 => this%f3(:,:,:,:,mythread), &
                 d3 => this%d3, &
+                ds => this%ds, &
                 nf => this%nfocks &
       )
 
-      do n = 1, buf%ncur
-        i = buf%ids(1,n)
-        j = buf%ids(2,n)
-        k = buf%ids(3,n)
-        l = buf%ids(4,n)
-        val = buf%ints(n)
+      ! f3/d3(nF,1:11,:,:): 1:8 alpha/beta pairs of the MRSF Coulomb+exchange
+      ! columns, 9:10 mixed alpha/beta spin-pair channels, 11 = agdlr.
+      ! ds(nF,1:8,:,:) = d3+d3^T for the Coulomb columns, precomputed once.
+      ! Explicit loops with the stride-1 v index innermost: the former
+      ! whole-slice assignments read the pointer d3, which the compiler cannot
+      ! prove disjoint from f3, so each of them could build an array temporary.
 
-        xval = val * this%scale_exchange
-        cval = val * this%scale_coulomb
+      if (this%cur_pass==1) then
+        do n = 1, buf%ncur
+          i = buf%ids(1,n); j = buf%ids(2,n); k = buf%ids(3,n); l = buf%ids(4,n)
+          val = buf%ints(n)
+          xval = val * this%scale_exchange
+          cval = val * this%scale_coulomb
 
-        if (this%cur_pass==1) then
-          ! Coulomb-like updates (MRSF columns :4 -> :8, alpha/beta pairs)
-          f3(:nf,1:8,i,j) = f3(:nf,1:8,i,j) + cval*d3(:nf,1:8,k,l)   ! (ij|lk)
-          f3(:nf,1:8,k,l) = f3(:nf,1:8,k,l) + cval*d3(:nf,1:8,i,j)   ! (kl|ji)
-          f3(:nf,1:8,i,j) = f3(:nf,1:8,i,j) + cval*d3(:nf,1:8,l,k)   ! (ij|kl)
-          f3(:nf,1:8,l,k) = f3(:nf,1:8,l,k) + cval*d3(:nf,1:8,i,j)   ! (lk|ji)
-          f3(:nf,1:8,j,i) = f3(:nf,1:8,j,i) + cval*d3(:nf,1:8,k,l)   ! (ji|lk)
-          f3(:nf,1:8,k,l) = f3(:nf,1:8,k,l) + cval*d3(:nf,1:8,j,i)   ! (kl|ij)
-          f3(:nf,1:8,j,i) = f3(:nf,1:8,j,i) + cval*d3(:nf,1:8,l,k)   ! (ji|kl)
-          f3(:nf,1:8,l,k) = f3(:nf,1:8,l,k) + cval*d3(:nf,1:8,j,i)   ! (lk|ij)
+          ! Coulomb (columns 1:8): the 8 permutational contributions collapse
+          ! to 4 distinct Fock targets, each reading one symmetric ds slab:
+          ! f(ij)+=c[d(kl)+d(lk)], f(ji) likewise, f(kl)+=c[d(ij)+d(ji)], f(lk) likewise.
+          do c = 1, 8
+            do v = 1, nf
+              f3(v,c,i,j) = f3(v,c,i,j) + cval*ds(v,c,k,l)
+              f3(v,c,j,i) = f3(v,c,j,i) + cval*ds(v,c,k,l)
+              f3(v,c,k,l) = f3(v,c,k,l) + cval*ds(v,c,i,j)
+              f3(v,c,l,k) = f3(v,c,l,k) + cval*ds(v,c,i,j)
+            end do
+          end do
 
-          ! Exchange-like updates (MRSF columns :7 -> :11, incl. alpha/beta)
-          f3(:nf,1:8,i,k) = f3(:nf,1:8,i,k) - xval*d3(:nf,1:8,j,l) ! (ij|lk)
-          f3(:nf,1:8,k,i) = f3(:nf,1:8,k,i) - xval*d3(:nf,1:8,l,j) ! (kl|ji)
-          f3(:nf,1:8,i,l) = f3(:nf,1:8,i,l) - xval*d3(:nf,1:8,j,k) ! (ij|kl)
-          f3(:nf,1:8,l,i) = f3(:nf,1:8,l,i) - xval*d3(:nf,1:8,k,j) ! (lk|ji)
-          f3(:nf,1:8,j,k) = f3(:nf,1:8,j,k) - xval*d3(:nf,1:8,i,l) ! (ji|lk)
-          f3(:nf,1:8,k,j) = f3(:nf,1:8,k,j) - xval*d3(:nf,1:8,l,i) ! (kl|ij)
-          f3(:nf,1:8,j,l) = f3(:nf,1:8,j,l) - xval*d3(:nf,1:8,i,k) ! (ji|kl)
-          f3(:nf,1:8,l,j) = f3(:nf,1:8,l,j) - xval*d3(:nf,1:8,k,i) ! (lk|ij)
+          ! Exchange (columns 1:8 and the general column 11).
+          do c = 1, 8
+            do v = 1, nf
+              f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,j,l)
+              f3(v,c,k,i) = f3(v,c,k,i) - xval*d3(v,c,l,j)
+              f3(v,c,i,l) = f3(v,c,i,l) - xval*d3(v,c,j,k)
+              f3(v,c,l,i) = f3(v,c,l,i) - xval*d3(v,c,k,j)
+              f3(v,c,j,k) = f3(v,c,j,k) - xval*d3(v,c,i,l)
+              f3(v,c,k,j) = f3(v,c,k,j) - xval*d3(v,c,l,i)
+              f3(v,c,j,l) = f3(v,c,j,l) - xval*d3(v,c,i,k)
+              f3(v,c,l,j) = f3(v,c,l,j) - xval*d3(v,c,k,i)
+            end do
+          end do
+          do v = 1, nf
+            f3(v,11,i,k) = f3(v,11,i,k) - xval*d3(v,11,j,l)
+            f3(v,11,k,i) = f3(v,11,k,i) - xval*d3(v,11,l,j)
+            f3(v,11,i,l) = f3(v,11,i,l) - xval*d3(v,11,j,k)
+            f3(v,11,l,i) = f3(v,11,l,i) - xval*d3(v,11,k,j)
+            f3(v,11,j,k) = f3(v,11,j,k) - xval*d3(v,11,i,l)
+            f3(v,11,k,j) = f3(v,11,k,j) - xval*d3(v,11,l,i)
+            f3(v,11,j,l) = f3(v,11,j,l) - xval*d3(v,11,i,k)
+            f3(v,11,l,j) = f3(v,11,l,j) - xval*d3(v,11,k,i)
+          end do
 
           ! Mixed alpha/beta spin-pair channels use the GAMESS-compatible
           ! exchange permutation for UMRSF open-shell pair densities.
-          f3(:nf,9:10,i,l) = f3(:nf,9:10,i,l) - xval*d3(:nf,9:10,k,j)
-          f3(:nf,9:10,l,i) = f3(:nf,9:10,l,i) - xval*d3(:nf,9:10,j,k)
-          f3(:nf,9:10,k,j) = f3(:nf,9:10,k,j) - xval*d3(:nf,9:10,i,l)
-          f3(:nf,9:10,j,k) = f3(:nf,9:10,j,k) - xval*d3(:nf,9:10,l,i)
-          f3(:nf,9:10,i,k) = f3(:nf,9:10,i,k) - xval*d3(:nf,9:10,l,j)
-          f3(:nf,9:10,k,i) = f3(:nf,9:10,k,i) - xval*d3(:nf,9:10,j,l)
-          f3(:nf,9:10,l,j) = f3(:nf,9:10,l,j) - xval*d3(:nf,9:10,i,k)
-          f3(:nf,9:10,j,l) = f3(:nf,9:10,j,l) - xval*d3(:nf,9:10,k,i)
+          do c = 9, 10
+            do v = 1, nf
+              f3(v,c,i,l) = f3(v,c,i,l) - xval*d3(v,c,k,j)
+              f3(v,c,l,i) = f3(v,c,l,i) - xval*d3(v,c,j,k)
+              f3(v,c,k,j) = f3(v,c,k,j) - xval*d3(v,c,i,l)
+              f3(v,c,j,k) = f3(v,c,j,k) - xval*d3(v,c,l,i)
+              f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,l,j)
+              f3(v,c,k,i) = f3(v,c,k,i) - xval*d3(v,c,j,l)
+              f3(v,c,l,j) = f3(v,c,l,j) - xval*d3(v,c,i,k)
+              f3(v,c,j,l) = f3(v,c,j,l) - xval*d3(v,c,k,i)
+            end do
+          end do
+        end do
 
-          ! General component agdlr is column 11 (spin-independent)
-          f3(1:nf,11,i,k) = f3(1:nf,11,i,k) - xval*d3(1:nf,11,j,l)
-          f3(1:nf,11,k,i) = f3(1:nf,11,k,i) - xval*d3(1:nf,11,l,j)
-          f3(1:nf,11,i,l) = f3(1:nf,11,i,l) - xval*d3(1:nf,11,j,k)
-          f3(1:nf,11,l,i) = f3(1:nf,11,l,i) - xval*d3(1:nf,11,k,j)
-          f3(1:nf,11,j,k) = f3(1:nf,11,j,k) - xval*d3(1:nf,11,i,l)
-          f3(1:nf,11,k,j) = f3(1:nf,11,k,j) - xval*d3(1:nf,11,l,i)
-          f3(1:nf,11,j,l) = f3(1:nf,11,j,l) - xval*d3(1:nf,11,i,k)
-          f3(1:nf,11,l,j) = f3(1:nf,11,l,j) - xval*d3(1:nf,11,k,i)
+      else if (this%cur_pass==2) then
+        ! In pass 2 only the general component agdlr (column 11) is updated,
+        ! as in the MRSF version (column 7 there).
+        do n = 1, buf%ncur
+          i = buf%ids(1,n); j = buf%ids(2,n); k = buf%ids(3,n); l = buf%ids(4,n)
+          xval = buf%ints(n) * this%scale_exchange
+          do v = 1, nf
+            f3(v,11,i,k) = f3(v,11,i,k) - xval*d3(v,11,j,l)
+            f3(v,11,k,i) = f3(v,11,k,i) - xval*d3(v,11,l,j)
+            f3(v,11,i,l) = f3(v,11,i,l) - xval*d3(v,11,j,k)
+            f3(v,11,l,i) = f3(v,11,l,i) - xval*d3(v,11,k,j)
+            f3(v,11,j,k) = f3(v,11,j,k) - xval*d3(v,11,i,l)
+            f3(v,11,k,j) = f3(v,11,k,j) - xval*d3(v,11,l,i)
+            f3(v,11,j,l) = f3(v,11,j,l) - xval*d3(v,11,i,k)
+            f3(v,11,l,j) = f3(v,11,l,j) - xval*d3(v,11,k,i)
+          end do
+        end do
+      end if
 
-        else if (this%cur_pass==2) then
-          ! In pass 2 only the general component agdlr (column 11) is updated,
-          ! as in the MRSF version (column 7 there).
-          f3(1:nf,11,i,k) = f3(1:nf,11,i,k) - xval*d3(1:nf,11,j,l)
-          f3(1:nf,11,k,i) = f3(1:nf,11,k,i) - xval*d3(1:nf,11,l,j)
-          f3(1:nf,11,i,l) = f3(1:nf,11,i,l) - xval*d3(1:nf,11,j,k)
-          f3(1:nf,11,l,i) = f3(1:nf,11,l,i) - xval*d3(1:nf,11,k,j)
-          f3(1:nf,11,j,k) = f3(1:nf,11,j,k) - xval*d3(1:nf,11,i,l)
-          f3(1:nf,11,k,j) = f3(1:nf,11,k,j) - xval*d3(1:nf,11,l,i)
-          f3(1:nf,11,j,l) = f3(1:nf,11,j,l) - xval*d3(1:nf,11,i,k)
-          f3(1:nf,11,l,j) = f3(1:nf,11,l,j) - xval*d3(1:nf,11,k,i)
-        end if
-
-      end do
     end associate
 
     buf%ncur = 0
@@ -439,7 +499,7 @@ contains
 !> spin-averaged input is closer to the exact operator diagonal than the
 !> alpha/beta Fock diagonals on 45 of 45 amplitudes.  See the long comment at
 !> the call site in tdhf_mrsf_energy.F90 and issue #328 before changing this.
-  subroutine mrinivec(infos,ea,eb,bvec_mo,xm,nvec)
+  subroutine mrinivec(infos,ea,eb,bvec_mo,xm,nvec,seeds_per_irrep)
 
     use precision, only: dp
     use io_constants, only: iw
@@ -452,6 +512,13 @@ contains
     real(kind=dp), intent(out), dimension(:,:) :: bvec_mo
     real(kind=dp), intent(out), dimension(:) :: xm
     integer, intent(in) :: nvec
+    !> Trial vectors handed to each symmetry block, indexed by irrep.
+    !> Allocated only when the pair-irrep table is staged and usable; left
+    !> unallocated otherwise, which makes the post-solve check inert.
+    !> Seeding a block is NOT sufficient for its roots to appear (see
+    !> mrsf_check_block_representation), so the caller needs this count to
+    !> tell "was never asked for" from "was asked for and did not arrive".
+    integer, allocatable, optional, intent(out) :: seeds_per_irrep(:)
 
     logical :: debug_mode
     real(kind=dp) :: xmj
@@ -724,6 +791,20 @@ contains
               write(iw,'(2X,"MRSF guess: added ",I0," trial vector(s) to &
                 &cover otherwise unrepresented irreps")') nadd
             end if
+
+            ! Census of the FINAL seed set, after every substitution.  This is
+            ! what the caller compares the converged spectrum against.
+            if (present(seeds_per_irrep)) then
+              allocate(seeds_per_irrep(nirr))
+              seeds_per_irrep = 0
+              do k = 1, nvec
+                if (itmp(k) >= 1 .and. itmp(k) <= xvec_dim) then
+                  ir = int(pair_irrep(itmp(k)))
+                  if (ir >= 1 .and. ir <= nirr) &
+                    seeds_per_irrep(ir) = seeds_per_irrep(ir) + 1
+                end if
+              end do
+            end if
           end if
         end if
       end if
@@ -745,6 +826,130 @@ contains
     return
 
   end subroutine mrinivec
+
+!###############################################################################
+
+!> @brief Warn when a seeded symmetry block contributed no root to the spectrum.
+!> @details
+!>   `mrinivec` already warns when a block gets NO trial vector (`nmiss > 0`):
+!>   its roots are then absent and the state numbering is shifted.  Seeding a
+!>   block does not make its roots reachable, though.  The Davidson expands
+!>   only on the residuals of the lowest `nstates` Ritz vectors, so a seed
+!>   whose diagonal estimate starts above that window is never enriched and its
+!>   block stays one-dimensional -- the block is seeded, `nmiss` is 0, and a
+!>   root is missing anyway.
+!>
+!>   Measured on CH2O/6-31G MRSF (C2v, nstate=3): B1 is seeded, every root
+!>   converges to err = 0, the run exits 0, and the reported third state is
+!>   6.803920 eV (B2).  The physical third state is 5.788160 eV (B1); it
+!>   appears at nstate=4 from the SAME six trial vectors.  Only the width of
+!>   the tracked window differs.
+!>
+!>   The solver is not stable against widening that window here (raising the
+!>   trial-set dimension moved four example references, and one extra vector
+!>   alone moved CH3Br-BHHLYP-SOC's 6th singlet from 5.214562 to 5.224000 eV,
+!>   converged and wrong), so this reports rather than repairs.
+!>
+!> @param[in]  infos       OQP information struct (for the pair-irrep table)
+!> @param[in]  ritz_full   converged Ritz vectors in the pair basis (xvec_dim, nstates)
+!> @param[in]  nstates     number of reported states
+!> @param[in]  seeds_per_irrep  seeds handed to each block by mrinivec
+  subroutine mrsf_check_block_representation(infos, ritz_full, nstates, &
+                                             seeds_per_irrep)
+    use precision, only: dp
+    use io_constants, only: iw
+    use types, only: information
+    use oqp_tagarray_driver
+    use tagarray, only: TA_OK
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    real(kind=dp), intent(in) :: ritz_full(:,:)
+    integer, intent(in) :: nstates
+    integer, allocatable, intent(in) :: seeds_per_irrep(:)
+
+    integer(8), contiguous, pointer :: pair_irrep(:)
+    integer(4) :: ta_status
+    integer :: nirr, ir, istate, ipair, best, xvec_dim, nsilent, nseeded
+    integer, allocatable :: roots_per_irrep(:)
+    real(kind=dp), allocatable :: weight(:)
+
+    if (.not. allocated(seeds_per_irrep)) return
+    if (nstates < 1) return
+
+    call tagarray_get_data(infos%dat, OQP_sym_pair_irrep, pair_irrep, &
+                           status=ta_status)
+    if (ta_status /= TA_OK) return
+
+    xvec_dim = ubound(ritz_full, 1)
+    if (size(pair_irrep) /= xvec_dim) return
+    nirr = size(seeds_per_irrep)
+    if (nirr < 1) return
+
+    ! Label each reported root by the irrep carrying most of its weight.  The
+    ! response matrix is block-diagonal over these blocks for a totally
+    ! symmetric reference, so a converged root belongs to exactly one of them
+    ! up to numerical leakage; the dominant block is that one.
+    allocate(roots_per_irrep(nirr))
+    roots_per_irrep = 0
+    allocate(weight(nirr))
+    do istate = 1, min(nstates, ubound(ritz_full, 2))
+      weight = 0.0_dp
+      do ipair = 1, xvec_dim
+        ir = int(pair_irrep(ipair))
+        if (ir >= 1 .and. ir <= nirr) &
+          weight(ir) = weight(ir) + ritz_full(ipair, istate)**2
+      end do
+      best = maxloc(weight, 1)
+      if (best >= 1 .and. best <= nirr) &
+        roots_per_irrep(best) = roots_per_irrep(best) + 1
+    end do
+
+    nsilent = 0
+    nseeded = 0
+    do ir = 1, nirr
+      if (seeds_per_irrep(ir) <= 0) cycle
+      nseeded = nseeded + 1
+      if (roots_per_irrep(ir) == 0) nsilent = nsilent + 1
+    end do
+
+    if (nsilent > 0) then
+      write(iw,'(/,2X,"MRSF WARNING: ",I0," symmetry block(s) received an ", &
+        &"initial trial vector but contributed NO root to the reported ", &
+        &"spectrum.  Seeding a block does not guarantee its roots: the ", &
+        &"Davidson expands only on the residuals of the lowest ",I0," Ritz ", &
+        &"vectors, so a block whose diagonal estimate starts above that ", &
+        &"window is never enriched.  A state of that symmetry may lie BELOW ", &
+        &"the highest state reported here, in which case the numbering is ", &
+        &"shifted and state N is not the physical state N.  Re-run with a ", &
+        &"larger nstate and check whether a new state appears below the ", &
+        &"ones you care about.",/)') nsilent, nstates
+      do ir = 1, nirr
+        if (seeds_per_irrep(ir) > 0 .and. roots_per_irrep(ir) == 0) &
+          write(iw,'(4X,"unrepresented block: irrep index ",I0, &
+            &" (",I0," seed(s), 0 roots)")') ir, seeds_per_irrep(ir)
+      end do
+      ! mrinivec seeds nvec = max(nstates, 6) vectors, so asking for fewer
+      ! states than there are seeded blocks leaves some unrepresented by
+      ! COUNTING alone.  Say so, because the reader will otherwise read every
+      ! line above as a detected fault.  It does not make the run safe: the
+      ! block's absence is exactly why its roots could not be found, and a
+      ! Ritz value cannot rule the hazard out -- Rayleigh-Ritz gives an UPPER
+      ! bound, so an estimate above the window is consistent with a true root
+      ! below it.  Measured on this file's own CH2O deck at nstate=3, where
+      ! the missing B1 root's Ritz estimate sits above the window and the
+      ! physical state (5.788160 eV) sits below it.
+      if (nstates < nseeded) &
+        write(iw,'(4X,"note: ",I0," state(s) requested vs ",I0," seeded ", &
+          &"block(s) -- some blocks cannot be represented at this nstate. ", &
+          &"That is a consequence of the count, not evidence of a fault, but ", &
+          &"it does not rule the shift out either: only re-running with a ", &
+          &"larger nstate does.")') nstates, nseeded
+      write(iw,'(a)') ''
+    end if
+
+  end subroutine mrsf_check_block_representation
 
 !> Transform MRSF response vectors from MO to AO basis
 !>
@@ -802,10 +1007,13 @@ contains
     implicit none
 
     type(information), intent(in) :: infos
-    real(kind=dp), intent(in), dimension(:,:) :: &
-      va, vb, bvec
+    real(kind=dp), intent(in), dimension(:,:) :: va
+    real(kind=dp), target, intent(in) :: &
+      vb(infos%basis%nbf,infos%basis%nbf), bvec(infos%basis%nbf,infos%basis%nbf)
     real(kind=dp), intent(inout), target, dimension(:,:,:) :: &
       fmrsf
+
+    real(kind=dp), contiguous, pointer :: vb_storage(:), bvec_storage(:)
 
     real(kind=dp), allocatable, dimension(:,:) :: &
       tmp
@@ -822,6 +1030,10 @@ contains
     bco2 => fmrsf(4,:,:)
     o21v => fmrsf(5,:,:)
     co12 => fmrsf(6,:,:)
+
+    ! Call-local borrowed storage retains the complete column stride.
+    vb_storage(1:size(vb)) => vb
+    bvec_storage(1:size(bvec)) => bvec
 
     nbf = infos%basis%nbf
     nocca = infos%mol_prop%nelec_A
@@ -848,10 +1060,13 @@ contains
     !
     ! Step 1: Intermediate vector tmp = sum_a C^beta_(mu,a) X_(HOMO,a)
     !   tmp_mu = sum_{a in virt_beta} C^beta_(mu,a) * X_(HOMO,a)
+    tmp(:,1) = 0.0_dp
+    if (nbf > nocca) then
     call dgemm('n', 't', nbf, 1, nbf-nocca, &
-               1.0_dp, vb(:,nocca+1), nbf, &
-                       bvec(lr2:lr2,nocca+1), nbf, &
+               1.0_dp, vb_storage(nocca*nbf+1:), nbf, &
+                       bvec_storage(nocca*nbf+lr2:), nbf, &
                0.0_dp, tmp(:,1), nbf)
+    end if
 
     ! Step 2: Outer product to form AO-basis matrix
     !   P^bo2v_(mu,nu) += C^alpha_(mu,HOMO) * tmp_nu
@@ -873,10 +1088,13 @@ contains
     !
     ! Step 1: Intermediate vector tmp = sum_a C^beta_(mu,a) X_(HOMO-1,a)
     !   tmp_mu = sum_{a in virt_beta} C^beta_(mu,a) * X_(HOMO-1,a)
+    tmp(:,1) = 0.0_dp
+    if (nbf > nocca) then
     call dgemm('n', 't', nbf, 1, nbf-nocca, &
-               1.0_dp, vb(:,nocca+1), nbf, &
-                       bvec(lr1:lr1,nocca+1), nbf, &
+               1.0_dp, vb_storage(nocca*nbf+1:), nbf, &
+                       bvec_storage(nocca*nbf+lr1:), nbf, &
                0.0_dp, tmp(:,1), nbf)
+    end if
 
     ! Step 2: Outer product to form AO-basis matrix
     !   P^bo1v_(mu,nu) += C^alpha_(mu,HOMO-1) * tmp_nu
@@ -962,10 +1180,13 @@ contains
     !
     ! Step 1: Intermediate vector from HOMO -> virt_beta amplitudes
     !   tmp_mu = sum_{a in virt_beta} C^beta_(mu,a) * X_(HOMO,a)
+    tmp(:,1) = 0.0_dp
+    if (nbf > nocca) then
     call dgemm('n', 't', nbf, 1, nbf-nocca, &
-               1.0_dp, vb(:,nocca+1), nbf, &
-                       bvec(lr2:lr2,nocca+1), nbf, &
+               1.0_dp, vb_storage(nocca*nbf+1:), nbf, &
+                       bvec_storage(nocca*nbf+lr2:), nbf, &
                0.0_dp, tmp(:,1), nbf)
+    end if
 
     ! Combined outer products with subtraction
     !   P^o21v_(mu,nu) += C^alpha_(mu,HOMO-1) * tmp_nu (positive contribution)
@@ -976,10 +1197,13 @@ contains
 
     ! Step 1: Intermediate vector from HOMO-1 -> virt_beta amplitudes
     !   tmp_mu = sum_{a in virt_beta} C^beta_(mu,a) * X_(HOMO-1,a)
+    tmp(:,1) = 0.0_dp
+    if (nbf > nocca) then
     call dgemm('n', 't', nbf, 1, nbf-nocca, &
-               1.0_dp, vb(:,nocca+1), nbf, &
-                       bvec(lr1:lr1,nocca+1), nbf, &
+               1.0_dp, vb_storage(nocca*nbf+1:), nbf, &
+                       bvec_storage(nocca*nbf+lr1:), nbf, &
                0.0_dp, tmp(:,1), nbf)
+    end if
 
     !   P^o21v_(mu,nu) -= C^alpha_(mu,HOMO) * tmp_nu (negative contribution)
     call dgemm('n', 't', nbf, nbf, 1, &
@@ -1055,10 +1279,13 @@ contains
     !
     if (noccb > 0) then
     ! Step 1: Intermediate tmp_(mu,i) = sum_a C^beta_(mu,a) * X_(i,a)
+    tmp(:,1:noccb) = 0.0_dp
+    if (nbf > nocca .and. noccb > 0) then
     call dgemm('n', 't', nbf, noccb, nbf-nocca, &
-               1.0_dp, vb(:,nocca+1), nbf, &
-                       bvec(:,nocca+1), nbf, &
+               1.0_dp, vb_storage(nocca*nbf+1:), nbf, &
+                       bvec_storage(nocca*nbf+1:), nbf, &
                0.0_dp, tmp(:,1:noccb), nbf)
+    end if
 
     ! Step 2: Outer product P^ball_(mu,nu) += sum_i C^alpha_(mu,i) * tmp_(nu,i)
     call dgemm('n', 't', nbf, nbf, noccb, &
@@ -1154,10 +1381,13 @@ contains
     implicit none
 
     type(information), intent(in) :: infos
-    real(kind=dp), intent(in), dimension(:,:) :: &
-      va, vb, bvec
+    real(kind=dp), intent(in), dimension(:,:) :: va
+    real(kind=dp), target, intent(in) :: &
+      vb(infos%basis%nbf,infos%basis%nbf), bvec(infos%basis%nbf,infos%basis%nbf)
     real(kind=dp), intent(inout), target, dimension(:,:,:) :: &
       mrsf_density
+
+    real(kind=dp), contiguous, pointer :: vb_storage(:), bvec_storage(:)
 
     real(kind=dp), allocatable, dimension(:,:) :: &
       tmp, tmp1, tmp2
@@ -1179,6 +1409,10 @@ contains
     bco2b => mrsf_density(8,:,:)
     o21v  => mrsf_density(9,:,:)
     co12  => mrsf_density(10,:,:)
+
+    ! Call-local borrowed storage retains the complete column stride.
+    vb_storage(1:size(vb)) => vb
+    bvec_storage(1:size(bvec)) => bvec
 
     nbf = infos%basis%nbf
     nocca = infos%mol_prop%nelec_A
@@ -1232,10 +1466,10 @@ contains
     ! Closed->Virtual block: empty when there is no doubly-occupied core
     ! (nocca-2 = noccb = 0, e.g. H2 triplet). Skip explicitly so the UHF path
     ! mirrors the ROHF guard (the do i=1,nocca-2 loop above is already a no-op).
-    if (nocca > 2) then
+    if (nocca > 2 .and. nbf > nocca) then
     call dgemm('n','t', nbf, nocca-2, nbf-nocca, &
-               1.0_dp, vb(:,nocca+1), nbf, &
-                       bvec(:,nocca+1), nbf, &
+               1.0_dp, vb_storage(nocca*nbf+1:), nbf, &
+                       bvec_storage(nocca*nbf+1:), nbf, &
                0.0_dp, tmp, nbf)
 
     call dgemm('n','t', nbf, nbf, nocca-2, &
@@ -1328,8 +1562,11 @@ contains
     real(kind=dp), intent(in), target, dimension(:,:,:) :: &
       fmrsf
     real(kind=dp), intent(out), dimension(:,:) :: pmo
-    real(kind=dp), intent(in), dimension(:,:) :: va, vb
+    real(kind=dp), intent(in), dimension(:,:) :: va
+    real(kind=dp), target, intent(in) :: vb(infos%basis%nbf,infos%basis%nbf)
     integer, intent(in) :: ivec
+
+    real(kind=dp), contiguous, pointer :: vb_storage(:)
 
     real(kind=dp), allocatable :: &
       scr(:,:), tmp(:), wrk(:,:)
@@ -1341,6 +1578,9 @@ contains
     real(kind=dp), parameter :: one = 1.0_dp
     real(kind=dp), parameter :: sqrt2 = 1.0_dp/sqrt(2.0_dp)
     logical :: debug_mode
+
+    ! Call-local borrowed storage retains the complete column stride.
+    vb_storage(1:size(vb)) => vb
 
     nbf = infos%basis%nbf
     mrst = infos%tddft%mult
@@ -1479,6 +1719,12 @@ contains
     !   tmp = adco2^T * C^alpha_HOMO-1 + ao21v^T * C^alpha_HOMO
     !   F^MO_(HOMO-1,a) += C^beta_a^T * tmp  (for a in virt_beta)
     !
+    ! Sections 5-6 project onto the beta virtual block (noca+1:nbf). With no
+    ! virtual orbital above the open shells (nbf == noca, e.g. the H2/STO-3G
+    ! triplet reference) that block is empty and DGEMM would receive
+    ! M = LDC = nbf-noca = 0, an argument error that Apple Accelerate rejects
+    ! (the process aborts after SCF). Skip it, as umrsfmntoia already does.
+    if (nbf > noca) then
     ! Step 1: Contract adco2^T with HOMO-1_alpha MO coefficient
     !   tmp_mu = sum_nu P^adco2_(nu,mu) * C^alpha_(nu,HOMO-1)
     call dgemm('t','n',nbf,1,nbf, &
@@ -1494,7 +1740,7 @@ contains
     ! Step 3: Project onto virtual beta-orbitals
     !   F^MO_(HOMO-1,a) += sum_mu C^beta_(mu,a) * tmp_mu  (a=noca+1:nbf)
     call dgemm('t','n',nbf-noca,1,nbf, &
-               one, vb(:,noca+1), nbf, &
+               one, vb_storage(noca*nbf+1:), nbf, &
                     tmp, nbf, &
                one, wrk(lr1:lr1,noca+1:nbf), nbf-noca)
     !-----------------------------------------------------------------------
@@ -1528,9 +1774,10 @@ contains
     ! Step 3: Project onto virtual beta-orbitals
     !   F^MO_(HOMO,a) += sum_mu C^beta_(mu,a) * tmp_mu  (a=noca+1:nbf)
     call dgemm('t','n',nbf-noca,1,nbf, &
-               one, vb(:,noca+1), nbf, &
+               one, vb_storage(noca*nbf+1:), nbf, &
                     tmp, nbf, &
                one, wrk(lr2:lr2,noca+1:nbf), nbf-noca)
+    end if  ! nbf > noca
 
     !-----------------------------------------------------------------------
     ! Spin-dependent corrections for (O1,O1) diagonal element (OO block)
@@ -1612,22 +1859,28 @@ contains
     real(kind=dp), intent(in), target, dimension(:,:,:) :: &
       fmrsf
     real(kind=dp), intent(out), dimension(:,:) :: pmo
-    real(kind=dp), intent(in), dimension(:,:) :: va, vb
+    real(kind=dp), target, intent(in) :: &
+      va(infos%basis%nbf,infos%basis%nbf), vb(infos%basis%nbf,infos%basis%nbf)
     integer, intent(in) :: ivec
 
+    real(kind=dp), contiguous, pointer :: va_storage(:), vb_storage(:)
+
     real(kind=dp), allocatable :: &
-      scr(:,:), wrk(:,:)
+      scr(:,:), tmp(:), wrk(:,:)
     real(kind=dp), pointer, dimension(:,:) :: &
       adco1a, adco1b, adco2a, adco2b, &
       ado1va, ado1vb, ado2va, ado2vb, agdlr, aco12, ao21v
     integer :: noca, nocb, mrst, i, ij, &
-      j, lr1, lr2, nbf, ok, ni, nj
+      j, lr1, lr2, nbf, ok
     real(kind=dp), parameter :: zero = 0.0_dp
     real(kind=dp), parameter :: one = 1.0_dp
     real(kind=dp), parameter :: half = 0.5_dp
     real(kind=dp), parameter :: sqrt2 = 1.0_dp/sqrt(2.0_dp)
-    real(kind=dp) :: dumn
     logical :: debug_mode
+
+    ! Call-local borrowed storage retains the complete column stride.
+    va_storage(1:size(va)) => va
+    vb_storage(1:size(vb)) => vb
 
     nbf = infos%basis%nbf
     mrst = infos%tddft%mult
@@ -1635,7 +1888,7 @@ contains
     nocb = infos%mol_prop%nelec_b
     debug_mode = infos%tddft%debug_mode
 
-    allocate(scr(nbf,nbf), wrk(nbf,nbf), source=0.0_dp, stat=ok)
+    allocate(tmp(nbf), scr(nbf,nbf), wrk(nbf,nbf), source=0.0_dp, stat=ok)
     if (ok /= 0) call show_message('Cannot allocate memory', with_abort)
 
     agdlr => fmrsf(11,:,:)
@@ -1671,59 +1924,124 @@ contains
 ! 1
 !   ----- (m,n) to (i+,n) -----
     wrk = scr
+    ! Sections 3-4 project onto the doubly occupied alpha block (orbitals 1..lr1-1); with a
+    ! two-electron triplet reference (noca = 2, lr1 = 1) that block is empty and DGEMM would
+    ! receive M = 0 with LDC = 0, which is an argument error. Skip the block instead.
+    if (lr1 > 1) then
 ! 3
-    j = lr2
-    do i = 1, lr1-1
-      dumn = 0.0_dp
-      do ni = 1, nbf
-        do nj = 1, nbf
-          dumn = dumn + va(ni, i) * va(nj, j) * ado1va(ni, nj) * half &
-                      + vb(ni, i) * vb(nj, j) * ado1vb(ni, nj) * half &
-                      + va(ni, i) * vb(nj, j-1) * aco12(ni, nj)
-        end do
-      end do
-      wrk(i,j) = wrk(i,j) + dumn
-    end do
-! 4
-    j = lr1
-    do i = 1, lr1-1
-      dumn = 0.0_dp
-      do ni = 1, nbf
-        do nj = 1, nbf
-          dumn = dumn + va(ni, i) * va(nj, j) * ado2va(ni, nj) * half &
-                      + vb(ni, i) * vb(nj, j) * ado2vb(ni, nj) * half &
-                      - va(ni, i) * vb(nj, j+1) * aco12(ni, nj)
-        end do
-      end do
-      wrk(i,j) = wrk(i,j) + dumn
-    end do
-! 5
-    i = lr1
-    do j = lr2+1, nbf
-      dumn = 0.0_dp
-      do ni = 1, nbf
-        do nj = 1, nbf
-          dumn = dumn + va(nj, j) * va(ni, i) * adco2a(ni, nj) * half &
-                      + vb(nj, j) * vb(ni, i) * adco2b(ni, nj) * half &
-                      + vb(nj, j) * va(ni, i+1) * ao21v(ni, nj)
-        end do
-      end do
-      wrk(i,j) = wrk(i,j) + dumn
-    end do
-! 6
-    i = lr2
-    do j = lr2+1, nbf
-      dumn = 0.0_dp
-      do ni = 1, nbf
-        do nj = 1, nbf
-          dumn = dumn + va(nj, j) * va(ni, i) * adco1a(ni, nj) * half &
-                      + vb(nj, j) * vb(ni, i) * adco1b(ni, nj) * half &
-                      - vb(nj, j) * va(ni, i-1) * ao21v(ni, nj)
-        end do
-      end do
-      wrk(i,j) = wrk(i,j) + dumn
-    end do
+    call dgemm('n','n',nbf,1,nbf, &
+               half, ado1va, nbf, &
+                     va(:,lr2:lr2), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',lr1-1,1,nbf, &
+               one, va, nbf, &
+                    tmp, nbf, &
+               one, wrk(1:lr1-1,lr2:lr2), lr1-1)
 
+    call dgemm('n','n',nbf,1,nbf, &
+               half, ado1vb, nbf, &
+                     vb(:,lr2:lr2), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',lr1-1,1,nbf, &
+               one, vb, nbf, &
+                    tmp, nbf, &
+               one, wrk(1:lr1-1,lr2:lr2), lr1-1)
+
+    call dgemm('n','n',nbf,1,nbf, &
+               one, aco12, nbf, &
+                    vb(:,lr1:lr1), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',lr1-1,1,nbf, &
+               one, va, nbf, &
+                    tmp, nbf, &
+               one, wrk(1:lr1-1,lr2:lr2), lr1-1)
+! 4
+    call dgemm('n','n',nbf,1,nbf, &
+               half, ado2va, nbf, &
+                     va(:,lr1:lr1), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',lr1-1,1,nbf, &
+               one, va, nbf, &
+                    tmp, nbf, &
+               one, wrk(1:lr1-1,lr1:lr1), lr1-1)
+
+    call dgemm('n','n',nbf,1,nbf, &
+               half, ado2vb, nbf, &
+                     vb(:,lr1:lr1), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',lr1-1,1,nbf, &
+               one, vb, nbf, &
+                    tmp, nbf, &
+               one, wrk(1:lr1-1,lr1:lr1), lr1-1)
+
+    call dgemm('n','n',nbf,1,nbf, &
+               one, aco12, nbf, &
+                    vb(:,lr2:lr2), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',lr1-1,1,nbf, &
+              -one, va, nbf, &
+                    tmp, nbf, &
+               one, wrk(1:lr1-1,lr1:lr1), lr1-1)
+    end if  ! lr1 > 1
+    ! Sections 5-6 project onto the beta virtual block; skip when there are no virtuals
+    ! (nbf == noca), which would otherwise pass M = 0 and LDC = 0 to DGEMM.
+    if (nbf > noca) then
+! 5
+    call dgemm('t','n',nbf,1,nbf, &
+               half, adco2a, nbf, &
+                     va(:,lr1:lr1), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',nbf-noca,1,nbf, &
+               one, va_storage(noca*nbf+1:), nbf, &
+                    tmp, nbf, &
+               one, wrk(lr1:lr1,noca+1:nbf), nbf-noca)
+
+    call dgemm('t','n',nbf,1,nbf, &
+               half, adco2b, nbf, &
+                     vb(:,lr1:lr1), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',nbf-noca,1,nbf, &
+               one, vb_storage(noca*nbf+1:), nbf, &
+                    tmp, nbf, &
+               one, wrk(lr1:lr1,noca+1:nbf), nbf-noca)
+
+    call dgemm('t','n',nbf,1,nbf, &
+               one, ao21v, nbf, &
+                    va(:,lr2:lr2), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',nbf-noca,1,nbf, &
+               one, vb_storage(noca*nbf+1:), nbf, &
+                    tmp, nbf, &
+               one, wrk(lr1:lr1,noca+1:nbf), nbf-noca)
+! 6
+    call dgemm('t','n',nbf,1,nbf, &
+               half, adco1a, nbf, &
+                     va(:,lr2:lr2), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',nbf-noca,1,nbf, &
+               one, va_storage(noca*nbf+1:), nbf, &
+                    tmp, nbf, &
+               one, wrk(lr2:lr2,noca+1:nbf), nbf-noca)
+
+    call dgemm('t','n',nbf,1,nbf, &
+               half, adco1b, nbf, &
+                     vb(:,lr2:lr2), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',nbf-noca,1,nbf, &
+               one, vb_storage(noca*nbf+1:), nbf, &
+                    tmp, nbf, &
+               one, wrk(lr2:lr2,noca+1:nbf), nbf-noca)
+
+    call dgemm('t','n',nbf,1,nbf, &
+               one, ao21v, nbf, &
+                    va(:,lr1:lr1), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',nbf-noca,1,nbf, &
+              -one, vb_storage(noca*nbf+1:), nbf, &
+                    tmp, nbf, &
+               one, wrk(lr2:lr2,noca+1:nbf), nbf-noca)
+
+    end if  ! nbf > noca
     if (mrst==1) then
       wrk(lr1,lr1) = (scr(lr1,lr1)-scr(lr2,lr2))*sqrt2
       wrk(lr2,lr2) = 0.0_dp
@@ -1738,7 +2056,7 @@ contains
 
     if (debug_mode) then
       write(iw,*) 'UMRSFMNTOIA wrk(1:5,1:5)'
-      write(iw,*) wrk(1:5,1:5)
+      write(iw,*) wrk(1:min(5,size(wrk,1)),1:min(5,size(wrk,2)))
     end if
 
     ij = 0
@@ -1780,18 +2098,20 @@ contains
     implicit none
 
     type(information), intent(in) :: infos
-    real(kind=dp), intent(in), dimension(:,:) :: &
-      wrk, fij, fab
+    real(kind=dp), intent(in) :: wrk(:,:), fij(:,:)
+    real(kind=dp), target, intent(in) :: fab(infos%basis%nbf,infos%basis%nbf)
     real(kind=dp), intent(inout), dimension(:,:) :: &
       pmo
     integer, intent(in) :: iv
 
     real(kind=dp), allocatable, dimension(:,:) :: scr, tmp1, wrk1
+    real(kind=dp), contiguous, pointer :: fab_storage(:)
     real(kind=dp) :: dumn, xlr
     integer :: nbf, nocca, noccb, mrst, i, ij, j, lr1, lr2, ok
     real(kind=dp), parameter :: sqrt2 = 1.0_dp/sqrt(2.0_dp)
     logical :: debug_mode
 
+    fab_storage(1:size(fab)) => fab
     nbf = infos%basis%nbf
     nocca = infos%mol_prop%nelec_a
     noccb = infos%mol_prop%nelec_b
@@ -1807,17 +2127,20 @@ contains
     scr(lr1,lr1) = 0.0_dp
     scr(lr2,lr2) = 0.0_dp
 
+    if (nbf > noccb) then
     ! Contraction 1
     call dgemm('n', 't', nocca, nbf-noccb, nbf-noccb, &
                1.0_dp, scr(1,noccb+1), nbf, &
-                       fab(noccb+1:,noccb+1), nbf, &
+                       fab_storage(noccb*nbf+noccb+1:), nbf, &
                0.0_dp, tmp1(1,noccb+1), nbf)
 
     ! Contraction 2
     call dgemm('n', 'n', nocca, nbf-noccb, nocca, &
-              -1.0_dp, fij(:,1), nbf, &
-                       scr(:,noccb+1), nbf, &
+              -1.0_dp, fij, nbf, &
+                       scr(1,noccb+1), nbf, &
                1.0_dp, tmp1(1,noccb+1), nbf)
+
+    end if
 
     xlr = wrk(lr1,lr1)
 
@@ -2026,6 +2349,79 @@ contains
 
   end subroutine mrsfxvec
 
+!>    @brief    Unrelaxed interstate difference density matrices
+!>              T^{IJ}_ij and T^{IJ}_ab for a pair of MRSF states,
+!>              the symmetrized bilinear generalization of the
+!>              single-state T_ij/T_ab entering the Z-vector RHS:
+!>
+!>              T^{IJ}(i+,j+) := -1/2 sum_a- ( Xi(i+,a-)*Xj(j+,a-)
+!>                                           + Xj(i+,a-)*Xi(j+,a-) )
+!>              T^{IJ}(a-,b-) := +1/2 sum_i+ ( Xi(i+,a-)*Xj(i+,b-)
+!>                                           + Xj(i+,a-)*Xi(i+,b-) )
+!>
+!>              For ist==jst this reduces exactly to the gradient
+!>              case T_ij = -X*X^T, T_ab = X^T*X. Amplitudes are
+!>              dimensionally transformed (mrsfxvec) before
+!>              contraction, so the spin-paired O->O components are
+!>              unfolded consistently. Singlet/triplet (mult=1,3)
+!>              MRSF only.
+!>
+  subroutine mrsf_interstate_tden(infos, bvec_mo, ist, jst, tij, tab)
+
+    use precision, only: dp
+    use types, only: information
+    use messages, only: show_message, with_abort
+
+    implicit none
+
+    type(information), intent(in) :: infos
+    real(kind=dp), intent(in), dimension(:,:) :: bvec_mo
+    integer, intent(in) :: ist, jst
+    real(kind=dp), intent(out), dimension(:,:) :: tij, tab
+
+    real(kind=dp), allocatable, dimension(:) :: xi, xj
+    integer :: noca, nocb, nvirb, nbf, ok
+
+    nbf = infos%basis%nbf
+    noca = infos%mol_prop%nelec_a
+    nocb = infos%mol_prop%nelec_b
+    nvirb = nbf-nocb
+
+    if (infos%tddft%mult /= 1 .and. infos%tddft%mult /= 3) &
+      call show_message('mrsf_interstate_tden supports mult=1,3 only', with_abort)
+
+    allocate(xi(noca*nvirb), xj(noca*nvirb), source=0.0_dp, stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', with_abort)
+
+    call mrsfxvec(infos, bvec_mo(:,ist), xi)
+    if (jst == ist) then
+      xj = xi
+    else
+      call mrsfxvec(infos, bvec_mo(:,jst), xj)
+    end if
+
+  ! T^{IJ}(i+,j+) = -1/2 ( Xi*Xj^T + Xj*Xi^T )
+    call dgemm('n', 't', noca, noca, nvirb, &
+              -0.5_dp, xi, noca, &
+                       xj, noca, &
+               0.0_dp, tij, noca)
+    call dgemm('n', 't', noca, noca, nvirb, &
+              -0.5_dp, xj, noca, &
+                       xi, noca, &
+               1.0_dp, tij, noca)
+
+  ! T^{IJ}(a-,b-) = +1/2 ( Xi^T*Xj + Xj^T*Xi )
+    call dgemm('t', 'n', nvirb, nvirb, noca, &
+               0.5_dp, xi, noca, &
+                       xj, noca, &
+               0.0_dp, tab, nvirb)
+    call dgemm('t', 'n', nvirb, nvirb, noca, &
+               0.5_dp, xj, noca, &
+                       xi, noca, &
+               1.0_dp, tab, nvirb)
+
+  end subroutine mrsf_interstate_tden
+
 !>    @brief    Spin-pairing parts
 !>              of singlet and triplet MRSF Lagrangian
 !>
@@ -2035,7 +2431,7 @@ contains
     use messages, only: show_message, with_abort
     implicit none
 
-    real(kind=dp), intent(out), dimension(:,:) :: xhxa, xhxb
+    real(kind=dp), intent(inout), dimension(:,:) :: xhxa, xhxb
     real(kind=dp), intent(in), dimension(:,:) :: ca, cb, xv
     real(kind=dp), intent(in), target, dimension(:,:,:) :: fmrsf
     integer, intent(in) :: noca, nocb
@@ -2993,6 +3389,9 @@ contains
 
     end if
 
+    ! get_trans_den accumulates into trden; define it here (intent(out))
+    ! so callers may pass reused work arrays.
+    trden = 0.0_dp
     call get_trans_den(trden, xv12i, xv12j, noca, nocb, nvirb)
 
     return
@@ -3259,20 +3658,22 @@ contains
     real(kind=dp), intent(inout), dimension(:,:) :: work
 
     integer :: i, nbf, nmo
-    integer :: p_start, p_end, q_start
+    integer :: slo, shi
     integer :: p, q, iterj
-    integer :: max_iter, i_max, j_max
+    integer :: max_iter
     real(kind=dp) :: thresh
-    real(kind=dp) :: max_off
+    real(kind=dp) :: max_off, btt
     real(kind=dp), parameter :: go2ev = 27.211386245988d+00
     logical :: dgprint
-    logical :: if_conv
 
     dgprint = infos%tddft%debug_mode
 
-    if_conv = .false.
-
-    thresh = 1d-3
+    ! RULES §17 — ALIGNER UNIFICATION: converge the corresponding-orbital gauge to the SAME tolerance
+    ! as the analytic gradient's umrsf_jacobi_smooth (max within-segment |btt| < 1e-12). The old
+    ! thresh=1d-3 (+ min-|θ| early exit + max-overlap-pair selection) left the gauge under-converged
+    ! and in a DIFFERENT btt=0 basin than the analytic's cyclic aligner. ONE algorithm for energy AND
+    ! analytic ⇒ they share one fixed point/basin by construction.
+    thresh = 1d-12
 
     nbf = size(mo_a, 1)
     nmo = size(mo_a, 2)
@@ -3305,54 +3706,42 @@ contains
     end if
 
     if (isegm == 0) then
-      p_start = nocca-1
-      p_end   = 2
-      q_start = 1
+      slo = 1 ; shi = nocca-1          ! alpha closed+O1 block {1..nocca-1}
       max_iter = 10000
     else if (isegm == 1) then
-      p_start = nmo
-      p_end   = nocca+1
-      q_start = nocca
+      slo = nocca ; shi = nmo          ! beta O2+virtual block {nocca..nmo}
       max_iter = 10000
     else
       call show_message('get_jacobi: invalid isegm', with_abort)
     end if
 
+    ! Cyclic Jacobi sweeps (IDENTICAL to umrsf_jacobi_smooth, RULES §17): sweep every within-segment
+    ! pair (p<q) IN ORDER, rotate each by its 2×2 corresponding-orbital angle, repeat until the max
+    ! stationarity residual max|btt| < thresh. Replaces max-overlap-pair selection + 1d-3 threshold +
+    ! min-|θ| early exit (which under-converged the gauge and split the basin from the analytic).
     do iterj = 1, max_iter
-
       max_off = 0.0d0
-      i_max = -1
-      j_max = -1
-
-      do p = p_start, p_end, -1
-        do q = q_start, p-1
-          if (abs(s_mo(p,q)) > max_off) then
-            max_off = abs(s_mo(p,q))
-            i_max = p
-            j_max = q
-          end if
-          if (abs(s_mo(q,p)) > max_off) then
-            max_off = abs(s_mo(q,p))
-            i_max = q
-            j_max = p
-          end if
+      do p = slo, shi-1
+        do q = p+1, shi
+          call rotate_pair(mo_a, mo_b, smat_full, s_mo, nmo, nbf, isegm, p, q, btt)
+          max_off = max(max_off, btt)
         end do
       end do
-
-      if (dgprint) write(iw, *) "max_off", max_off, i_max, j_max
-
-      if (max_off <= thresh) then
-        write(iw,'("segment ",I1," converged at iter ",I0)') isegm, iterj
-        call flush(iw)
-        exit
-      else if (if_conv) then
-        write(iw,'("segment ",I1," reached the min theta at iter ",I0)') isegm, iterj
+      if (dgprint) write(iw, *) "sweep", iterj, "max|btt|", max_off
+      if (max_off < thresh) then
+        write(iw,'("segment ",I1," converged at sweep ",I0)') isegm, iterj
         call flush(iw)
         exit
       end if
-
-      call rotate_pair(mo_a, mo_b, smat_full, s_mo, nmo, nbf, isegm, i_max, j_max, if_conv)
     end do
+    ! The UMRSF energy and gradient both assume a stationary alignment gauge; publishing an
+    ! underconverged one would make the gradient differentiate a different quantity.
+    if (max_off >= thresh) then
+      write(iw,'("segment ",I1," NOT converged after ",I0," sweeps; max|btt| = ",ES12.4, &
+                &", threshold = ",ES12.4)') isegm, max_iter, max_off, thresh
+      call flush(iw)
+      call show_message('get_jacobi: corresponding-orbital alignment did not converge.', with_abort)
+    end if
 
     if (dgprint) then
       write(iw,'(A)') '-----------------------------------------'
@@ -3387,11 +3776,12 @@ contains
 !###############################################################################
 
 !> Single Jacobi rotation of the MO pair (i_idx, j_idx) chosen by get_jacobi
-  subroutine rotate_pair(mo_a, mo_b, smat, s_mo, nbf, norb, isegm, i_idx, j_idx, if_conv)
+  subroutine rotate_pair(mo_a, mo_b, smat, s_mo, nbf, norb, isegm, i_idx, j_idx, btt_abs)
 
     implicit none
 
-    logical, intent(inout) :: if_conv
+    real(kind=dp), intent(out) :: btt_abs     ! |btt| BEFORE rotation = corresponding-orbital
+                                              ! stationarity residual (get_jacobi convergence metric)
     integer, intent(in) :: nbf, norb, isegm, i_idx, j_idx
     real(kind=dp), intent(inout) :: mo_a(nbf,*), mo_b(nbf,*)
     real(kind=dp), intent(in) :: smat(*)
@@ -3413,13 +3803,12 @@ contains
       btt = aa*cc - bb*dd
     end if
 
+    btt_abs = abs(btt)
+
     tht = 0.5d0 * atan2(btt, att)
 
-    if (abs(tht) < 1.0d-4) then
-      if_conv = .true.
-      return
-    end if
-
+    ! Cyclic sweep: ALWAYS apply the rotation (no min-|θ| early exit). Near the fixed point btt→0 ⇒
+    ! θ→0 ⇒ the Givens rotation is ≈identity; convergence is judged by max|btt| in get_jacobi.
     cth = cos(tht)
     sth = sin(tht)
 
@@ -3489,110 +3878,224 @@ contains
 
 !###############################################################################
 
-!> Compute the <S^2> expectation value of a UMRSF-TDDFT response state
+!> Compute the <S^2> expectation value of a ROHF MRSF-TDDFT response state
 !>
-!> UMRSF analogue of the MRSF spin-square evaluation: accumulates <S^2>
-!> for state js from the response amplitudes bvec_mo and the diagonal
-!> alpha/beta MO overlaps, for singlet (mrsfs) or triplet (mrsft) targets.
+!> All MRSF configurations except core->virtual (C->V) are spin adapted: the
+!> E+ - E- (singlet) and E+ + E- (triplet) combinations of the O->O, C->O and
+!> O->V spin flips are exact S = 0 and S = 1 functions.  A C->V pair has four
+!> open shells (C, O1, O2, V); its triplet combination is a pure triplet, while
+!> its singlet combination is sqrt(2/3) S=0 + sqrt(1/3) S=2, i.e. <S^2> = 2.
+!> S^2 does not couple different spatial occupations, so
 !>
-  subroutine umrsfssqu(ss, mo_a, mo_b, smat, wrk1, wrk2, nbf, nbf2, xvec_dim, js, &
-                       norb, bvec_mo, nocca, noccb, mrsfs, mrsft)
+!>   singlet: <S^2> = 2 w_CV,   w_CV = sum_{i<=noccb, j>2} X(i,j)**2 / |X|**2
+!>   triplet: <S^2> = 2
+!>
+!> (Dier, Dittmer, Rikus, Dreuw, Neugebauer, ChemRxiv 2026,
+!> doi:10.26434/chemrxiv.15010307, Eqs. 24-26).  bvec_mo uses the packed
+!> layout X(i,j), i = alpha-occupied, j = beta-virtual counted from noccb+1.
+!>
+  pure subroutine mrsfssq(ss, bvec_mo, nocca, noccb, nbf, mrsfs)
 
-    use mathlib, only: unpack_f90
     use precision, only: dp
 
     implicit none
 
-    logical, intent(in) :: mrsfs, mrsft
-    integer :: i, j, js, nocca, noccb, nbf, nbf2, xvec_dim, norb
-    real(kind=dp), intent(in),    dimension(:,:) :: mo_a, mo_b
-    real(kind=dp), intent(in),    dimension(:)   :: smat
-    real(kind=dp), intent(inout), dimension(:,:) :: wrk1
-    real(kind=dp), intent(inout), dimension(:)   :: wrk2
-    real(kind=dp), intent(in),    dimension(nocca, norb-noccb, *) :: bvec_mo
     real(kind=dp), intent(out) :: ss
-    real(kind=dp), parameter :: half = 0.5d+00
-    real(kind=dp), parameter :: tol = 1.0d-12
+    real(kind=dp), intent(in) :: bvec_mo(:)
+    integer, intent(in) :: nocca, noccb, nbf
+    logical, intent(in) :: mrsfs
 
-    real(kind=dp) :: a, b, c, dum, f
+    real(kind=dp) :: total, cv
+    integer :: j
 
-    call unpack_f90(smat, wrk1, 'u')
-
-    ! Precalculation of diagonal alpha/beta MO overlaps
-    a = 0
-    b = 1
-    c = 0
-    do i = 1, nocca
-      dum = dot_product( mo_a(:,i), matmul(wrk1, mo_b(:,i)) )
-      wrk2(i) = dum
-      if (i > noccb) then
-        cycle
-      else
-        a = a+dum*dum
-        b = b*dum*dum
-        c = c+(1.0_dp/max((dum*dum),tol))
-      end if
-    end do
-
-    f = 1
-    if (mrsfs) then
-      ! Singlet spin quantum number
-      ss = 0
-      do i = 1, nocca
-        do j = 1, norb-noccb
-          ! cv
-          if ((j > 2).and.(i <= noccb)) then
-            ss = ss + (nocca-1-a + (wrk2(i))**2 - b /  &
-            (max(abs(wrk2(i)), tol))**2) * (bvec_mo(i,j,js))**2
-          ! co
-          else if (i <= noccb) then
-            ss = ss + (nocca-1-a + (wrk2(i))**2 - (wrk2(j+noccb))**2 &
-              - b * ((wrk2(j+noccb)) / max(abs(wrk2(i)), tol))**2) &
-              * (bvec_mo(i,j,js))**2
-          ! ov, os
-          else if ((j > 2) .or. (i == noccb+j)) then
-            ss = ss+(nocca-1-a-b)*(bvec_mo(i,j,js))**2
-          ! g, d
-          else
-            ss = ss + half * (nocca-1-a - (wrk2(noccb+j))**2 &
-             + (wrk2(noccb+j))**2 * b * (nocca-1-c - 1.0d0 / &
-             (max(abs(wrk2(noccb+j)), tol))**2)) &
-             * (bvec_mo(i,j,js))**2
-
-            f = f+half*(-1+a*(wrk2(noccb+j))**2)*(bvec_mo(i,j,js))**2
-          end if
-        end do
-      end do
-
-    else if (mrsft) then
-      ! Triplet spin quantum number
-      ss = 0
-      do i = 1, nocca
-        do j = 1, norb-noccb
-          ! cv
-          if ((j > 2).and.(i <= noccb)) then
-            ss = ss + (nocca-1 - a + (wrk2(i))**2 &
-             + b * (1.0d0 / max(abs(wrk2(i)), tol))**2) &
-             * (bvec_mo(i,j,js))**2
-          ! co
-          else if (i <= noccb) then
-            ss = ss + (nocca-1 - a + (wrk2(i))**2 - (wrk2(j+noccb))**2 &
-                  + b * ( (wrk2(j+noccb) / &
-                  max(abs(wrk2(i)),tol))**2 )) * (bvec_mo(i,j,js))**2
-          ! ov, ot
-          else if ((j > 2) .or. (i == noccb+j)) then
-            ss = ss+(nocca-1-a+b)*(bvec_mo(i,j,js))**2
-          end if
-        end do
-      end do
+    if (.not. mrsfs) then
+      ss = 2.0_dp
+      return
     end if
 
-    ! Normalization
-    ss = ss/f
+    total = sum(bvec_mo(1:nocca*(nbf-noccb))**2)
+    cv = 0.0_dp
+    do j = 3, nbf-noccb
+      cv = cv + sum(bvec_mo((j-1)*nocca+1:(j-1)*nocca+noccb)**2)
+    end do
+    ss = 0.0_dp
+    if (total > 0.0_dp) ss = 2.0_dp*cv/total
 
-    return
+  end subroutine mrsfssq
 
+!###############################################################################
+
+!> Compute the <S^2> expectation value of a UMRSF-TDDFT response state
+!>
+!> Evaluate the explicitly paired response state Psi=(Phi+eta F Phi)/sqrt(2),
+!> where F=Ry(pi), eta=+1/-1 for singlet/triplet parity and Phi=sum T_ia E+_ia.
+!> T is reconstructed from the packed CO, OV, CV and OO amplitudes below.
+!> Both <Phi|S^2|Phi> and <Phi|S^2 F|Phi>, and the full norm
+!> <Phi|Phi>+eta<Phi|F|Phi>, retain the complete alpha/beta MO overlap matrix.
+!> A full SVD of the occupied-alpha/core-beta overlap reduces the opposite-parent
+!> determinant cofactors to products of singular values, including exact zeros.
+!> The two complementary occupied-alpha directions must be retained.
+!> No diagonal-overlap or squared-amplitude-only approximation is made.
+!> For identical alpha/beta orbitals this reduces to mrsfssq; for unrestricted
+!> parents spin parity alone does not imply a pure total-spin eigenstate.
+!>
+  subroutine umrsfssqu(ss, mo_a, mo_b, smat, wrk1, wrk2, nbf, nbf2, xvec_dim, js, &
+                       norb, bvec_mo, nocca, noccb, mrsfs, mrsft)
+    use mathlib, only: unpack_f90
+    use messages, only: show_message, with_abort
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+    implicit none
+    integer, intent(in) :: nbf, nbf2, xvec_dim, js, norb, nocca, noccb
+    logical, intent(in) :: mrsfs, mrsft
+    real(dp), intent(in) :: mo_a(:,:), mo_b(:,:), smat(:)
+    real(dp), intent(in) :: bvec_mo(nocca,norb-noccb,*)
+    real(dp), intent(inout) :: wrk1(:,:), wrk2(:)
+    real(dp), intent(out) :: ss
+    real(dp), allocatable :: sa(:,:), overlap(:,:), core(:,:), u(:,:), t(:,:), v(:,:), r(:,:), work(:)
+    real(dp), allocatable :: prefix(:), suffix(:)
+    real(dp) :: query(1), unused_vt(1,1), scale, eta, norm, cross_norm, same, cross, physical_norm
+    real(dp) :: product_all, product_except, fuv, cross_coefficient, trace_r
+    integer :: nv, o1, o2, q, info, lwork, ok
+
+    ! Observable of Psi=(Phi+eta Ry(pi)Phi)/sqrt(2), Phi=sum T_ia E+_ia.
+    ! The packed OO fold below defines the paired-state extension to UMRSF.
+    ! Spin parity eta does not imply a pure total spin for unrestricted MOs.
+    ! Keep all alpha/beta overlaps and configuration cross terms. A diagonal
+    ! overlap approximation fails even for a single C->V excitation.
+    if (nocca /= noccb+2 .or. norb < nocca .or. (mrsfs .eqv. mrsft)) &
+      call show_message('UMRSF spin square: invalid two-SOMO spin sector', with_abort)
+    nv = norb-noccb; o1 = noccb+1; o2 = noccb+2
+    allocate(sa(nbf,nocca), overlap(nocca,norb), core(nocca,noccb), u(nocca,nocca), &
+             t(nocca,nv), v(nocca,nv), r(nocca,nocca), &
+             prefix(0:noccb), suffix(1:noccb+1), stat=ok)
+    if (ok /= 0) call show_message('UMRSF spin square: cannot allocate memory', with_abort)
+    call unpack_f90(smat, wrk1, 'u')
+    call dgemm('N','N',nbf,nocca,nbf,1.0_dp,wrk1,nbf,mo_a,nbf,0.0_dp,sa,nbf)
+    call dgemm('T','N',nocca,norb,nbf,1.0_dp,sa,nbf,mo_b,nbf,0.0_dp,overlap,nocca)
+    eta = -1.0_dp
+    if (mrsfs) eta = 1.0_dp
+    scale = maxval(abs(bvec_mo(:,:,js)))
+    if (.not. ieee_is_finite(scale) .or. scale == 0.0_dp) &
+      call show_message('UMRSF spin square: zero or invalid response vector', with_abort)
+    t = bvec_mo(:,:,js)/scale
+    t(o2,2) = -eta*t(o1,1)*0.5_dp
+    t(o1,1) = t(o1,1)*0.5_dp
+    if (mrsfs) then
+      t(o2,1) = t(o2,1)/sqrt(2.0_dp)
+      t(o1,2) = t(o1,2)/sqrt(2.0_dp)
+    else
+      t(o2,1) = 0.0_dp; t(o1,2) = 0.0_dp
+    end if
+
+    ! Full U includes the TWO complementary occupied-alpha directions. The
+    ! SVD is only a coordinate change inside this observable, not an MO rotation
+    ! in the caller. Cofactor products remain defined at zero singular values.
+    u = 0.0_dp
+    do q = 1, nocca
+      u(q,q) = 1.0_dp
+    end do
+    if (noccb > 0) then
+      core = overlap(:,1:noccb)
+      call dgesvd('A','N',nocca,noccb,core,nocca,wrk2,u,nocca,unused_vt,1,query,-1,info)
+      if (info /= 0) call show_message('UMRSF spin square: SVD workspace query failed', with_abort)
+      lwork = max(1,int(query(1)))
+      allocate(work(lwork), stat=ok)
+      if (ok /= 0) call show_message('UMRSF spin square: cannot allocate SVD workspace', with_abort)
+      core = overlap(:,1:noccb)
+      call dgesvd('A','N',nocca,noccb,core,nocca,wrk2,u,nocca,unused_vt,1,work,lwork,info)
+      if (info /= 0) call show_message('UMRSF spin square: SVD did not converge', with_abort)
+      deallocate(work)
+    end if
+    v = matmul(transpose(u),overlap(:,noccb+1:norb))
+    t = matmul(transpose(u),t)
+    call dgemm('N','T',nocca,nocca,nv,1.0_dp,t,nocca,v,nocca,0.0_dp,r,nocca)
+    norm = sum(t*t)
+    trace_r = 0.0_dp
+    do q = 1, nocca
+      trace_r = trace_r+r(q,q)
+    end do
+    same = (1.0_dp+sum(1.0_dp-wrk2(1:noccb)**2))*norm-sum(r*r)+trace_r**2
+    do q = 1, noccb
+      same = same+wrk2(q)**2*sum(t(q,:)**2)
+    end do
+
+    prefix(0) = 1.0_dp; suffix(noccb+1) = 1.0_dp
+    do q = 1, noccb
+      prefix(q) = prefix(q-1)*wrk2(q)**2
+    end do
+    do q = noccb, 1, -1
+      suffix(q) = suffix(q+1)*wrk2(q)**2
+    end do
+    product_all = prefix(noccb)
+    fuv = r(o1,o2)**2+r(o2,o1)**2-2.0_dp*r(o1,o1)*r(o2,o2)
+    cross_norm = product_all*fuv
+    cross_coefficient = product_all
+    cross = -product_all*(sum(t(o1,:)**2)+sum(t(o2,:)**2))
+    do q = 1, noccb
+      product_except = prefix(q-1)*suffix(q+1)
+      cross_coefficient = cross_coefficient+(wrk2(q)**2-1.0_dp)*product_except
+      cross = cross-product_except*(r(q,o1)**2+r(o1,q)**2-2.0_dp*r(q,q)*r(o1,o1) &
+                                   +r(q,o2)**2+r(o2,q)**2-2.0_dp*r(q,q)*r(o2,o2))
+    end do
+    cross = cross+cross_coefficient*fuv
+    physical_norm = norm+eta*cross_norm
+    ! A nonzero packed vector can map to a null paired state. Never replace its
+    ! norm by a floor or report a spurious finite expectation value.
+    if (.not. ieee_is_finite(physical_norm) .or. &
+        physical_norm <= 64.0_dp*epsilon(norm)*norm) &
+      call show_message('UMRSF spin square: null or ill-conditioned paired-state norm', with_abort)
+    ss = (same+eta*cross)/physical_norm
+    if (.not. ieee_is_finite(ss)) call show_message('UMRSF spin square: nonfinite expectation', with_abort)
+    deallocate(sa,overlap,core,u,t,v,r,prefix,suffix)
   end subroutine umrsfssqu
+
+  subroutine umrsfssq_quintet(ss, mo_a, mo_b, smat, wrk1, nbf, norb, bvec_mo, nocca, noccb, js)
+    use mathlib, only: unpack_f90
+    use messages, only: show_message, with_abort
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+    implicit none
+    integer, intent(in) :: nbf, norb, nocca, noccb, js
+    real(dp), intent(in) :: mo_a(:,:), mo_b(:,:), smat(:)
+    real(dp), intent(in) :: bvec_mo(noccb,norb-nocca,*)
+    real(dp), intent(inout) :: wrk1(:,:)
+    real(dp), intent(out) :: ss
+    real(dp), allocatable :: sb(:,:), overlap(:,:), t(:,:), v(:,:), r(:,:), ct(:,:)
+    real(dp) :: scale, norm, exchange, trace_r
+    integer :: nv, q, ok
+
+    ! Ms=2 beta-core -> alpha-virtual excitations of R+ are orthonormal.
+    ! S^2=6+N_beta-spin_exchange, with N_beta=Nc-1 after excitation.
+    ! For unrestricted parents S can exceed 2; a fixed 6 is valid only in the
+    ! spin-pure limit. This changes the observable, not the quintet response.
+    if (nocca /= noccb+2 .or. noccb < 1 .or. norb <= nocca) &
+      call show_message('UMRSF spin square: empty or invalid quintet response space', with_abort)
+    nv = norb-nocca
+    allocate(sb(nbf,noccb),overlap(noccb,norb),t(noccb,nv),v(noccb,nv), &
+             r(noccb,noccb),ct(nocca,nv),stat=ok)
+    if (ok /= 0) call show_message('UMRSF spin square: cannot allocate quintet workspace', with_abort)
+    call unpack_f90(smat,wrk1,'u')
+    call dgemm('N','N',nbf,noccb,nbf,1.0_dp,wrk1,nbf,mo_b,nbf,0.0_dp,sb,nbf)
+    call dgemm('T','N',noccb,norb,nbf,1.0_dp,sb,nbf,mo_a,nbf,0.0_dp,overlap,noccb)
+    scale = maxval(abs(bvec_mo(:,:,js)))
+    if (.not. ieee_is_finite(scale) .or. scale == 0.0_dp) &
+      call show_message('UMRSF spin square: zero or invalid quintet response vector', with_abort)
+    t = bvec_mo(:,:,js)/scale
+    norm = sum(t*t)
+    if (.not. ieee_is_finite(norm) .or. norm <= 0.0_dp) &
+      call show_message('UMRSF spin square: invalid quintet state norm', with_abort)
+    v = overlap(:,nocca+1:norb)
+    call dgemm('N','T',noccb,noccb,nv,1.0_dp,t,noccb,v,noccb,0.0_dp,r,noccb)
+    call dgemm('T','N',nocca,nv,noccb,1.0_dp,overlap,noccb,t,noccb,0.0_dp,ct,nocca)
+    exchange = 0.0_dp; trace_r = 0.0_dp
+    do q = 1, noccb
+      exchange = exchange+1.0_dp-sum(overlap(q,1:nocca)**2)
+      trace_r = trace_r+r(q,q)
+    end do
+    ss = 5.0_dp+exchange+(sum(ct*ct)-sum(r*r)+trace_r**2)/norm
+    if (.not. ieee_is_finite(ss)) call show_message('UMRSF spin square: nonfinite quintet expectation', with_abort)
+    deallocate(sb,overlap,t,v,r,ct)
+  end subroutine umrsfssq_quintet
+
 
 !###############################################################################
 
@@ -3675,5 +4178,422 @@ contains
     deallocate(scr1,scr2)
 
   end subroutine umrsfdmat
+
+  subroutine int2_mrsf_consume_shell(this, shell_block, thread_id)
+
+    implicit none
+
+    class(int2_mrsf_data_t), intent(inout) :: this
+    type(int2_shell_block_t), intent(in) :: shell_block
+    integer, intent(in) :: thread_id
+    integer :: ba,bb,bc,bd,bmaxb,bmaxd,bnij,bnkl,swap_index
+    logical :: bab,bcd,bsame
+    integer :: i, j, k, l, n, v, c
+    real(kind=dp) :: val, xval, cval
+    integer :: mythread
+
+    bab=shell_block%shells(1)==shell_block%shells(2)
+    bcd=shell_block%shells(3)==shell_block%shells(4)
+    bsame=all(shell_block%shells(1:2)==shell_block%shells(3:4))
+    mythread = thread_id
+
+    if (.not.this%tamm_dancoff) return
+
+    associate ( f3 => this%f3(:,:,:,:,mythread), &
+                d3 => this%d3, &
+                ds => this%ds, &
+                nf => this%nfocks &
+      )
+
+      ! f3(nF,1:7,:,:) !> 1=ado2v, 2=ado1v, 3=adco1, 4=adco2, 5=ao21v, 6=aco12, 7=agdlr
+      ! d3(nF,1:7,:,:) !> 1= bo2v, 2= bo1v, 3= bco1, 4= bco2, 5= o21v, 6= co12, 7= ball
+      ! ds(nF,1:4,:,:) !> symmetrized Coulomb density (d3+d3^T), precomputed once
+
+      if (this%cur_pass==1 .and. allocated(this%f3s)) then
+        ! Opt-in FP32 accumulation (OQP_MRSF_FP32): same algebra as the FP64
+        ! path below but operands/accumulator are single precision. Folded back
+        ! to FP64 in parallel_stop. ~few-ueV perturbation, convergence unchanged.
+        block
+          real(kind=sp) :: cs, xs
+          associate (f3s => this%f3s(:,:,:,:,mythread), &
+                     ds_sp => this%ds_sp, d3_sp => this%d3_sp)
+        bnij=0
+        do ba=1,shell_block%dims(1)
+          bmaxb=shell_block%dims(2)
+          if (bab) bmaxb=ba
+          do bb=1,bmaxb
+            bnij=bnij+1
+            bnkl=bnij
+            do bc=1,shell_block%dims(3)
+              bmaxd=shell_block%dims(4)
+              if (bcd) bmaxd=bc
+              if (bsame) then
+                bmaxd=min(bmaxd,bnkl)
+                if (bmaxd==0) exit
+                bnkl=bnkl-bmaxd
+              end if
+              do bd=1,bmaxd
+                val=shell_block%values(bd,bc,bb,ba)
+                if (val==0.0_dp) cycle
+                i=shell_block%offsets(1)+ba
+                j=shell_block%offsets(2)+bb
+                k=shell_block%offsets(3)+bc
+                l=shell_block%offsets(4)+bd
+                if (i<j) then
+                  swap_index=i; i=j; j=swap_index
+                end if
+                if (k<l) then
+                  swap_index=k; k=l; l=swap_index
+                end if
+                if (i<k) then
+                  swap_index=i; i=k; k=swap_index
+                  swap_index=j; j=l; l=swap_index
+                else if (i==k .and. j<l) then
+                  swap_index=j; j=l; l=swap_index
+                end if
+
+            cs = real(val*this%scale_coulomb, sp)
+            xs = real(val*this%scale_exchange, sp)
+            do c = 1, 4
+              do v = 1, nf
+                f3s(v,c,i,j) = f3s(v,c,i,j) + cs*ds_sp(v,c,k,l)
+                f3s(v,c,j,i) = f3s(v,c,j,i) + cs*ds_sp(v,c,k,l)
+                f3s(v,c,k,l) = f3s(v,c,k,l) + cs*ds_sp(v,c,i,j)
+                f3s(v,c,l,k) = f3s(v,c,l,k) + cs*ds_sp(v,c,i,j)
+              end do
+            end do
+            do c = 1, 7
+              do v = 1, nf
+                f3s(v,c,i,k) = f3s(v,c,i,k) - xs*d3_sp(v,c,j,l)
+                f3s(v,c,k,i) = f3s(v,c,k,i) - xs*d3_sp(v,c,l,j)
+                f3s(v,c,i,l) = f3s(v,c,i,l) - xs*d3_sp(v,c,j,k)
+                f3s(v,c,l,i) = f3s(v,c,l,i) - xs*d3_sp(v,c,k,j)
+                f3s(v,c,j,k) = f3s(v,c,j,k) - xs*d3_sp(v,c,i,l)
+                f3s(v,c,k,j) = f3s(v,c,k,j) - xs*d3_sp(v,c,l,i)
+                f3s(v,c,j,l) = f3s(v,c,j,l) - xs*d3_sp(v,c,i,k)
+                f3s(v,c,l,j) = f3s(v,c,l,j) - xs*d3_sp(v,c,k,i)
+              end do
+            end do
+              end do
+            end do
+          end do
+        end do
+          end associate
+        end block
+
+      else if (this%cur_pass==1) then
+        bnij=0
+        do ba=1,shell_block%dims(1)
+          bmaxb=shell_block%dims(2)
+          if (bab) bmaxb=ba
+          do bb=1,bmaxb
+            bnij=bnij+1
+            bnkl=bnij
+            do bc=1,shell_block%dims(3)
+              bmaxd=shell_block%dims(4)
+              if (bcd) bmaxd=bc
+              if (bsame) then
+                bmaxd=min(bmaxd,bnkl)
+                if (bmaxd==0) exit
+                bnkl=bnkl-bmaxd
+              end if
+              do bd=1,bmaxd
+                val=shell_block%values(bd,bc,bb,ba)
+                if (val==0.0_dp) cycle
+                i=shell_block%offsets(1)+ba
+                j=shell_block%offsets(2)+bb
+                k=shell_block%offsets(3)+bc
+                l=shell_block%offsets(4)+bd
+                if (i<j) then
+                  swap_index=i; i=j; j=swap_index
+                end if
+                if (k<l) then
+                  swap_index=k; k=l; l=swap_index
+                end if
+                if (i<k) then
+                  swap_index=i; i=k; k=swap_index
+                  swap_index=j; j=l; l=swap_index
+                else if (i==k .and. j<l) then
+                  swap_index=j; j=l; l=swap_index
+                end if
+
+          xval = val * this%scale_exchange
+          cval = val * this%scale_coulomb
+
+          ! Coulomb (components 1:4): the 8 permutational contributions collapse
+          ! to 4 distinct Fock targets, each reading one symmetric ds slab.
+          ! Explicit loops (stride-1 v inner) vectorize and avoid array temporaries.
+          do c = 1, 4
+            do v = 1, nf
+              f3(v,c,i,j) = f3(v,c,i,j) + cval*ds(v,c,k,l)
+              f3(v,c,j,i) = f3(v,c,j,i) + cval*ds(v,c,k,l)
+              f3(v,c,k,l) = f3(v,c,k,l) + cval*ds(v,c,i,j)
+              f3(v,c,l,k) = f3(v,c,l,k) + cval*ds(v,c,i,j)
+            end do
+          end do
+          ! Exchange (components 1:7): 8 distinct targets (no symmetry to fold).
+          do c = 1, 7
+            do v = 1, nf
+              f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,j,l)
+              f3(v,c,k,i) = f3(v,c,k,i) - xval*d3(v,c,l,j)
+              f3(v,c,i,l) = f3(v,c,i,l) - xval*d3(v,c,j,k)
+              f3(v,c,l,i) = f3(v,c,l,i) - xval*d3(v,c,k,j)
+              f3(v,c,j,k) = f3(v,c,j,k) - xval*d3(v,c,i,l)
+              f3(v,c,k,j) = f3(v,c,k,j) - xval*d3(v,c,l,i)
+              f3(v,c,j,l) = f3(v,c,j,l) - xval*d3(v,c,i,k)
+              f3(v,c,l,j) = f3(v,c,l,j) - xval*d3(v,c,k,i)
+            end do
+          end do
+              end do
+            end do
+          end do
+        end do
+
+      else if (this%cur_pass==2) then
+        bnij=0
+        do ba=1,shell_block%dims(1)
+          bmaxb=shell_block%dims(2)
+          if (bab) bmaxb=ba
+          do bb=1,bmaxb
+            bnij=bnij+1
+            bnkl=bnij
+            do bc=1,shell_block%dims(3)
+              bmaxd=shell_block%dims(4)
+              if (bcd) bmaxd=bc
+              if (bsame) then
+                bmaxd=min(bmaxd,bnkl)
+                if (bmaxd==0) exit
+                bnkl=bnkl-bmaxd
+              end if
+              do bd=1,bmaxd
+                val=shell_block%values(bd,bc,bb,ba)
+                if (val==0.0_dp) cycle
+                i=shell_block%offsets(1)+ba
+                j=shell_block%offsets(2)+bb
+                k=shell_block%offsets(3)+bc
+                l=shell_block%offsets(4)+bd
+                if (i<j) then
+                  swap_index=i; i=j; j=swap_index
+                end if
+                if (k<l) then
+                  swap_index=k; k=l; l=swap_index
+                end if
+                if (i<k) then
+                  swap_index=i; i=k; k=swap_index
+                  swap_index=j; j=l; l=swap_index
+                else if (i==k .and. j<l) then
+                  swap_index=j; j=l; l=swap_index
+                end if
+
+          xval = val * this%scale_exchange
+          do v = 1, nf
+            f3(v,7,i,k) = f3(v,7,i,k) - xval*d3(v,7,j,l)
+            f3(v,7,k,i) = f3(v,7,k,i) - xval*d3(v,7,l,j)
+            f3(v,7,i,l) = f3(v,7,i,l) - xval*d3(v,7,j,k)
+            f3(v,7,l,i) = f3(v,7,l,i) - xval*d3(v,7,k,j)
+            f3(v,7,j,k) = f3(v,7,j,k) - xval*d3(v,7,i,l)
+            f3(v,7,k,j) = f3(v,7,k,j) - xval*d3(v,7,l,i)
+            f3(v,7,j,l) = f3(v,7,j,l) - xval*d3(v,7,i,k)
+            f3(v,7,l,j) = f3(v,7,l,j) - xval*d3(v,7,k,i)
+          end do
+              end do
+            end do
+          end do
+        end do
+      end if
+
+    end associate
+
+
+
+  end subroutine
+
+  subroutine int2_umrsf_consume_shell(this, shell_block, thread_id)
+
+    implicit none
+
+    class(int2_umrsf_data_t), intent(inout) :: this
+    type(int2_shell_block_t), intent(in) :: shell_block
+    integer, intent(in) :: thread_id
+    integer :: ba,bb,bc,bd,bmaxb,bmaxd,bnij,bnkl,swap_index
+    logical :: bab,bcd,bsame
+    integer :: i, j, k, l, n, v, c
+    real(kind=dp) :: val, xval, cval
+    integer :: mythread
+
+    bab=shell_block%shells(1)==shell_block%shells(2)
+    bcd=shell_block%shells(3)==shell_block%shells(4)
+    bsame=all(shell_block%shells(1:2)==shell_block%shells(3:4))
+    mythread = thread_id
+
+    if (.not.this%tamm_dancoff) return
+
+    associate ( f3 => this%f3(:,:,:,:,mythread), &
+                d3 => this%d3, &
+                ds => this%ds, &
+                nf => this%nfocks &
+      )
+
+      ! f3/d3(nF,1:11,:,:): 1:8 alpha/beta pairs of the MRSF Coulomb+exchange
+      ! columns, 9:10 mixed alpha/beta spin-pair channels, 11 = agdlr.
+      ! ds(nF,1:8,:,:) = d3+d3^T for the Coulomb columns, precomputed once.
+      ! Explicit loops with the stride-1 v index innermost: the former
+      ! whole-slice assignments read the pointer d3, which the compiler cannot
+      ! prove disjoint from f3, so each of them could build an array temporary.
+
+      if (this%cur_pass==1) then
+        bnij=0
+        do ba=1,shell_block%dims(1)
+          bmaxb=shell_block%dims(2)
+          if (bab) bmaxb=ba
+          do bb=1,bmaxb
+            bnij=bnij+1
+            bnkl=bnij
+            do bc=1,shell_block%dims(3)
+              bmaxd=shell_block%dims(4)
+              if (bcd) bmaxd=bc
+              if (bsame) then
+                bmaxd=min(bmaxd,bnkl)
+                if (bmaxd==0) exit
+                bnkl=bnkl-bmaxd
+              end if
+              do bd=1,bmaxd
+                val=shell_block%values(bd,bc,bb,ba)
+                if (val==0.0_dp) cycle
+                i=shell_block%offsets(1)+ba
+                j=shell_block%offsets(2)+bb
+                k=shell_block%offsets(3)+bc
+                l=shell_block%offsets(4)+bd
+                if (i<j) then
+                  swap_index=i; i=j; j=swap_index
+                end if
+                if (k<l) then
+                  swap_index=k; k=l; l=swap_index
+                end if
+                if (i<k) then
+                  swap_index=i; i=k; k=swap_index
+                  swap_index=j; j=l; l=swap_index
+                else if (i==k .and. j<l) then
+                  swap_index=j; j=l; l=swap_index
+                end if
+
+          xval = val * this%scale_exchange
+          cval = val * this%scale_coulomb
+
+          ! Coulomb (columns 1:8): the 8 permutational contributions collapse
+          ! to 4 distinct Fock targets, each reading one symmetric ds slab:
+          ! f(ij)+=c[d(kl)+d(lk)], f(ji) likewise, f(kl)+=c[d(ij)+d(ji)], f(lk) likewise.
+          do c = 1, 8
+            do v = 1, nf
+              f3(v,c,i,j) = f3(v,c,i,j) + cval*ds(v,c,k,l)
+              f3(v,c,j,i) = f3(v,c,j,i) + cval*ds(v,c,k,l)
+              f3(v,c,k,l) = f3(v,c,k,l) + cval*ds(v,c,i,j)
+              f3(v,c,l,k) = f3(v,c,l,k) + cval*ds(v,c,i,j)
+            end do
+          end do
+
+          ! Exchange (columns 1:8 and the general column 11).
+          do c = 1, 8
+            do v = 1, nf
+              f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,j,l)
+              f3(v,c,k,i) = f3(v,c,k,i) - xval*d3(v,c,l,j)
+              f3(v,c,i,l) = f3(v,c,i,l) - xval*d3(v,c,j,k)
+              f3(v,c,l,i) = f3(v,c,l,i) - xval*d3(v,c,k,j)
+              f3(v,c,j,k) = f3(v,c,j,k) - xval*d3(v,c,i,l)
+              f3(v,c,k,j) = f3(v,c,k,j) - xval*d3(v,c,l,i)
+              f3(v,c,j,l) = f3(v,c,j,l) - xval*d3(v,c,i,k)
+              f3(v,c,l,j) = f3(v,c,l,j) - xval*d3(v,c,k,i)
+            end do
+          end do
+          do v = 1, nf
+            f3(v,11,i,k) = f3(v,11,i,k) - xval*d3(v,11,j,l)
+            f3(v,11,k,i) = f3(v,11,k,i) - xval*d3(v,11,l,j)
+            f3(v,11,i,l) = f3(v,11,i,l) - xval*d3(v,11,j,k)
+            f3(v,11,l,i) = f3(v,11,l,i) - xval*d3(v,11,k,j)
+            f3(v,11,j,k) = f3(v,11,j,k) - xval*d3(v,11,i,l)
+            f3(v,11,k,j) = f3(v,11,k,j) - xval*d3(v,11,l,i)
+            f3(v,11,j,l) = f3(v,11,j,l) - xval*d3(v,11,i,k)
+            f3(v,11,l,j) = f3(v,11,l,j) - xval*d3(v,11,k,i)
+          end do
+
+          ! Mixed alpha/beta spin-pair channels use the GAMESS-compatible
+          ! exchange permutation for UMRSF open-shell pair densities.
+          do c = 9, 10
+            do v = 1, nf
+              f3(v,c,i,l) = f3(v,c,i,l) - xval*d3(v,c,k,j)
+              f3(v,c,l,i) = f3(v,c,l,i) - xval*d3(v,c,j,k)
+              f3(v,c,k,j) = f3(v,c,k,j) - xval*d3(v,c,i,l)
+              f3(v,c,j,k) = f3(v,c,j,k) - xval*d3(v,c,l,i)
+              f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,l,j)
+              f3(v,c,k,i) = f3(v,c,k,i) - xval*d3(v,c,j,l)
+              f3(v,c,l,j) = f3(v,c,l,j) - xval*d3(v,c,i,k)
+              f3(v,c,j,l) = f3(v,c,j,l) - xval*d3(v,c,k,i)
+            end do
+          end do
+              end do
+            end do
+          end do
+        end do
+
+      else if (this%cur_pass==2) then
+        ! In pass 2 only the general component agdlr (column 11) is updated,
+        ! as in the MRSF version (column 7 there).
+        bnij=0
+        do ba=1,shell_block%dims(1)
+          bmaxb=shell_block%dims(2)
+          if (bab) bmaxb=ba
+          do bb=1,bmaxb
+            bnij=bnij+1
+            bnkl=bnij
+            do bc=1,shell_block%dims(3)
+              bmaxd=shell_block%dims(4)
+              if (bcd) bmaxd=bc
+              if (bsame) then
+                bmaxd=min(bmaxd,bnkl)
+                if (bmaxd==0) exit
+                bnkl=bnkl-bmaxd
+              end if
+              do bd=1,bmaxd
+                val=shell_block%values(bd,bc,bb,ba)
+                if (val==0.0_dp) cycle
+                i=shell_block%offsets(1)+ba
+                j=shell_block%offsets(2)+bb
+                k=shell_block%offsets(3)+bc
+                l=shell_block%offsets(4)+bd
+                if (i<j) then
+                  swap_index=i; i=j; j=swap_index
+                end if
+                if (k<l) then
+                  swap_index=k; k=l; l=swap_index
+                end if
+                if (i<k) then
+                  swap_index=i; i=k; k=swap_index
+                  swap_index=j; j=l; l=swap_index
+                else if (i==k .and. j<l) then
+                  swap_index=j; j=l; l=swap_index
+                end if
+
+          xval = val * this%scale_exchange
+          do v = 1, nf
+            f3(v,11,i,k) = f3(v,11,i,k) - xval*d3(v,11,j,l)
+            f3(v,11,k,i) = f3(v,11,k,i) - xval*d3(v,11,l,j)
+            f3(v,11,i,l) = f3(v,11,i,l) - xval*d3(v,11,j,k)
+            f3(v,11,l,i) = f3(v,11,l,i) - xval*d3(v,11,k,j)
+            f3(v,11,j,k) = f3(v,11,j,k) - xval*d3(v,11,i,l)
+            f3(v,11,k,j) = f3(v,11,k,j) - xval*d3(v,11,l,i)
+            f3(v,11,j,l) = f3(v,11,j,l) - xval*d3(v,11,i,k)
+            f3(v,11,l,j) = f3(v,11,l,j) - xval*d3(v,11,k,i)
+          end do
+              end do
+            end do
+          end do
+        end do
+      end if
+
+    end associate
+
+
+
+  end subroutine int2_umrsf_consume_shell
 
 end module tdhf_mrsf_lib

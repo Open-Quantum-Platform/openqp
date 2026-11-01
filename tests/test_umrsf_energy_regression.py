@@ -5,27 +5,66 @@ import types
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import isolate_modules, stub_module
+
 
 ROOT = Path(__file__).resolve().parents[1]
 ENERGY = ROOT / "source" / "modules" / "tdhf_mrsf_energy.F90"
 LIB = ROOT / "source" / "tdhf_mrsf_lib.F90"
+LIBXC = ROOT / "source" / "dftlib" / "libxc.F90"
 SINGLE_POINT = ROOT / "pyoqp" / "oqp" / "library" / "single_point.py"
 OQPDATA = ROOT / "pyoqp" / "oqp" / "molecule" / "oqpdata.py"
 INPUT_CHECKER = ROOT / "pyoqp" / "oqp" / "utils" / "input_checker.py"
 MOLECULE = ROOT / "pyoqp" / "oqp" / "molecule" / "molecule.py"
 
-# Every UMRSF runtype other than "energy" eventually drives a gradient,
-# Hessian, or Z-vector, none of which are implemented for UMRSF. ("thermo"
-# is also gradient-driven but is not in the checker's recognized runtype set,
-# so it is rejected earlier as an unknown runtype rather than by this guard.)
+# UMRSF supports energies only. Every other runtype needs a gradient, Hessian
+# or NAC that UMRSF does not implement.
 UMRSF_BLOCKED_RUNTYPES = (
     "grad", "prop", "data", "hess", "nac", "nacme",
-    "optimize", "meci", "mecp", "mep", "ts", "irc", "neb",
+    "optimize", "meci", "mecp", "tci", "mep", "ts", "irc", "neb",
 )
 
 
 def compact(text: str) -> str:
     return re.sub(r"\s+", "", text.lower())
+
+
+def _fortran_subroutine(path, name):
+    source = compact(path.read_text())
+    start = source.index(f"subroutine{name}(")
+    return source[start:source.index(f"endsubroutine{name}", start)]
+
+
+def _libxc_aliases_by_feature():
+    source = LIBXC.read_text().split("select case (funcname)", 1)[1].split(
+        "end select", 1
+    )[0]
+    heads = list(re.finditer(
+        r"(?mi)^[ \t]*case(?:[ \t]*\(.*\)|[ \t]+default).*$", source
+    ))
+    features = {name: set() for name in ("cam", "meta", "dh", "spc")}
+    for index, head in enumerate(heads):
+        aliases = {
+            value.lower()
+            for value in re.findall(
+                r'"([^"]+)"', head.group(0).split("!", 1)[0]
+            )
+        }
+        stop = heads[index + 1].start() if index + 1 < len(heads) else len(source)
+        body = "\n".join(
+            line.split("!", 1)[0] for line in source[head.end():stop].splitlines()
+        )
+        if re.search(r"dft_params%cam_flag\s*=\s*\.true\.", body, re.I):
+            features["cam"] |= aliases
+        if re.search(
+                r"add_functional\s*\(\s*XC_(?:HYB_)?MGGA_", body, re.I):
+            features["meta"] |= aliases
+        if re.search(r"dft_params%dh_flag\s*=\s*\.true\.", body, re.I):
+            features["dh"] |= aliases
+        if re.search(
+                r"tddft_params%spc_(?:coco|ovov|coov)\s*=", body, re.I):
+            features["spc"] |= aliases
+    return features
 
 
 def _load_regression():
@@ -44,8 +83,8 @@ def _load_regression():
 
 def _load_input_checker():
     """Import input_checker.py in isolation with a minimal MPI stub."""
-    sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-    sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+    stub_module("oqp")
+    stub_module("oqp.utils")
     mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
 
     class MPIManager:
@@ -69,6 +108,7 @@ def _umrsf_config(runtype):
         "input": {
             "runtype": runtype,
             "method": "tdhf",
+            "functional": "bhhlyp",
             "basis": "6-31g",
             "system": "\nO 0.0 0.0 0.0\nH 0.0 0.0 0.95\nH 0.9 0.0 -0.3",
         },
@@ -86,34 +126,134 @@ def _umrsf_guard_errors(report):
     return [
         diag
         for diag in report.errors
-        if diag.path == "tdhf.type" and "only supports runtype=energy" in diag.message.lower()
+        if diag.path == "tdhf.type"
+        and "umrsf-tddft only supports runtype" in diag.message.lower()
     ]
 
 
 class UMRSFEnergyRegressionTests(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(isolate_modules())
+
+    def test_target_state_is_checked_against_the_clipped_response_space(self):
+        # The shared energy stage only bounds its index, because MECP and SOC
+        # sequences can leave a target from the other multiplicity.
+        energy = _fortran_subroutine(ENERGY, "tdhf_mrsf_energy").replace("&", "")
+        clip = energy.index("infos%tddft%nstate=nstates")
+        bound = energy.index("target_state=max(1,min(int(infos%tddft%target_state),nstates))")
+        use = energy.index("mrsf_energies(target_state)")
+        self.assertLess(clip, bound)
+        self.assertLess(bound, use)
+        self.assertNotIn("mrsf_energies(infos%tddft%target_state)", energy)
+
+    def test_sf_and_tddft_targets_are_bounded_and_rejected_by_their_gradients(self):
+        root = ENERGY.parents[0]
+        sf_energy = compact((root / "tdhf_sf_energy.F90").read_text())
+        td_energy = compact((root / "tdhf_energy.F90").read_text())
+        self.assertIn("sf_energies(target_state)", sf_energy)
+        self.assertNotIn("sf_energies(infos%tddft%target_state)", sf_energy)
+        self.assertIn("td_energies(max(1,min(int(infos%tddft%target_state),nstates)))", td_energy)
+        sf_z = compact((root / "tdhf_sf_z_vector.F90").read_text())
+        td_grad = compact((root / "tdhf_gradient.F90").read_text())
+        self.assertIn("if(infos%tddft%target_state>size(bvec_mo,2))then", sf_z)
+        self.assertLess(sf_z.index("size(bvec_mo,2))then"),
+                        sf_z.index("callsfdmat(bvec_mo(:,infos%tddft%target_state)"))
+        self.assertIn("if(infos%tddft%target_state>size(xpy,2))then", td_grad)
+        self.assertLess(td_grad.index("size(xpy,2))then"),
+                        td_grad.index("calliatogen(xpy(:,infos%tddft%target_state)"))
+
+    def test_unconverged_jacobi_alignment_aborts(self):
+        lib = _fortran_subroutine(LIB, "get_jacobi")
+        self.assertIn("if(max_off>=thresh)then", lib)
+        self.assertIn("get_jacobi:corresponding-orbitalalignmentdidnotconverge", lib)
+
+    def test_required_response_terms_cannot_be_disabled_by_environment(self):
+        # No UMRSF setting may come from the process environment: an inherited value would change
+        # the reported gradient or its cost without appearing in the input or result provenance.
+        for path in (LIB,):
+            self.assertNotIn('get_environment_variable("UMRSF', path.read_text(), path.name)
+
     def test_umrsf_mixed_exchange_channels_use_gamess_compatible_permutation(self):
         source = compact(LIB.read_text())
+        kernel = source.split("subroutineint2_umrsf_data_t_update", 1)[1].split(
+            "endsubroutineint2_umrsf_data_t_update", 1)[0]
+        mixed = kernel.split("doc=9,10", 1)[1].split("enddo", 2)
+        mixed = mixed[0] + "enddo" + mixed[1]
         expected_updates = (
-            "f3(:nf,9:10,i,l)=f3(:nf,9:10,i,l)-xval*d3(:nf,9:10,k,j)",
-            "f3(:nf,9:10,l,i)=f3(:nf,9:10,l,i)-xval*d3(:nf,9:10,j,k)",
-            "f3(:nf,9:10,k,j)=f3(:nf,9:10,k,j)-xval*d3(:nf,9:10,i,l)",
-            "f3(:nf,9:10,j,k)=f3(:nf,9:10,j,k)-xval*d3(:nf,9:10,l,i)",
-            "f3(:nf,9:10,i,k)=f3(:nf,9:10,i,k)-xval*d3(:nf,9:10,l,j)",
-            "f3(:nf,9:10,k,i)=f3(:nf,9:10,k,i)-xval*d3(:nf,9:10,j,l)",
-            "f3(:nf,9:10,l,j)=f3(:nf,9:10,l,j)-xval*d3(:nf,9:10,i,k)",
-            "f3(:nf,9:10,j,l)=f3(:nf,9:10,j,l)-xval*d3(:nf,9:10,k,i)",
+            "f3(v,c,i,l)=f3(v,c,i,l)-xval*d3(v,c,k,j)",
+            "f3(v,c,l,i)=f3(v,c,l,i)-xval*d3(v,c,j,k)",
+            "f3(v,c,k,j)=f3(v,c,k,j)-xval*d3(v,c,i,l)",
+            "f3(v,c,j,k)=f3(v,c,j,k)-xval*d3(v,c,l,i)",
+            "f3(v,c,i,k)=f3(v,c,i,k)-xval*d3(v,c,l,j)",
+            "f3(v,c,k,i)=f3(v,c,k,i)-xval*d3(v,c,j,l)",
+            "f3(v,c,l,j)=f3(v,c,l,j)-xval*d3(v,c,i,k)",
+            "f3(v,c,j,l)=f3(v,c,j,l)-xval*d3(v,c,k,i)",
         )
         bad_head_updates = (
-            "f3(:nf,9:10,i,k)=f3(:nf,9:10,i,k)-xval*d3(:nf,9:10,j,l)",
-            "f3(:nf,9:10,k,i)=f3(:nf,9:10,k,i)-xval*d3(:nf,9:10,l,j)",
-            "f3(:nf,9:10,i,l)=f3(:nf,9:10,i,l)-xval*d3(:nf,9:10,j,k)",
-            "f3(:nf,9:10,l,i)=f3(:nf,9:10,l,i)-xval*d3(:nf,9:10,k,j)",
+            "f3(v,c,i,k)=f3(v,c,i,k)-xval*d3(v,c,j,l)",
+            "f3(v,c,k,i)=f3(v,c,k,i)-xval*d3(v,c,l,j)",
+            "f3(v,c,i,l)=f3(v,c,i,l)-xval*d3(v,c,j,k)",
+            "f3(v,c,l,i)=f3(v,c,l,i)-xval*d3(v,c,k,j)",
         )
 
         for update in expected_updates:
-            self.assertIn(update, source)
+            self.assertIn(update, mixed)
         for update in bad_head_updates:
-            self.assertNotIn(update, source)
+            self.assertNotIn(update, mixed)
+
+    def test_umrsf_coulomb_digestion_folds_symmetric_density(self):
+        source = compact(LIB.read_text())
+        kernel = source.split("subroutineint2_umrsf_data_t_update", 1)[1].split(
+            "endsubroutineint2_umrsf_data_t_update", 1)[0]
+        # One symmetric ds slab per Coulomb target, as in the MRSF kernel; ds must
+        # cover all eight alpha/beta Coulomb columns on the UMRSF path.
+        self.assertIn("f3(v,c,i,j)=f3(v,c,i,j)+cval*ds(v,c,k,l)", kernel)
+        self.assertIn("f3(v,c,l,k)=f3(v,c,l,k)+cval*ds(v,c,i,j)", kernel)
+        self.assertNotIn("cval*d3(", kernel)
+        self.assertNotIn("f3(:nf,", kernel)
+        self.assertIn("typeis(int2_umrsf_data_t)ncoul=8", source)
+        self.assertIn("this%d3(:,1:ncoul,mu,nu)+this%d3(:,1:ncoul,nu,mu)", source)
+
+    def test_umrsf_mixed_exchange_quartet_matches_k_of_transposed_density(self):
+        # Use four distinct AO indices so the ERI's eight symmetry-related
+        # permutations are all distinct.  The derivative of
+        # -<B,K[D^T]> with respect to that unique integral is the coefficient
+        # emitted by grd2_umrsf_resp_get_density for channels 9 and 10.
+        i, j, k, l = range(4)
+        permutations = (
+            (i, j, k, l),
+            (j, i, k, l),
+            (i, j, l, k),
+            (j, i, l, k),
+            (k, l, i, j),
+            (l, k, i, j),
+            (k, l, j, i),
+            (l, k, j, i),
+        )
+        bra = [[11.0 * (p + 1) + 3.0 * (q + 1) for q in range(4)]
+               for p in range(4)]
+        ket = [[7.0 * (p + 1) - 2.0 * (q + 1) for q in range(4)]
+               for p in range(4)]
+
+        mixed_energy_derivative = -sum(
+            bra[p][r] * ket[s][q] for p, q, r, s in permutations
+        )
+        mixed_quartet_coefficient = -(
+            bra[i][k] * ket[l][j]
+            + bra[j][k] * ket[l][i]
+            + bra[i][l] * ket[k][j]
+            + bra[j][l] * ket[k][i]
+            + bra[k][i] * ket[j][l]
+            + bra[l][i] * ket[j][k]
+            + bra[k][j] * ket[i][l]
+            + bra[l][j] * ket[i][k]
+        )
+        ordinary_k_coefficient = -sum(
+            bra[p][r] * ket[q][s] for p, q, r, s in permutations
+        )
+
+        self.assertEqual(mixed_quartet_coefficient, mixed_energy_derivative)
+        self.assertNotEqual(mixed_quartet_coefficient, ordinary_k_coefficient)
 
     def test_umrsf_flag_is_scoped_to_umrsf_entry_point(self):
         source = compact(ENERGY.read_text())
@@ -141,7 +281,8 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
 
         self.assertIn("'umrsf'", oqpdata)
         self.assertIn("self._data.tddft.umrsf=td_type=='umrsf'", oqpdata)
-        self.assertIn("umrsf-tddft gradients are not implemented", single)
+        self.assertNotIn("oqp.tdhf_umrsf_z_vector", single)
+        self.assertNotIn("oqp.tdhf_umrsf_gradient", single)
 
     def test_umrsf_energy_runtype_is_not_blocked(self):
         checker = _load_input_checker()
@@ -155,7 +296,7 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
             + report.to_text(),
         )
 
-    def test_umrsf_non_energy_runtypes_are_blocked_at_the_single_choke_point(self):
+    def test_umrsf_non_energy_gradient_runtypes_are_blocked_at_the_single_choke_point(self):
         checker = _load_input_checker()
         for runtype in UMRSF_BLOCKED_RUNTYPES:
             with self.subTest(runtype=runtype):
@@ -170,6 +311,23 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
                     f"error, got {len(guard_errors)}:\n" + report.to_text(),
                 )
                 self.assertIn(runtype, guard_errors[0].value)
+
+    def test_umrsf_energy_still_allows_broader_parameterizations(self):
+        checker = _load_input_checker()
+        config = _umrsf_config("energy")
+        config["input"]["functional"] = "cam-b3lyp"
+        config["dftgrid"] = {"cam_flag": True}
+        config["tdhf"].update({
+            "spc_coco": 0.35,
+            "spc_ovov": 0.35,
+            "spc_coov": 0.35,
+            "z_solver": 3,
+        })
+        report = checker.check_input_values(config, raise_error=False, emit=False)
+        self.assertFalse(
+            any(error.path == "tdhf.z_solver" for error in report.errors),
+            report.to_text(),
+        )
 
     def test_umrsf_energy_does_not_use_mrsf_transition_density_output_path(self):
         source = compact(ENERGY.read_text())

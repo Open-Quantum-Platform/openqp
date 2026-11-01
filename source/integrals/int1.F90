@@ -53,6 +53,7 @@ module int1
     private
     public omp_hst
     public omp_qmmm
+    public omp_qmmm_all
     public multipole_integrals
     public angular_momentum_integrals
     public giao_overlap_derivative
@@ -317,6 +318,45 @@ contains
     chg_op(:)=0
     call nuc_ints(basis, coord, ttt(i,:), chg_op(:), tol)
     call bas_norm_matrix(chg_op(:), basis%bfnrm, l1)
+
+ end subroutine
+
+!-------------------------------------------------------------------------------
+
+!> @brief ESPF operators of all atoms in one pass over the grid
+!
+!> @details Same operators as calling omp_qmmm for i = 1..nat, but the
+!>  weight-independent potential integral of every grid point is evaluated
+!>  once and then distributed over the nat weight vectors.
+!>
+!> @param[in]       basis    basis set
+!> @param[in]       coord    grid point coordinates, (3,npt)
+!> @param[in]       ttt      ESPF weights, (nat,npt)
+!> @param[inout]    chg_ops  packed operators, (nbf*(nbf+1)/2,nat)
+!> @param[in]       logtol   1-e exponential prefactor tolerance
+ subroutine omp_qmmm_all(basis, coord, ttt, chg_ops, logtol)
+
+    use precision, only: dp
+    use basis_tools, only: basis_set
+
+    type(basis_set), intent(in) :: basis
+    real(real64), contiguous, intent(in) :: coord(:,:), ttt(:,:)
+    real(real64), contiguous, intent(inout) :: chg_ops(:,:)
+    real(real64), optional, intent(in) :: logtol
+    real(real64) :: tol
+    integer :: i
+
+    if (present(logtol)) then
+        tol = logtol
+    else
+        tol = log(10.0_dp)*20
+    end if
+
+    chg_ops(:,:) = 0
+    call nuc_ints_multi(basis, coord, ttt, chg_ops, tol)
+    do i = 1, ubound(chg_ops, 2)
+        call bas_norm_matrix(chg_ops(:,i), basis%bfnrm, basis%nbf)
+    end do
 
  end subroutine
 
@@ -1427,6 +1467,90 @@ contains
         end do
 !$omp end do nowait
     end do
+!$omp end parallel
+!   end of shell loops
+
+ end subroutine
+
+!-------------------------------------------------------------------------------
+
+!> @brief Nuclear-attraction-type integrals for several weight vectors at once
+!
+!> @details h(:,i) = sum_p zq(i,p) <mu| -1/|r-r_p| |nu>.  The unit-charge
+!>  block of every point p is computed once per shell pair and accumulated
+!>  into the nat blocks with the weights zq(:,p), instead of repeating the
+!>  Rys quadrature for every weight vector (nuc_ints called nat times).
+!>  Weights that are exactly zero are skipped, as in nuc_ints.
+!>
+!> @param[in]       coord   point coordinates, (3,np)
+!> @param[in]       zq      weights, (nw,np)
+!> @param[inout]    h       packed matrices, (nbf*(nbf+1)/2,nw)
+ subroutine nuc_ints_multi(basis, coord, zq, h, tol)
+
+    type(basis_set), intent(in)     :: basis ! basis without sp-shells
+    real(real64),   intent(in)     :: tol
+    real(real64), contiguous,  intent(in)  :: coord(:,:), zq(:,:)
+    real(real64), contiguous,  intent(inout)  :: h(:,:)
+
+    integer :: nw, np, ii, jj, ip, iw, ig, nblk
+
+    real(real64), dimension(blocksize) :: vunit
+    real(real64), allocatable :: vall(:,:)
+!dir$ attributes align : 64 :: vunit
+
+    type(shell_t) :: shi, shj
+    type(shpair_t) :: cntp
+    nw = ubound(zq, 1)
+    np = ubound(zq, 2)
+
+!$omp parallel &
+!$omp   private( &
+!$omp       ii, jj, ip, iw, ig, nblk, &
+!$omp       vunit, vall, &
+!$omp       shi, shj, cntp &
+!$omp   )
+
+    allocate(vall(blocksize, nw))
+    call cntp%alloc(basis)
+
+!  I shell
+    do ii = basis%nshell, 1, -1
+
+        call shi%fetch_by_id(basis, ii)
+
+!       J shell
+!$omp do schedule(dynamic)
+        do jj = 1, ii
+
+            call shj%fetch_by_id(basis, jj)
+
+            call cntp%shell_pair(basis, shi, shj, tol)
+            if (cntp%numpairs==0) cycle
+
+            nblk = cntp%inao*cntp%jnao
+            vall = 0.0d0
+
+            do ip = 1, np
+                vunit = 0.0d0
+                do ig = 1, cntp%numpairs
+                    call comp_coulomb_int1_prim(cntp, ig, coord(:,ip), -1.0d0, vunit)
+                end do
+                do iw = 1, nw
+                    if (zq(iw,ip) == 0.0d0) cycle
+                    vall(1:nblk,iw) = vall(1:nblk,iw) + zq(iw,ip)*vunit(1:nblk)
+                end do
+            end do
+
+            do iw = 1, nw
+                if (HARMONIC_ACTIVE .and. (shi%harmonic==1 .or. shj%harmonic==1)) &
+                    call cart2sph_mat(vall(:,iw), shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
+                call update_triang_matrix(shi, shj, vall(:,iw), h(:,iw))
+            end do
+
+        end do
+!$omp end do nowait
+    end do
+    deallocate(vall)
 !$omp end parallel
 !   end of shell loops
 

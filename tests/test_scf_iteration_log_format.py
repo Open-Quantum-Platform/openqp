@@ -92,3 +92,39 @@ def test_formatter_descriptors_print_numbers_not_asterisks(tmp_path):
 
     subprocess.run([gfortran, str(source), "-o", str(exe)], check=True)
     subprocess.run([str(exe)], check=True)
+
+
+def test_first_iteration_energy_history_is_initialized(tmp_path):
+    """Exercise the driver's actual history initialization with poisoned locals."""
+    import re
+
+    compiler = shutil.which("gfortran") or shutil.which("gfortran-15")
+    if not compiler:
+        pytest.skip("GNU Fortran required for signaling-NaN initialization")
+    source = (ROOT / "source/scf.F90").read_text()
+    before_options = source.split("! Print SCF Options", 1)[0]
+    # Keep the driver's assignments to the two distinct history variables.
+    # The old code initialized energy%e_old but read the undefined local e_old.
+    assignments = re.findall(r"^\s*(?:energy%|)e_old\s*=.*$", before_options, re.M)
+    fixture = """program check_history
+      use, intrinsic :: ieee_arithmetic
+      implicit none
+      integer, parameter :: dp = kind(1.0d0)
+      type energy_t
+        real(dp) :: e_old
+      end type
+      type(energy_t) :: energy
+      real(dp) :: e_old, current_energy, delta
+""" + "\n".join(assignments) + """
+      current_energy = -75.0_dp
+      delta = current_energy - e_old
+      if (.not. ieee_is_finite(delta)) error stop 1
+      if (delta /= current_energy) error stop 2
+    end program
+"""
+    src = tmp_path / "history.f90"
+    src.write_text(fixture)
+    exe = tmp_path / "history"
+    subprocess.run([compiler, "-O0", "-finit-real=snan", "-ffpe-trap=invalid",
+                    str(src), "-o", str(exe)], check=True)
+    subprocess.run([str(exe)], check=True)

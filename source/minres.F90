@@ -37,6 +37,7 @@ module minres_mod
   !> @brief MINRES solver state for A x = b (A symmetric, M SPD).
   type :: minres_t
     logical :: initialized = .false.
+    logical :: step_prepared = .false.
     integer(kind=8) :: errcode = 0
     ! Krylov / Lanczos work vectors
     real(kind=dp), allocatable :: b(:), x(:)
@@ -55,6 +56,8 @@ module minres_mod
     procedure :: init  => minres_init
     procedure :: clean => minres_clean
     procedure :: step  => minres_step
+    procedure :: prepare_step => minres_prepare_step
+    procedure :: finish_step => minres_finish_step
   end type
 
 contains
@@ -68,11 +71,12 @@ contains
 
 !#################################################################
 
-  subroutine minres_init(this, b, update, precond, dat, x0, tol)
+  subroutine minres_init(this, b, update, precond, dat, x0, ax0, tol)
     class(minres_t), intent(inout) :: this
     real(kind=dp), intent(in) :: b(:)
     procedure(minres_matvec) :: update, precond
     real(kind=dp), optional, intent(in) :: x0(:)
+    real(kind=dp), optional, intent(in) :: ax0(:)
     real(kind=dp), optional, intent(in) :: tol
     type(*), target :: dat
     integer :: n
@@ -83,6 +87,12 @@ contains
     end if
     if (present(x0)) then
       if (size(x0) /= size(b)) then
+        this%errcode = MINRES_BAD_ARGUMENT
+        return
+      end if
+    end if
+    if (present(ax0)) then
+      if (.not. present(x0) .or. size(ax0) /= size(b)) then
         this%errcode = MINRES_BAD_ARGUMENT
         return
       end if
@@ -104,13 +114,25 @@ contains
     if (present(tol)) this%tol = tol
     this%dat = c_loc(dat)
 
-    ! r1 = b - A x
-    call this%update(this%av, this%x, this%dat)
-    if (.not. all(ieee_is_finite(this%av))) then
-      this%errcode = MINRES_BREAKDOWN
-      return
+    ! r1 = b - A x.  Allocating with SOURCE above gives the historical zero
+    ! initial guess when x0 is absent.  For a linear MINRES operator A*0 is
+    ! identically zero, so avoid one potentially expensive operator action in
+    ! that overwhelmingly common case.  An explicit x0 retains the complete
+    ! update and finite-value validation used by all existing callers.
+    if (present(x0)) then
+      if (present(ax0)) then
+        this%av = ax0
+      else
+        call this%update(this%av, this%x, this%dat)
+      end if
+      if (.not. all(ieee_is_finite(this%av))) then
+        this%errcode = MINRES_BREAKDOWN
+        return
+      end if
+      this%r1 = this%b - this%av
+    else
+      this%r1 = this%b
     end if
-    this%r1 = this%b - this%av
     this%r2 = this%r1
 
     ! y = M^-1 r1 ; beta1 = sqrt(r1 . y)  (>0 since M SPD)
@@ -140,6 +162,7 @@ contains
 
     this%error = this%beta1
     this%initialized = .true.
+    this%step_prepared = .false.
     if (this%beta1 <= this%tol) this%errcode = MINRES_CONVERGED
   end subroutine
 
@@ -160,6 +183,7 @@ contains
     nullify(this%precond); nullify(this%update)
     this%dat = c_null_ptr
     this%initialized = .false.
+    this%step_prepared = .false.
     this%errcode = 0
     this%error = huge(1.0_dp)
     this%tol = 0.0_dp
@@ -170,27 +194,71 @@ contains
 
   subroutine minres_step(this)
     class(minres_t), intent(inout) :: this
-    real(kind=dp) :: s, alpha, gamma, delta, gbar, oldeps, phi, denom
+    logical :: ready
+
+    call this%prepare_step(ready)
+    if (.not. ready) return
+
+    call this%update(this%av, this%v, this%dat) ! av = A v
+    call this%finish_step()
+  end subroutine
+
+!#################################################################
+
+  !> Start one independent MINRES recurrence step without applying A.
+  !>
+  !> This split entry point lets a caller collect the Lanczos vectors from
+  !> several independent right-hand sides and evaluate all A*v products in
+  !> one batched physics-kernel traversal.  `finish_step` consumes `this%av`;
+  !> the ordinary scalar `step` above remains source/API compatible.
+  subroutine minres_prepare_step(this, ready)
+    class(minres_t), intent(inout) :: this
+    logical, intent(out) :: ready
+    real(kind=dp) :: s
+
+    ready = .false.
 
     if (.not. this%initialized) then
       this%errcode = MINRES_NOT_INITIALIZED
       return
     end if
 
+    if (this%step_prepared) then
+      this%errcode = MINRES_BAD_ARGUMENT
+      return
+    end if
+    if (.not. safe_denominator(this%beta)) then
+      this%errcode = MINRES_BREAKDOWN
+      return
+    end if
+
+    this%iter = this%iter + 1
+    s = 1.0_dp / this%beta
+    this%v = s * this%y
+    this%step_prepared = .true.
+    ready = .true.
+  end subroutine
+
+!#################################################################
+
+  !> Finish a split MINRES step after the caller has filled `this%av=A*v`.
+  subroutine minres_finish_step(this)
+    class(minres_t), intent(inout) :: this
+    real(kind=dp) :: alpha, gamma, delta, gbar, oldeps, phi, denom
+
+    if (.not. this%initialized) then
+      this%errcode = MINRES_NOT_INITIALIZED
+      return
+    end if
+    if (.not. this%step_prepared) then
+      this%errcode = MINRES_BAD_ARGUMENT
+      return
+    end if
+    this%step_prepared = .false.
+
     associate(x => this%x, r1 => this%r1, r2 => this%r2, y => this%y, &
               v => this%v, av => this%av, w => this%w, w1 => this%w1, w2 => this%w2)
 
-      this%iter = this%iter + 1
-
-      ! --- Lanczos step: generate next vector ------------------------------
-      if (.not. safe_denominator(this%beta)) then
-        this%errcode = MINRES_BREAKDOWN
-        return
-      end if
-      s = 1.0_dp / this%beta
-      v = s * y
-
-      call this%update(av, v, this%dat)        ! av = A v
       y = av
       if (this%iter >= 2) y = y - (this%beta / this%oldb) * r1
       alpha = dot_product(v, y)
@@ -245,7 +313,7 @@ contains
         this%errcode = MINRES_CONVERGED
       end if
     end associate
-  end subroutine
+  end subroutine minres_finish_step
 
 !#################################################################
 

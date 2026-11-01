@@ -145,6 +145,8 @@ def resolved_dftb_type(config):
     inp = _section(config, "input")
     runtype = str(inp.get("runtype", "energy")).strip().lower()
     istate = _int(_section(config, "optimize").get("istate", 0))
+    if runtype == "md":
+        return "ground"
     if runtype in {"optimize", "mep"} and istate == 0:
         return "ground"
 
@@ -316,7 +318,8 @@ def format_dftb_settings(
         ("Target", dftb_target_description(config)),
     ]
     if actual_backend == "native":
-        level = dftb.get("print_level", 1)
+        from oqp.utils.log_format import module_print_level
+        level = module_print_level(config, "dftb")
         if effective_capabilities is None or has_capability(
                 DFTB_CAP_STRUCTURED_TRACE):
             trace_text = "level %s" % level

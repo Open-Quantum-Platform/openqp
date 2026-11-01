@@ -3,6 +3,7 @@
 import json
 import math
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -10,6 +11,7 @@ import sys
 import numpy as np
 import pytest
 
+from oqp_module_isolation import child_env
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -29,7 +31,6 @@ def test_odp_kernel_is_fortran_resident_and_c_interoperable():
 
 
 def test_odp_configuration_requires_explicit_metric_and_continuous_cvs():
-    sys.path.insert(0, str(ROOT / "pyoqp"))
     from oqp.library.odp import ODPUmbrella, parse_odp_cv_specification
 
     types, atoms, labels = parse_odp_cv_specification(
@@ -56,7 +57,6 @@ def test_odp_configuration_requires_explicit_metric_and_continuous_cvs():
 
 
 def test_runtime_checker_rejects_enabled_odp_outside_namd():
-    sys.path.insert(0, str(ROOT / "pyoqp"))
     from oqp.utils.input_checker import check_input_values
 
     config = {
@@ -77,27 +77,37 @@ def test_runtime_checker_rejects_enabled_odp_outside_namd():
     assert not any(item.path == "odp.enabled" for item in report.errors)
 
 
-def test_odp_rejects_nvt_in_legacy_and_semantic_inputs():
+def test_odp_accepts_langevin_nvt_in_legacy_and_semantic_inputs():
     from oqp.utils.input_checker import CheckReport, _check_runtype
-    from oqp.utils.oqp_input import OQPInputError, parse_canonical_oqp
+    from oqp.utils.oqp_input import parse_canonical_oqp
 
     config = {
         "input": {"method": "tdhf", "runtype": "namd"},
-        "md": {"ensemble": "nvt"},
+        "md": {"ensemble": "nvt", "thermostat": "langevin"},
         "odp": {"enabled": True},
     }
     report = CheckReport()
     _check_runtype(config, report)
-    assert any(item.path == "md.ensemble" for item in report.errors)
+    assert not any(item.path in ("md.ensemble", "odp.enabled")
+                   for item in report.errors)
 
-    with pytest.raises(OQPInputError, match="ensemble=nve"):
-        parse_canonical_oqp(
-            'mrsf(nstate=2)/bhhlyp/sto-3g '
-            'namd(S1,nstep=2,ensemble=nvt,thermostat=langevin) '
-            'odp(enabled=true,cv="distance(1,2)",scale="1",'
-            'reference_r="1",reference_p="2",k_parallel=0.1) '
-            'geom="h2.xyz"'
-        )
+    parsed = parse_canonical_oqp(
+        'mrsf(nstate=2)/bhhlyp/sto-3g '
+        'namd(S1,scheme=Overlap,nstep=2,ensemble=nvt,thermostat=langevin) '
+        'odp(enabled=true,cv="distance(1,2)",scale="1",'
+        'reference_r="1",reference_p="2",k_parallel=0.1) '
+        'geom="h2.xyz"'
+    )
+    assert any(call.name == "odp" for call in parsed.modifiers)
+
+
+def test_namd_has_no_odp_ensemble_or_boundary_rejection():
+    source = (ROOT / "pyoqp" / "oqp" / "library" / "namd.py").read_text()
+    assert "_validate_odp_boundary_conditions" not in source
+    assert "same-spin NVE NAMD only" not in source
+    # every ODP evaluation in the NAMD drivers goes through the box hook
+    assert "self.odp.evaluate(coordinates, box=self._odp_box())" in source
+    assert source.count("self.odp.evaluate(") == 1
 
 
 def test_wham_rejects_mismatched_nvt_sampling_temperature(tmp_path, monkeypatch):
@@ -244,11 +254,7 @@ print("ODP=" + json.dumps({
     "singular_angle": singular_angle,
 }))
 '''
-    env = os.environ.copy()
-    pythonpath = str(ROOT / "pyoqp")
-    if env.get("PYTHONPATH"):
-        pythonpath += os.pathsep + env["PYTHONPATH"]
-    env["PYTHONPATH"] = pythonpath
+    env = child_env()
     result = subprocess.run(
         [sys.executable, "-c", script], cwd=ROOT, env=env,
         capture_output=True, text=True, check=False,
@@ -273,10 +279,215 @@ print("ODP=" + json.dumps({
     assert "collinear angle" in values["singular_angle"]
 
 
+def test_built_odp_periodic_cvs_use_minimum_images():
+    script = r"""
+import json
+import numpy as np
+from oqp.library.odp import ODPUmbrella
+from oqp.library.namd import NAMD_QMMM
+
+section = {
+    "enabled": True,
+    "cv": "distance(2,5); asymmetric_distance(5,2,5,7); angle(2,5,7)",
+    "scale": [0.8, 0.6, 1.1],
+    "reference_r": [3.4, -0.6, 1.7],
+    "reference_p": [2.1, 0.9, 2.2],
+    "center": 0.37,
+    "k_parallel": 0.07,
+    "k_perpendicular": 0.02,
+    "window": 3,
+}
+odp = ODPUmbrella(section)
+box = np.array([23.0, 27.0, 31.0])
+rng = np.random.default_rng(20261020)
+# A compact, non-symmetric cluster of CV atoms (2,5,7 in 1-based labels)
+# among spectator atoms; CV atoms are then pushed through different faces.
+whole = rng.uniform(-14.0, 14.0, size=(8, 3))
+whole[1] = [10.9, -12.6, 14.8]
+whole[4] = [12.7, -11.2, 16.1]
+whole[6] = [11.3, -13.9, 17.4]
+max_energy = max_force = max_xi = max_fd = 0.0
+for trial in range(12):
+    jitter = rng.normal(scale=0.15, size=whole.shape)
+    reference_xyz = whole + jitter
+    wrapped = reference_xyz.copy()
+    for atom in (1, 4, 6):
+        wrapped[atom] += box*rng.integers(-2, 3, size=3)
+    for atom in (0, 2, 3, 5, 7):
+        wrapped[atom] += box*rng.integers(-1, 2, size=3)
+    expected = odp.evaluate(reference_xyz)
+    periodic = odp.evaluate(wrapped, box=box)
+    max_energy = max(max_energy, abs(periodic["energy"] - expected["energy"]))
+    max_xi = max(max_xi, abs(periodic["xi"] - expected["xi"]),
+                 float(np.max(np.abs(periodic["cv_raw"] - expected["cv_raw"]))))
+    max_force = max(max_force,
+                    float(np.max(np.abs(periodic["force"] - expected["force"]))))
+    h = 1.0e-6
+    for atom, axis in ((1, 0), (4, 2), (6, 1)):
+        plus = wrapped.copy(); plus[atom, axis] += h
+        minus = wrapped.copy(); minus[atom, axis] -= h
+        fd = -(odp.evaluate(plus, box=box)["energy"]
+               - odp.evaluate(minus, box=box)["energy"])/(2*h)
+        max_fd = max(max_fd, abs(fd - periodic["force"][atom, axis]))
+
+diagonal = np.zeros((8, 3))
+diagonal[1] = [0.0, 0.0, 0.0]
+diagonal[4] = [0.4*23.0, 0.4*23.0, 0.0]
+diagonal[6] = [0.4*23.0 + 1.3, 0.4*23.0 - 0.7, 0.9]
+cube = np.array([23.0, 23.0, 23.0])
+try:
+    odp.evaluate(diagonal, box=cube)
+    diagonal_ok = True
+except RuntimeError:
+    diagonal_ok = False
+
+# the reviewer's angle: two 4.9-bohr arms about vertex 2 in a 10-bohr cell;
+# imaging atom 3 against atom 1 would make the second arm 5.1 bohr
+angle = ODPUmbrella({
+    "enabled": True, "cv": "angle(1,2,3)", "scale": [1.0],
+    "reference_r": [1.0], "reference_p": [2.0], "center": 0.5,
+    "k_parallel": 0.1, "k_perpendicular": 0.0})
+small = np.array([10.0, 10.0, 10.0])
+wrapped_angle = np.array([[0.0, 0.0, 0.0], [4.9, 1.0, 0.0], [-0.2, 2.5, 0.7]])
+unwrapped_angle = wrapped_angle.copy()
+unwrapped_angle[2, 0] += 10.0
+angle_periodic = angle.evaluate(wrapped_angle, box=small)
+angle_reference = angle.evaluate(unwrapped_angle)
+angle_error = abs(angle_periodic["energy"] - angle_reference["energy"]) + float(
+    np.max(np.abs(angle_periodic["force"] - angle_reference["force"])))
+
+def image(vector, cell):
+    return vector - cell*np.round(vector/cell)
+
+# A ring of distance CVs that winds around the cell (review case: x = 0, 4,
+# -4 in a 10-bohr box; minimum-image lengths 4, 2, 4) has no common Cartesian
+# embedding, yet every CV is unambiguous: each must take its own
+# minimum-image value, and the folded force must be the energy derivative.
+triangle = ODPUmbrella({
+    "enabled": True, "cv": "distance(1,2); distance(2,3); distance(3,1)",
+    "scale": [1.0, 0.7, 1.3], "reference_r": [3.0, 1.5, 3.5],
+    "reference_p": [4.5, 2.5, 4.0], "center": 0.4, "k_parallel": 0.1,
+    "k_perpendicular": 0.03})
+ring_box = np.array([10.0, 10.0, 10.0])
+loop = np.array([[0.0, 0.0, 0.0], [4.0, 0.3, -0.2], [-4.0, 0.5, 0.4]])
+ring = triangle.evaluate(loop, box=ring_box)
+ring_expected = [float(np.linalg.norm(image(loop[j] - loop[i], ring_box)))
+                 for i, j in ((0, 1), (1, 2), (2, 0))]
+ring_cv = float(np.max(np.abs(ring["cv_raw"] - ring_expected)))
+ring_fd = 0.0
+for atom in range(3):
+    for axis in range(3):
+        plus = loop.copy(); plus[atom, axis] += 1.0e-6
+        minus = loop.copy(); minus[atom, axis] -= 1.0e-6
+        fd = -(triangle.evaluate(plus, box=ring_box)["energy"]
+               - triangle.evaluate(minus, box=ring_box)["energy"])/2.0e-6
+        ring_fd = max(ring_fd, abs(fd - ring["force"][atom, axis]))
+
+# exactly half the box apart along x: two minimum images, refused
+refusal = None
+try:
+    triangle.evaluate(np.array([[0.0, 0.0, 0.0], [5.0, 0.3, 0.0],
+                                [2.0, 1.0, 0.0]]), box=ring_box)
+except RuntimeError as exc:
+    refusal = str(exc)
+
+# Atoms 2 and 7 are 11.6 bohr apart along x (more than half of 23) but no CV
+# uses that pair; each CV, measured along its own pairs 5-2 and 5-7, equals
+# the CV of the explicitly unwrapped coordinates.
+far_ends = whole.copy()
+far_ends[6] = whole[1] + np.array([11.6, 0.0, 0.0])
+unwrapped = far_ends.copy()
+unwrapped[1] = far_ends[4] + image(far_ends[1] - far_ends[4], box)
+unwrapped[6] = far_ends[4] + image(far_ends[6] - far_ends[4], box)
+far_ends_shifted = far_ends.copy()
+far_ends_shifted[1] += box*np.array([1, 0, -1])
+far_ends_shifted[6] += box*np.array([-2, 1, 0])
+far_ends_cv = float(np.max(np.abs(
+    odp.evaluate(far_ends_shifted, box=box)["cv_raw"]
+    - odp.evaluate(unwrapped)["cv_raw"])))
+
+# Two unconnected distances in a 10-bohr cube: each pair is imaged on its own
+# (imaging atom 4 against atom 1 put the 3-4 pair 9.6 bohr apart).
+apart = ODPUmbrella({"enabled": True, "cv": "distance(1,2); distance(3,4)",
+                     "scale": [1.0, 1.0], "reference_r": [1.0, 1.0],
+                     "reference_p": [2.0, 2.0], "center": 0.5,
+                     "k_parallel": 0.1})
+apart_cv = apart.evaluate(np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0],
+                                    [4.9, 0.0, 0.0], [5.3, 0.0, 0.0]]),
+                          box=np.array([10.0, 10.0, 10.0]))["cv_raw"].tolist()
+
+class Driver:
+    def __init__(self, cell):
+        self.cell = cell
+    def _box_lengths_bohr(self):
+        return self.cell
+
+namd = NAMD_QMMM.__new__(NAMD_QMMM)
+namd.odp = odp
+namd.driver = Driver(box)
+namd.r_all = wrapped
+force, energy = namd._apply_odp_to_force_energy(np.zeros_like(wrapped), -2.5)
+direct = odp.evaluate(wrapped, box=box)
+cluster = NAMD_QMMM.__new__(NAMD_QMMM)
+cluster.odp = odp
+cluster.driver = Driver(None)
+cluster.r_all = wrapped
+cluster_force, cluster_energy = cluster._apply_odp_to_force_energy(
+    np.zeros_like(wrapped), -2.5)
+raw = odp.evaluate(wrapped)
+print("PBC=" + json.dumps({
+    "max_energy": max_energy, "max_xi": max_xi, "max_force": max_force,
+    "max_fd": max_fd, "refusal": refusal, "diagonal_ok": diagonal_ok,
+    "ring_cv": ring_cv, "ring_fd": ring_fd,
+    "angle_error": angle_error,
+    "far_ends_cv": far_ends_cv, "apart_cv": apart_cv,
+    "namd_energy": energy - (-2.5 + direct["energy"]),
+    "namd_force": float(np.max(np.abs(force - direct["force"]))),
+    "namd_unbiased": namd._unbiased_potential_energy,
+    "cluster_energy": cluster_energy - (-2.5 + raw["energy"]),
+    "periodic_differs_from_raw": abs(direct["energy"] - raw["energy"]),
+}))
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script], cwd=ROOT, env=child_env(),
+        capture_output=True, text=True, check=False,
+    )
+    if result.returncode != 0:
+        if "cannot load" in result.stderr or "No module named" in result.stderr:
+            pytest.skip("compiled OpenQP runtime is not available")
+        pytest.fail(result.stdout + result.stderr)
+    marker = next(
+        (line for line in result.stdout.splitlines() if line.startswith("PBC=")), None)
+    assert marker is not None, result.stdout + result.stderr
+    values = json.loads(marker.removeprefix("PBC="))
+    assert values["max_energy"] < 1.0e-12
+    assert values["max_xi"] < 1.0e-12
+    assert values["max_force"] < 1.0e-12
+    assert values["max_fd"] < 2.0e-8
+    assert "exactly half the box length" in values["refusal"]
+    # a ring of CVs winding around the cell: each CV at its own minimum image
+    assert values["ring_cv"] < 1.0e-12
+    assert values["ring_fd"] < 2.0e-8
+    assert values["angle_error"] < 1.0e-12
+    assert values["far_ends_cv"] < 1.0e-12
+    assert abs(values["apart_cv"][0] - 1.0) < 1.0e-12
+    assert abs(values["apart_cv"][1] - 0.4) < 1.0e-12
+    # a diagonal pair separation of (0.4 L, 0.4 L, 0) has a unique minimum
+    # image although its norm exceeds half the box
+    assert values["diagonal_ok"] is True
+    assert values["namd_energy"] == 0.0
+    assert values["namd_force"] == 0.0
+    assert values["namd_unbiased"] == -2.5
+    assert values["cluster_energy"] == 0.0
+    # the wrapped frame really crosses faces: without imaging the bias differs
+    assert values["periodic_differs_from_raw"] > 1.0e-3
+
+
 def test_odp_packed_trj_and_restart_preserve_wham_provenance(tmp_path):
     script = r'''
 import json
 import os
+import shutil
 from types import SimpleNamespace
 import numpy as np
 import oqp.library.namd as namd_module
@@ -289,7 +500,7 @@ class Mol:
     log = os.path.join(root, "job.log")
     oqp_canonical_input = (
         "mrsf(nstate=2)/bhhlyp/6-31g*\n"
-        "namd(S1,nstep=2,dt=0.5)\n"
+        "namd(S1,scheme=Overlap,nstep=2,dt=0.5)\n"
         "odp(enabled=true,cv=\"distance(1,2)\",scale=\"1.0\","
         "reference_r=\"1.0\",reference_p=\"2.0\",center=0.5,"
         "k_parallel=0.1,window=4)\ngeom=\"h2.xyz\"\n"
@@ -355,7 +566,7 @@ series = read_odp_wham_series(d.trajectory_file)
 with np.load(d.restart_file, allow_pickle=False) as saved:
     restart_provenance = json.loads(str(saved["odp_provenance"][0]))
 d2 = NAMD.__new__(NAMD)
-d2.mol = Mol(); d2.nstate = 2; d2.dt_fs = 0.5
+d2.mol = Mol(); d2.nstate = 2; d2.dt_fs = 0.5; d2.dt_adaptive = False
 d2.seed = 1; d2.rng_stream = 0; d2.restart_requested = True
 d2.mass = np.ones(2); d2.velocity_source = "zero"; d2.ensemble = "nve"
 d2.thermostat = "off"; d2.thermostat_temperature = 300.0
@@ -393,11 +604,7 @@ payload = {
 del records
 print("ODP_IO=" + json.dumps(payload))
 '''
-    env = os.environ.copy()
-    pythonpath = str(ROOT / "pyoqp")
-    if env.get("PYTHONPATH"):
-        pythonpath += os.pathsep + env["PYTHONPATH"]
-    env["PYTHONPATH"] = pythonpath
+    env = child_env()
     env["OQP_ODP_TEST_ROOT"] = str(tmp_path)
     result = subprocess.run(
         [sys.executable, "-c", script], cwd=ROOT, env=env,
@@ -431,6 +638,7 @@ def test_python_wham_recovers_synthetic_unbiased_distribution(tmp_path):
 import hashlib
 import json
 import os
+import shutil
 import shutil
 import struct
 import numpy as np
@@ -748,11 +956,7 @@ print("ODP_WHAM=" + json.dumps({
     "overlapping_segments_rejected": overlapping_segments_rejected,
 }))
 '''
-    env = os.environ.copy()
-    pythonpath = str(ROOT / "pyoqp")
-    if env.get("PYTHONPATH"):
-        pythonpath += os.pathsep + env["PYTHONPATH"]
-    env["PYTHONPATH"] = pythonpath
+    env = child_env()
     env["OQP_ODP_WHAM_ROOT"] = str(tmp_path)
     result = subprocess.run(
         [sys.executable, "-c", script], cwd=ROOT, env=env,
@@ -820,11 +1024,7 @@ print("ODP_WHAM=" + json.dumps({
 
 
 def test_odp_restart_example_runs_generated_manifest(tmp_path):
-    env = os.environ.copy()
-    pythonpath = str(ROOT / "pyoqp")
-    if env.get("PYTHONPATH"):
-        pythonpath += os.pathsep + env["PYTHONPATH"]
-    env["PYTHONPATH"] = pythonpath
+    env = child_env()
     result = subprocess.run(
         [
             sys.executable,
@@ -840,3 +1040,123 @@ def test_odp_restart_example_runs_generated_manifest(tmp_path):
     assert "ODP restart completed through step 2" in result.stdout
     assert (tmp_path / "odp-restart.namd.restart.npz").is_file()
     assert (tmp_path / "odp-restart.namd.trj").is_file()
+
+
+def _run_openqp_deck(deck_path, workdir, threads="4"):
+    env = child_env()
+    env["OMP_NUM_THREADS"] = threads
+    return subprocess.run(
+        [sys.executable, "-m", "oqp.pyoqp", "--nompi", str(deck_path)],
+        cwd=workdir, env=env, capture_output=True, text=True, check=False,
+    )
+
+
+def _trajectory_values(workdir, trajectory, extra=""):
+    script = r"""
+import json, sys, warnings
+import numpy as np
+from oqp.library.namd import read_namd_trajectory
+from oqp.library.odp import odp_wham
+header, records = read_namd_trajectory(sys.argv[1])
+adjusted = (records["e_tot_hartree"]
+            - records["thermostat_exchange_cumulative_hartree"])
+values = {
+    "ensemble": header["ensemble"],
+    "thermostat": header["independent_controls"]["thermostat"],
+    "window": header["odp"]["window"],
+    "steps": records["step"].tolist(),
+    "xi": records["odp_xi"].tolist(),
+    "cv_raw": records["odp_cv_raw"].tolist(),
+    "coordinates": records["coordinates_bohr"].tolist(),
+    "bias_split": float(np.max(np.abs(
+        records["e_unbiased_pot_hartree"] + records["odp_bias_hartree"]
+        - records["e_pot_hartree"]))),
+    "exchange": float(np.max(np.abs(
+        records["thermostat_exchange_cumulative_hartree"]))),
+    "adjusted_drift": float(np.max(np.abs(adjusted - adjusted[0]))),
+}
+with warnings.catch_warnings(record=True) as caught:
+    warnings.simplefilter("always")
+    result = odp_wham([sys.argv[1]], 300.0, bins=4)
+values["wham_warning"] = result["ensemble_warning"]
+values["wham_runtime_warnings"] = [
+    str(item.message) for item in caught
+    if issubclass(item.category, RuntimeWarning)]
+try:
+    odp_wham([sys.argv[1]], 310.0, bins=4)
+    values["wham_310"] = None
+except ValueError as exc:
+    values["wham_310"] = str(exc)
+print("TRJ=" + json.dumps(values))
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script, trajectory], cwd=workdir,
+        env=child_env(), capture_output=True, text=True, check=False,
+    )
+    if result.returncode != 0:
+        pytest.fail(result.stdout + result.stderr)
+    marker = next(line for line in result.stdout.splitlines()
+                  if line.startswith("TRJ="))
+    return json.loads(marker.removeprefix("TRJ="))
+
+
+def test_odp_langevin_nvt_namd_run_feeds_canonical_wham(tmp_path):
+    name = "H2CO_BHHLYP-MRSF-NAMD-ODP-NVT"
+    workdir = tmp_path / "ODP"
+    workdir.mkdir()
+    (tmp_path / "geometries").mkdir()
+    shutil.copy(ROOT / "examples" / "ODP" / f"{name}.oqp", workdir)
+    shutil.copy(ROOT / "examples" / "geometries" / "CH2O-2bc62dda4b8a.xyz",
+                tmp_path / "geometries")
+    result = _run_openqp_deck(workdir / f"{name}.oqp", workdir)
+    if result.returncode != 0:
+        if "cannot load" in result.stderr or "No module named" in result.stderr:
+            pytest.skip("compiled OpenQP runtime is not available")
+        pytest.fail(result.stdout[-4000:] + result.stderr[-4000:])
+    values = _trajectory_values(workdir, f"{name}.namd.trj")
+    assert values["ensemble"] == "NVT"
+    assert values["thermostat"]["type"] == "langevin"
+    assert values["thermostat"]["temperature_kelvin"] == 300.0
+    assert values["steps"] == [0, 1, 2, 3]
+    assert values["bias_split"] < 1.0e-12
+    # the thermostat really acted, and the bias stayed conservative: the
+    # energy minus the cumulative thermostat exchange is conserved
+    assert values["exchange"] > 1.0e-6
+    assert values["adjusted_drift"] < 1.0e-5
+    assert values["wham_warning"] is None
+    assert values["wham_runtime_warnings"] == []
+    assert "sampled at 300 K" in values["wham_310"]
+
+
+PME_ODP_DECK = """\
+mrsf(nstate=2)/bhhlyp/6-31g
+namd(S0,scheme=Overlap,nstep=3,ensemble=nvt,thermostat=langevin,thermostat_friction=5.0,seed=11,restart_interval=3)
+scf(conv=1e-09)
+qmmm(forcefield_files="amber14-all.xml amber14/tip3p.xml",qm_atoms="8,9,16,17,18",cutoff=PME,ewald_tol=1e-06,lj_switch=true,h_lj=true,mm_charge_width=0.7)
+odp(enabled=true,cv="distance(9,10); distance(9,17)",scale="1.0,1.0",reference_r="2.2,2.5",reference_p="2.5,2.8",center=0.4,k_parallel=0.05,k_perpendicular=0.01,window=2)
+geom="ala_box.pdb"
+"""
+
+
+def test_odp_periodic_pme_qmmm_namd_run_measures_minimum_image_cvs(tmp_path):
+    pytest.importorskip("openmm")
+    shutil.copy(ROOT / "examples" / "QMMM" / "ala_box.pdb", tmp_path / "ala_box.pdb")
+    deck = tmp_path / "pme.oqp"
+    deck.write_text(PME_ODP_DECK)
+    result = _run_openqp_deck(deck, tmp_path, threads="8")
+    if result.returncode != 0:
+        if "cannot load" in result.stderr or "No module named" in result.stderr:
+            pytest.skip("compiled OpenQP runtime is not available")
+        pytest.fail(result.stdout[-4000:] + result.stderr[-4000:])
+    values = _trajectory_values(tmp_path, "pme.namd.trj")
+    assert values["ensemble"] == "NVT"
+    assert values["window"] == 2
+    assert values["bias_split"] < 1.0e-12
+    box = 16.0/0.52917721092
+    for xyz, cvs in zip(values["coordinates"], values["cv_raw"]):
+        xyz = np.asarray(xyz)
+        for (a, b), cv in zip(((8, 9), (8, 16)), cvs):
+            d = xyz[b] - xyz[a]
+            d -= box*np.round(d/box)
+            assert abs(cv - float(np.linalg.norm(d))) < 1.0e-10
+    assert values["wham_warning"] is None

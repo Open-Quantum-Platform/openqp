@@ -6,6 +6,8 @@ from pathlib import Path
 import numpy as np
 import unittest
 
+from oqp_module_isolation import isolate_modules
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -61,6 +63,7 @@ def water_modes():
 
 class TestModeIrrepAssignment(unittest.TestCase):
     def setUp(self):
+        self.addCleanup(isolate_modules())
         self.symmetry = load_module(
             "openqp_symmetry_modes_under_test",
             "pyoqp/oqp/library/symmetry.py",

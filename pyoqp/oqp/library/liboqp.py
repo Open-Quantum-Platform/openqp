@@ -41,6 +41,40 @@ class _OQPRunner:
 
     def _oqp_config(self):
         cfg = self.mol.config.get("oqp", {})
+        history = cfg.get("gpr_history", 8)
+        scale = cfg.get("gpr_length_scale", 0.5)
+        try:
+            valid_history = (not isinstance(history, (bool, np.bool_)) and
+                             float(history) == int(history) and 3 <= int(history) <= 20)
+        except (TypeError, ValueError, OverflowError):
+            valid_history = False
+        if not valid_history:
+            raise ValueError("gpr_history must be an integer from 3 to 20")
+        try:
+            valid_scale = (not isinstance(scale, (bool, np.bool_)) and
+                           np.isfinite(float(scale)) and 1e-3 <= float(scale) <= 10)
+        except (TypeError, ValueError, OverflowError):
+            valid_scale = False
+        if not valid_scale:
+            raise ValueError("gpr_length_scale must be finite and between 0.001 and 10 Bohr")
+        experimental = (
+            str(cfg.get("model_hessian", "auto")).strip().lower() not in {"auto", "constant"}
+            or str(cfg.get("hessian_update", "auto")).strip().lower() != "auto"
+            or int(history) != 8
+            or float(scale) != 0.5
+        )
+        if experimental and (
+                self.mol.config.get("input", {}).get("runtype") not in {"optimize", "ts"}
+                or self.mol.config.get("input", {}).get("qmmm_flag", False)
+                or str(cfg.get("freeze", "") or "").strip()
+                or str(cfg.get("init_hessian", "model")).strip().lower() != "model"):
+            raise ValueError("Experimental model curvature requires native optimize/ts, "
+                             "init_hessian=model, and no frozen distances or QM/MM")
+        model = str(cfg.get("model_hessian", "auto")).strip().lower()
+        # Crossing objectives also use engine mode=min. Resolve their default
+        # here, where the physical runtype is still available.
+        if model == "auto" and self.mol.config.get("input", {}).get("runtype") not in {"optimize", "ts"}:
+            model = "constant"
         return {
             "coordsys": cfg.get("coordsys", "auto"),
             "trust": float(cfg.get("trust", 0.2)),
@@ -50,6 +84,10 @@ class _OQPRunner:
             "recovery_trust": float(cfg.get("recovery_trust", 0.02)),
             "frozen_distances": parse_frozen_distance_spec(cfg.get("freeze", "")),
             "follow_mode": int(cfg.get("follow", 0)),
+            "model_hessian": model,
+            "hessian_update": str(cfg.get("hessian_update", "auto")).strip().lower(),
+            "gpr_history": int(history),
+            "gpr_length_scale": float(scale),
         }
 
     def _initial_hessian(self):
@@ -119,6 +157,12 @@ class _OQPRunner:
 
     def optimize(self):
         opts = self._oqp_config()
+        if opts["model_hessian"] != "constant" or opts["hessian_update"] != "auto":
+            dump_log(self.mol, title=(
+                "PyOQP: Model curvature controls [model_hessian=%s, "
+                "hessian_update=%s, gpr_history=%d, gpr_length_scale=%.6g bohr]"
+                % (opts["model_hessian"], opts["hessian_update"],
+                   opts["gpr_history"], opts["gpr_length_scale"])))
         atoms = np.asarray(self.mol.get_atoms(), dtype=int).reshape(-1)
         opts = self._resolve_initial_profile(atoms, opts)
         x0 = np.asarray(self.pre_coord, dtype=float).reshape(-1)
@@ -159,6 +203,12 @@ class _OQPRunner:
                 masses=masses,
                 project_global_rigid_modes=isolated,
                 frozen_distances=opts["frozen_distances"],
+                transit_endpoints=getattr(self, "transit_endpoints", None),
+                model_hessian=opts["model_hessian"],
+                hessian_update=opts["hessian_update"],
+                gpr_history=opts["gpr_history"],
+                gpr_length_scale=opts["gpr_length_scale"],
+                logger=lambda message: dump_log(self.mol, title=message),
             )
             dump_log(
                 self.mol,
@@ -470,6 +520,51 @@ class OQPTSOpt(_OQPRunner, StateSpecificOpt):
 
     def __init__(self, mol):
         super().__init__(mol)
+
+    def optimize(self):
+        cfg = self.mol.config.get("oqp", {})
+        search = str(cfg.get("ts_search", "prfo")).lower()
+        if search not in {"prfo", "qst2", "qst3"}:
+            raise ValueError("oqp.ts_search must be prfo, qst2, or qst3")
+        self.transit_endpoints = None
+        if search != "prfo":
+            if str(cfg.get("freeze", "")).strip():
+                raise ValueError("QST2/QST3 do not support frozen distances")
+            if cfg.get("init_hessian", "model") != "model":
+                raise ValueError("QST2/QST3 use init_hessian=model")
+            atoms = np.asarray(self.mol.get_atoms(), dtype=int).reshape(-1)
+            def read_endpoint(key):
+                filename = str(cfg.get(key, "")).strip()
+                if not filename:
+                    raise ValueError("%s requires oqp.%s" % (search, key))
+                if not os.path.isabs(filename):
+                    filename = os.path.join(os.path.dirname(getattr(self.mol, "input_file", "") or ""), filename)
+                image = _read_xyz(filename)
+                try:
+                    numbers = [int(SYMBOL_MAP[s]) for s in image.symbols]
+                except KeyError as exc:
+                    raise ValueError("Endpoint has an unrecognized element symbol") from exc
+                if numbers != atoms.tolist():
+                    raise ValueError("%s atoms must match the input in element and order" % key)
+                value = np.asarray(image.coordinates_angstrom, dtype=float)
+                if not np.isfinite(value).all():
+                    raise ValueError("Endpoint coordinates must be finite")
+                return value * ANGSTROM_TO_BOHR
+            from oqp.library.oqp_transit import internal_midpoint
+            reactant = np.asarray(self.pre_coord, dtype=float).reshape(-1, 3)
+            product = read_endpoint("ts_product")
+            product = np.asarray(kabsch_align(reactant, product))
+            if search == "qst3":
+                guess = np.asarray(kabsch_align(reactant, read_endpoint("ts_guess"))).reshape(-1)
+                interpolation = "supplied_guess"
+            else:
+                guess, interpolation = internal_midpoint(atoms, reactant, product)
+            self.transit_endpoints = (reactant.reshape(-1).copy(), product.reshape(-1).copy())
+            self.pre_coord = guess.copy()
+            self.mol.update_system(guess)
+            dump_log(self.mol, title="PyOQP: Native %s STQN [%s; model Hessian, no frequencies]"
+                     % (search.upper(), interpolation))
+        super().optimize()
 
     def _initial_hessian(self):
         policy = str(
@@ -839,6 +934,7 @@ class OQPBaekAOpt(_OQPRunner, Optimizer):
                 maxiter=maxiter,
                 masses=masses,
                 project_global_rigid_modes=isolated,
+                model_hessian=opts["model_hessian"],
             )
             dump_log(
                 self.mol,
@@ -1290,6 +1386,7 @@ class OQPNEBOpt(StateSpecificOpt):
             atoms, x0, mode="min", maxiter=self.maxit,
             masses=masses,
             project_global_rigid_modes=isolated,
+            model_hessian="constant",
         )
         last = {
             "x": np.asarray(x0, dtype=float).reshape(-1).copy(),
@@ -1365,6 +1462,19 @@ class OQPNEBOpt(StateSpecificOpt):
         # Linear interpolation of all images (Bohr).
         fractions = np.linspace(0.0, 1.0, self.nimage)
         images = [reactant + f * (product - reactant) for f in fractions]
+
+        interpolation = str(self.mol.config.get("oqp", {}).get("neb_interpolation", "linear")).lower()
+        if interpolation not in {"linear", "idpp"}:
+            raise ValueError("oqp.neb_interpolation must be linear or idpp")
+        if interpolation == "idpp":
+            from oqp.library.oqp_idpp import idpp_interpolate
+            initial = idpp_interpolate(images)
+            images = initial["images"]
+            self.mol.neb_idpp_result = initial
+            dump_log(self.mol, title="PyOQP: IDPP initial path converged=%s, fmax=%.3e, iterations=%d"
+                     % (initial["converged"], initial["fmax"], initial["iters"]))
+            if not initial["converged"]:
+                raise RuntimeError("IDPP initial path did not converge; no electronic NEB started")
 
         neb = NEB(images, k_spring=self.k_spring, climbing=self.climbing,
                   climb_fmax=self.climb_fmax)

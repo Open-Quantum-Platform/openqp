@@ -9,8 +9,9 @@ import shutil
 import hashlib
 import platform
 import subprocess
-import multiprocessing
 import numpy as np
+from multiprocessing.pool import ThreadPool
+from contextlib import contextmanager
 from numpy import linalg as la
 from oqp.molecule import Molecule
 from oqp.utils.mpi_utils import MPIManager, MPIPool
@@ -119,6 +120,7 @@ from oqp.library.nac_utils import (
     hst_derivative_coupling,
     interstate_coupling,
     load_numerical_nac_cache,
+    normalize_retained_state_overlap,
     write_numerical_nac_cache_marker,
 )
 from oqp.utils.tb_backends import is_tb_method, make_tb_adapter, tb_config
@@ -156,6 +158,10 @@ MP2_VARIANT_SCALES = {
 }
 
 
+# Minimum macro-iterations of an ARH escalation stage (see _run_scf).
+ARH_STAGE_MAXIT = 100
+
+
 SUPPORTED_SINGLE_POINT_ENERGY_METHODS = {
     # 'ccsd'/'ccsd(t)' arrive with #302; the two guards were merged into this
     # one constant so a method cannot be accepted by one and rejected by the
@@ -168,12 +174,90 @@ SUPPORTED_SINGLE_POINT_ENERGY_METHODS = {
 }
 
 
+def _marks_grad_buffer(kernel):
+    """Wrap a native gradient kernel so the buffer write is recorded.
+
+    The Fortran kernels fill ``mol.data._data.grad`` in place.  That buffer is
+    allocated once and never cleared, so nothing downstream can tell a computed
+    gradient from leftover memory unless the write is declared.
+    """
+
+    def _call(mol, *args, **kwargs):
+        result = kernel(mol, *args, **kwargs)
+        mol.mark_grad_valid()
+        return result
+
+    _call.__name__ = getattr(kernel, '__name__', 'gradient_kernel')
+    return _call
+
+
 def _normalized_method_label(method):
     return str(method).strip().lower()
 
 
 def _raise_unavailable_wavefunction_method(method):
     raise ValueError(f'Unknown method type {method}')
+
+
+#: Per-ladder previous-step records: (record in a checkpoint) -> (``_old`` tag).
+_LADDER_HISTORY_TAGS = tuple(
+    (tag, f'{tag}_old') for tag in (
+        'OQP::td_bvec_mo_s', 'OQP::td_singlet_energies',
+        'OQP::td_bvec_mo_t', 'OQP::td_triplet_energies',
+        'OQP::state_tracking_lineage_s', 'OQP::state_tracking_phase_initial_s',
+        'OQP::state_tracking_lineage_t', 'OQP::state_tracking_phase_initial_t',
+    )
+)
+
+
+def _carry_ladder_history(data, previous_data):
+    """Install the per-ladder records of ``previous_data`` as ``*_old`` tags.
+
+    Every per-ladder ``*_old`` tag is invalidated first.  A Molecule is reused
+    across steps (MD, scripted drivers), so a previous step that carries no
+    record for a ladder -- a single-ladder or older checkpoint -- must leave
+    that ladder WITHOUT history; keeping the record of an earlier two-ladder
+    step would let NACME.load_state_history align and couple against the
+    wrong geometry instead of taking its no-history fallback.  Amplitudes and
+    energies of a ladder are installed only as a pair.
+    """
+    for _, old in _LADDER_HISTORY_TAGS:
+        try:
+            data[old]
+        except (AttributeError, KeyError):
+            continue
+        del data[old]
+    records = dict(_LADDER_HISTORY_TAGS)
+    for amplitude, ladder in (('OQP::td_bvec_mo_s', 'OQP::td_singlet_energies'),
+                              ('OQP::td_bvec_mo_t', 'OQP::td_triplet_energies')):
+        if amplitude in previous_data and ladder in previous_data:
+            data[records[amplitude]] = previous_data[amplitude]
+            data[records[ladder]] = previous_data[ladder]
+    for spin in ('s', 't'):
+        for record in ('OQP::state_tracking_lineage', 'OQP::state_tracking_phase_initial'):
+            tag = f'{record}_{spin}'
+            if tag in previous_data:
+                data[records[tag]] = previous_data[tag]
+
+
+def _single_ladder_child(config):
+    """Drop the two-ladder selectors from a finite-difference child job config.
+
+    A displaced child (numerical NAC, numerical Hessian, IR/Raman intensities)
+    is one single-ladder calculation: the parent has already switched [tdhf]
+    to the ladder it differentiates (response_manifold), and the child's own
+    runtype (nacme/grad/energy) has no second ladder.  [properties] grad_s,
+    grad_t and soc are requests of the PARENT run.  Left in the copied config
+    they are read again by the child's input checker, which refuses them
+    outside runtype=grad/prop/data, so every worker of a numerical-NAC
+    two-ladder run stopped before computing anything.  The values are the
+    schema defaults in string form, valid both for write_config (which omits
+    the empty ones) and for an all-string input_dict.
+    """
+    properties = config.setdefault('properties', {})
+    properties['grad_s'] = ''
+    properties['grad_t'] = ''
+    properties['soc'] = 'false'
 
 
 def _no_integral_symmetry_in_child(config):
@@ -209,6 +293,59 @@ def _no_integral_symmetry_in_child(config):
     symmetry = config.setdefault('symmetry', {})
     symmetry['use_integral_symmetry'] = 'false'
     return config
+
+
+def _finite_difference_response_tolerances(config):
+    """Tighten the response convergence of a finite-difference gradient child.
+
+    ``[tdhf] zvconv`` and ``[tdhf] conv`` bound the SQUARED residual norm of
+    the Z-vector and Davidson solvers (tdhf_z_vector passes sqrt(zvconv) to
+    the PCG solver), so the default 1e-10 leaves residuals up to 1e-5, and the
+    excited-state gradient, which is linear in the Z and amplitude errors,
+    carries errors of ~1e-6 that change discontinuously with the iteration
+    count.  A central difference over +-dx divides them by 2 dx: linear
+    H3+/STO-3G TDHF, dx = 1e-3 bohr, numerical zz 0.26306 against 0.26447
+    Eh/bohr^2 from the state energies and the analytic Hessian, while every
+    single gradient met its tolerance.  Converge each child so that both
+    residuals are below max(1e-5 dx, 1e-8) (Hessian error ~1e-6); a looser
+    user value is tightened, a tighter one kept.  Below ~1e-9 the MRSF
+    Davidson stalls (squared residual 2.5e-18 after its auto-restart, H2O
+    BHHLYP/6-31G*) and an unreachable tolerance aborts the child.
+
+    ``[scf] conv`` is left to the user: tightening it in every child made
+    open-shell DFT numerical Hessians up to 5x slower (ROKS OH, dx = 5e-3),
+    while the response tolerances cost +28 % on benzene B3LYP RPA.
+    """
+    def as_float(value):
+        return float(str(value).strip().lower().replace('d', 'e'))
+
+    dx = abs(as_float(config.get('hess', {}).get('dx', 1.0e-3)))
+    target = max(1.0e-5 * dx, 1.0e-8) ** 2
+    tdhf = config.setdefault('tdhf', {})
+    for key in ('zvconv', 'conv'):
+        try:
+            current = as_float(tdhf.get(key, 1.0))
+        except ValueError:
+            current = 1.0
+        if current > target:
+            tdhf[key] = f'{target:.3e}'
+    return config
+
+
+def _with_child_response_tolerances(model_signature, config):
+    """Add the response tolerances the displaced children actually run at.
+
+    The scratch gradients of a numerical Hessian are reused on restart by
+    name, and the name signs on the parent configuration.  The children run
+    at the tolerances _finite_difference_response_tolerances sets, so sign on
+    those too: gradients written before that tightening existed (or at another
+    dx, which changes the tolerance) are then recomputed instead of reused.
+    """
+    child_tdhf = _finite_difference_response_tolerances(
+        copy.deepcopy(config)).get('tdhf', {})
+    signature = dict(model_signature)
+    signature['fd_child_tdhf'] = {key: str(child_tdhf.get(key)) for key in ('zvconv', 'conv')}
+    return signature
 
 
 def _displacement_run_signature(origin_coord, atoms, dx, model_signature):
@@ -268,6 +405,25 @@ class Calculator:
         self.mpi_manager = MPIManager()
 
 
+@contextmanager
+def grad_request(mol, values):
+    """Install one manifold's gradient request as [properties] grad.
+
+    Gradient, its state labels and the exported file list all read that key, so
+    a run that solves two spin manifolds swaps the request in per manifold
+    instead of widening every consumer to a spin argument.  The SOC-NAMD driver
+    does exactly this between manifolds (oqp.library.namd, per-(mult, root)
+    gradient loop).
+    """
+    properties = mol.config['properties']
+    previous = properties.get('grad', [])
+    properties['grad'] = list(values)
+    try:
+        yield
+    finally:
+        properties['grad'] = previous
+
+
 class LastStep(Calculator):
     """
     OQP last step single point calculation class
@@ -319,18 +475,32 @@ class LastStep(Calculator):
     def set_param(self, param):
         self.d4_param = param
 
-    def compute(self, mol, grad_list=None):
+    def compute(self, mol, grad_list=None, spin_label=None, state_blocks=None):
+        """Add the dispersion correction and publish the totals.
+
+        ``spin_label`` ('s' or 't') publishes to the spin-labelled files; None
+        keeps the unlabelled names.  The correction is added IN PLACE, so this
+        may run only once per set of energies and gradients -- a second call on
+        the same values would add dftd4 twice.
+
+        ``state_blocks`` describes an energy array that joins several response
+        solves, as ((multiplicity, nroots), ...) after the shared reference
+        entry.  Without it every root is labelled in the current target
+        multiplicity.
+        """
         # do dftd4
         energy, grad = self.get_dispersion(mol, grad_list)
-        energies = self.final_energy(energy)
+        energies = self.final_energy(energy, spin_label=spin_label,
+                                     state_blocks=state_blocks)
 
         if not grad_list:
             return energies
 
-        grads = self.final_grad(grad, grad_list)
+        grads = self.final_grad(grad, grad_list, spin_label=spin_label,
+                                state_blocks=state_blocks)
         return energies, grads
 
-    def final_energy(self, d4_energy):
+    def final_energy(self, d4_energy, spin_label=None, state_blocks=None):
         # add dftd4 energy
         el = self.mol.energies
         self.mol.energies = [x + d4_energy for x in el]
@@ -339,12 +509,13 @@ class LastStep(Calculator):
             self.mol,
             title='PyOQP: Final Energy',
             section='energy',
-            info={'el': el, 'd4': d4_energy}
+            info={'el': el, 'd4': d4_energy, 'state_blocks': state_blocks}
         )
 
         # export data
         if self.export:
-            dump_data(self.mol, (self.mol.energies, self.export_title), title='ENERGY', fpath=self.mol.log_path)
+            dump_data(self.mol, (self.mol.energies, self.export_title),
+                      title='ENERGY', spin_label=spin_label, fpath=self.mol.log_path)
 
         # save mol
         if self.save_mol:
@@ -352,7 +523,7 @@ class LastStep(Calculator):
 
         return self.mol.energies
 
-    def final_grad(self, d4_grad, grad_list):
+    def final_grad(self, d4_grad, grad_list, spin_label=None, state_blocks=None):
         # add dftd4 grad
         el = self.mol.grads
         self.mol.grads = [x + d4_grad for x in el]
@@ -361,13 +532,14 @@ class LastStep(Calculator):
             self.mol,
             title='PyOQP: Final Gradient',
             section='grad',
-            info={'el': el, 'd4': d4_grad, 'grad_list': grad_list}
+            info={'el': el, 'd4': d4_grad, 'grad_list': grad_list,
+                  'state_blocks': state_blocks}
         )
 
         # export data
         if self.export:
-            dump_data(self.mol, (self.mol.grads, self.export_title, grad_list), title='GRADIENT',
-                      fpath=self.mol.log_path)
+            dump_data(self.mol, (self.mol.grads, self.export_title, grad_list),
+                      title='GRADIENT', spin_label=spin_label, fpath=self.mol.log_path)
 
         # save mol
         if self.save_mol:
@@ -570,6 +742,11 @@ class SinglePoint(Calculator):
         if len(functional) == 0:
             functional = 'hf'
         basis = self.basis.replace('*', 's')
+        if basis.lower().startswith('file:'):
+            # A custom-basis spec is an input path, not a filename component.
+            # Its colon/separators are invalid on Windows; a short stable ID
+            # also leaves room for the project's name in CI output paths.
+            basis = 'custom-' + hashlib.sha256(self.basis.encode('utf-8')).hexdigest()[:12]
         if self.mol.idx != 1:
             guess_file = self.mol.log.replace('.log', '_%s_%s_%s_%s_%s.molden' % (
                 self.mol.idx, cal_type, scf_type, functional, basis))
@@ -706,6 +883,54 @@ class SinglePoint(Calculator):
             for i, j in zip(swapmo_array[::2], swapmo_array[1::2]):
                 og_val[[i - 1, j - 1]] = og_val[[j - 1, i - 1]]
                 og_vec[[i - 1, j - 1]] = og_vec[[j - 1, i - 1]]
+            # A supplied guess (JSON, resident orbitals) is a solution in its
+            # own right and may be accepted on the first build, so its density
+            # must belong to the swapped orbitals. A computed guess only starts
+            # the iterations; there the swap names the occupation that
+            # rstctmo/MOM follow from the guess density, which is left as it is
+            # (the delta-CHP core-hole examples converge from that start).
+            from oqp.library.guess import GUESS_SUPPLIED
+            if int(self.mol.data._data.control.guess) == GUESS_SUPPLIED:
+                self._rebuild_guess_density()
+
+    def _rebuild_guess_density(self):
+        """Rebuild the guess densities from the (swapped) supplied orbitals.
+
+        A supplied guess carries its own OQP::DM_A/DM_B, read before swapmo
+        runs, and the SCF may accept orbitals and density together on its
+        first build.  Swapping only the orbital rows left a density of the
+        unswapped occupation next to orbitals of the swapped one: a JSON
+        ground state with swapmo=1,6 converged on the first build at the
+        ground-state energy while publishing core-hole orbitals.  Same occupation
+        convention as get_ab_initio_density (source/guess.F90): RHF DM_A is the
+        doubly occupied total density, ROHF builds both spins from the alpha
+        orbitals, UHF from its own spin orbitals.  swapmo acts on the alpha
+        set, so RHF/ROHF beta orbitals follow it.
+        """
+        data = self.mol.data
+        ctrl = data._data.control
+        prop = data._data.mol_prop
+        scftype = int(ctrl.scftype)
+        na, nb, nocc = int(prop.nelec_A), int(prop.nelec_B), int(prop.nocc)
+        vec_a = data["OQP::VEC_MO_A"]                    # rows are MOs
+        nbf = vec_a.shape[1]
+        tril = np.tril_indices(nbf)
+
+        def packed(vec, nel, occ):
+            occupied = vec[:nel]
+            return (occ * occupied.T @ occupied)[tril]
+
+        if scftype in (1, 3):
+            data["OQP::VEC_MO_B"][:] = vec_a
+            data["OQP::E_MO_B"][:] = data["OQP::E_MO_A"]
+        dm_a = data["OQP::DM_A"]
+        dm_b = data["OQP::DM_B"]
+        if scftype == 1:
+            dm_a[:] = packed(vec_a, nocc, 2.0).reshape(dm_a.shape)
+            return
+        dm_a[:] = packed(vec_a, na, 1.0).reshape(dm_a.shape)
+        vec_b = vec_a if scftype == 3 else data["OQP::VEC_MO_B"]
+        dm_b[:] = packed(vec_b, nb, 1.0).reshape(dm_b.shape)
 
     def reference(self, do_init_scf=True):
         if is_tb_method(self.method):
@@ -830,6 +1055,16 @@ class SinglePoint(Calculator):
         # Metadata-only MO irrep labels (no-op unless symmetry is enabled).
         if getattr(self.mol, 'symmetry_metadata', None):
             self.mol.label_molecular_orbitals()
+            # Stage the per-MO irrep indices the correlated methods read.
+            # Descriptive data only -- it changes nothing until a method
+            # chooses to block by it -- but until now nothing on a production
+            # path called this, so OQP::sym_mo_irrep_a/_b and
+            # OQP::sym_irrep_xor were never written in a real symmetry-enabled
+            # FCI/CASCI/CASSCF run and the machinery that reads them could
+            # never be reached (issue #340).
+            stage = getattr(self.mol, 'stage_mo_irreps', None)
+            if callable(stage):
+                stage()
 
         return energy
 
@@ -842,13 +1077,13 @@ class SinglePoint(Calculator):
             mult = int(cfg.get('scf', {}).get('multiplicity', 1))
         except (TypeError, ValueError):
             mult = 1
-        try:
-            z = self.mol.get_atoms()
-            tm = bool(((z >= 21) & (z <= 30)).any() or ((z >= 39) & (z <= 48)).any()
-                      or ((z >= 57) & (z <= 80)).any())
-            natom = int(len(z))
-        except Exception:
-            tm, natom = False, 0
+        # No fallback: a molecule without atoms cannot reach the SCF, and a
+        # silent (tm=False, natom=0) answer would steer the converger choice
+        # for the hard transition-metal class without any trace in the log.
+        z = self.mol.get_atoms()
+        tm = bool(((z >= 21) & (z <= 30)).any() or ((z >= 39) & (z <= 48)).any()
+                  or ((z >= 57) & (z <= 80)).any())
+        natom = int(len(z))
         try:
             charge = int(cfg.get('input', {}).get('charge', 0))
         except (TypeError, ValueError):
@@ -876,12 +1111,18 @@ class SinglePoint(Calculator):
         primary = 'diis'   # C-DIIS: best default
 
         if mode == 'ml':
+            # Only the absence of the optional distilled model selects the
+            # rule fallback. A model that is present but fails to import or
+            # to predict is a defect and must stop the run.
             try:
                 from oqp.library.scf_selector_model import predict as _ml_predict  # distilled, optional
+            except ModuleNotFoundError as exc:
+                if exc.name != 'oqp.library.scf_selector_model':
+                    raise
+                used = 'ML(no model -> rules)'
+            else:
                 primary = _ml_predict(f)
                 used = 'ML-model'
-            except Exception:
-                used = 'ML(no model -> rules)'
 
         # Stability following is opt-in: it runs only when the user sets
         # scf.stability in the input. The SCF manager never enables it on its
@@ -924,9 +1165,14 @@ class SinglePoint(Calculator):
           2. **Escalation ladder** — if the primary converger does not converge,
              walk a chain of progressively more robust (and costlier) methods,
              each warm-started from the previous orbitals. The default chain is
-             ``SOSCF`` (cheap second-order, fixes most DIIS stalls) → then
+             ``SOSCF`` (cheap second-order, fixes most DIIS stalls) → ``ARH``
+             (trust region on the augmented Roothaan-Hall model: no response
+             builds, but linear convergence, so it gets at least
+             ``ARH_STAGE_MAXIT`` macro-iterations) → then
              ``scf.alternative_scf`` (default TRAH, a globally convergent
-             trust-region method). Set ``scf.escalation`` to a comma-separated
+             trust-region method that finishes what ARH's linear tail cannot
+             within its budget; after ARH it uses the exact Hessian unless
+             ``scf.trh_arh`` is set). Set ``scf.escalation`` to a comma-separated
              list (e.g. ``soscf,trah``) to override the chain explicitly;
              ``scf.alternative_scf`` (back-compat) sets only the final method.
              The primary converger is dropped from the chain and duplicates are
@@ -939,6 +1185,9 @@ class SinglePoint(Calculator):
              This catches the case where DIIS *converges* to a non-aufbau /
              non-lowest open-shell (UHF/ROHF) solution and would otherwise be
              returned silently.  It is never enabled automatically.
+             It also covers ``converger_type=arh``, which (like DIIS) does no
+             exact-Hessian stability check of its own; only TRAH, which
+             checks at convergence, skips this pass.
 
         Returns
         -------
@@ -952,146 +1201,200 @@ class SinglePoint(Calculator):
         stability = getattr(self, 'stability', scf_config.get('stability', False))
         trah_stab_default = scf_config.get('trh_stab', False)
 
+        # TRAH minimises over orbital rotations and never re-diagonalises, so it
+        # cannot keep a MOM or rstctmo (non-aufbau) occupation: from such a
+        # stationary point it descends to a lower state and reports convergence.
+        # The native driver refuses the combination; never route one there.
+        occupation_constrained = (bool(scf_config.get('rstctmo', False))
+                                  or bool(scf_config.get('mom', False)))
+
         # --- SCF manager: converger_type=auto|ml picks the primary from system features ---
         if str(primary).lower() in ('auto', 'ml'):
             primary, stability = self._select_converger(str(primary).lower(), stability)
+            if occupation_constrained and str(primary).lower() == 'trah':
+                dump_log(self.mol, section='',
+                         title='PyOQP SCF manager: TRAH cannot keep the MOM/rstctmo '
+                               'occupation; using diis')
+                primary = 'diis'
         primary = self._apply_selected_converger(primary)
 
-        # --- Stage 1: primary converger ---
-        data.set_scf_converger_type(primary)
-        self.scf()
-        converged = self.mol.mol_energy.SCF_converged
-        if converged:
-            dump_log(self.mol, title='PyOQP: SCF converged with %s' % primary, section='')
-
-        # --- Stage 2: escalate the converger on non-convergence ---
-        # Escalation ladder of progressively more robust (and costlier) methods.
-        # Default: SOSCF (cheap second-order, fixes most DIIS stalls) BEFORE TRAH
-        # (globally convergent trust region). 'scf.escalation' overrides the
-        # comma-separated chain; 'scf.alternative_scf' (back-compat) sets the
-        # final method. Each stage warm-starts from the previous orbitals.
-        escalation = scf_config.get('escalation', None)
-        if escalation:
-            chain = [c.strip().lower() for c in str(escalation).split(',') if c.strip()]
-        else:
-            chain = ['soscf']
-            if fallback:
-                chain.append(fallback)
-        # Drop the primary and de-duplicate while preserving order.
-        _seen = set()
-        chain = [c for c in chain if c != primary and not (c in _seen or _seen.add(c))]
-        # TRAH is not occupation constrained and may rotate a MOM/rstctmo
-        # core-hole reference into a different electronic state.  Keep the
-        # occupation-preserving recovery stages, but never silently enter TRAH
-        # for a restricted-orbital calculation.
-        rstctmo = bool(scf_config.get('rstctmo', False))
-        if rstctmo and 'trah' in chain:
-            chain = [c for c in chain if c != 'trah']
-            dump_log(
-                self.mol,
-                title='PyOQP: TRAH recovery disabled because scf.rstctmo=true; '
-                      'TRAH cannot preserve the requested orbital ordering',
-                section='input',
-            )
-        for conv in chain:
-            if converged:
-                break
-            dump_log(self.mol,
-                     title='PyOQP: SCF not converged; escalating to %s' % conv,
-                     section='input')
-            data.set_scf_converger_type(conv)
-            data.set_sd_scf(False)
+        # Every stage below changes the native converger; whatever happens,
+        # including an error, later reference() calls get the primary back.
+        try:
+            # --- Stage 1: primary converger ---
+            data.set_scf_converger_type(primary)
             self.scf()
             converged = self.mol.mol_energy.SCF_converged
+            if converged:
+                dump_log(self.mol, title='PyOQP: SCF converged with %s' % primary, section='')
 
-        # --- Stage 3: stability safeguard ---
-        # Applied only when the user opts in with [scf] stability=true.  Covers
-        # ground-state targets (method='hf', and the coupled-cluster methods
-        # that build on the same ground-state determinant) and spin-flip
-        # excited-state reference SCFs (method='tdhf' with type sf/mrsf/umrsf).
-        # CCSD and CCSD(T) belong with 'hf' here: they correlate the converged
-        # reference, so an unstable UHF/ROHF determinant is exactly as wrong a
-        # starting point for them as it is for the HF energy itself, and
-        # silently ignoring the option the user asked for is the worst of the
-        # available behaviours.  A
-        # DIIS-converged but *unstable* open-shell solution is just as wrong a
-        # reference for spin-flip TDHF/MRSF as it is a wrong ground state:
-        # building MRSF on it makes the reference (and the excited states)
-        # disagree with the standalone SCF along a PES.  Do not apply this to
-        # ordinary closed-shell TDHF/TDA/RPA references.  The safeguard only
-        # KEEPS the relaxed orbitals when TRAH finds a genuinely lower solution
-        # (e_post < e_pre); an energy-invariant re-canonicalization (no lowering)
-        # is reverted below by restoring the snapshot.
-        td_type = str(getattr(self, 'td', '')).lower()
-        spin_flip_reference = self.method == 'tdhf' and td_type in ('sf', 'mrsf', 'umrsf')
-        ground_state_target = self.method in ('hf', 'ccsd', 'ccsd(t)')
-        if (converged and stability and not rstctmo and primary != 'trah'
-                and (ground_state_target or spin_flip_reference)):
-            e_pre = self.mol.mol_energy.energy
-            mol_energy_snapshot = self._snapshot_mol_energy_state()
-            # Snapshot the converged orbitals so the safeguard is a true no-op
-            # at a stable minimum (TRAH may re-canonicalize/rotate orbitals
-            # energy-invariantly, which would otherwise perturb sensitive
-            # downstream quantities such as range-separated excited gradients).
-            snapshot = self._snapshot_scf_state()
-            dump_log(self.mol, title='PyOQP: Verifying SCF stability (TRAH)', section='input')
-
-            # Stability-following explores symmetry-breaking rotations whose
-            # densities are not totally symmetric, so the petite-list
-            # reduction must be off during (and after, if a broken-symmetry
-            # solution is kept) this stage.
-            petite_staged = self._petite_is_staged()
-            if petite_staged:
-                self._set_petite_enabled(False)
-
-            data.set_scf_converger_type('trah')
-            data.set_trah_stability(True)
-            data.set_sd_scf(False)
-            self.scf()
-            trah_ok = self.mol.mol_energy.SCF_converged
-            e_post = self.mol.mol_energy.energy
-
-            if trah_ok and e_post < e_pre - 1.0e-7:
-                # The converged point was unstable: keep the lower solution.
-                # The kept density may be symmetry-broken: petite stays off.
-                if petite_staged:
-                    self.mol.symmetry_metadata['integral_symmetry']['status'] = \
-                        'disabled_symmetry_broken_scf'
-                dump_log(self.mol,
-                         title='PyOQP: SCF point was unstable; relaxed to a lower '
-                               'solution (dE = %.3e Hartree)' % (e_post - e_pre),
-                         section='')
+            # --- Stage 2: escalate the converger on non-convergence ---
+            # Escalation ladder of progressively more robust (and costlier) methods.
+            # Default: SOSCF (cheap second-order, fixes most DIIS stalls) BEFORE TRAH
+            # (globally convergent trust region). 'scf.escalation' overrides the
+            # comma-separated chain; 'scf.alternative_scf' (back-compat) sets the
+            # final method. Each stage warm-starts from the previous orbitals.
+            escalation = scf_config.get('escalation', None)
+            if escalation:
+                chain = [c.strip().lower() for c in str(escalation).split(',') if c.strip()]
             else:
-                # Stable (no lower solution found) or the verification did not
-                # converge: restore the original converged orbitals unchanged.
-                self._restore_scf_state(snapshot)
-                for attr, value in mol_energy_snapshot.items():
+                chain = ['soscf', 'arh']
+                if fallback:
+                    chain.append(fallback)
+            # Drop the primary and de-duplicate while preserving order.
+            _seen = set()
+            chain = [c for c in chain if c != primary and not (c in _seen or _seen.add(c))]
+            # Keep the occupation-preserving recovery stages, but never enter TRAH
+            # for a MOM/rstctmo calculation (see occupation_constrained above).
+            if occupation_constrained and ('trah' in chain or 'arh' in chain):
+                chain = [c for c in chain if c not in ('trah', 'arh')]
+                dump_log(
+                    self.mol,
+                    title='PyOQP: TRAH recovery disabled because scf.mom/rstctmo=true; '
+                          'TRAH cannot preserve the requested orbital occupation',
+                    section='input',
+                )
+            # trh_arh=-1 (by reference) is the only setting the ladder overrides.
+            arh_auto = int(scf_config.get('trh_arh', -1)) == -1
+            # An ARH run, as the primary converger or as a ladder stage, is
+            # what makes the exact-Hessian TRAH finish below the right choice.
+            arh_ran = primary == 'arh'
+            for conv in chain:
+                if converged:
+                    break
+                dump_log(self.mol,
+                         title='PyOQP: SCF not converged; escalating to %s' % conv,
+                         section='input')
+                data.set_scf_converger_type(conv)
+                data.set_sd_scf(False)
+                if conv == 'arh':
+                    # ARH macro-iterations cost about two Fock builds and none of
+                    # response, but converge linearly: the default scf.maxit (30)
+                    # stopped every ARH stage of the benchmark before |g| fell
+                    # below conv.  Give the stage its own floor, then restore.
+                    maxit = int(getattr(self, 'scf_maxit', scf_config.get('maxit', 30)))
+                    data.set_scf_maxit(max(maxit, ARH_STAGE_MAXIT))
                     try:
-                        setattr(self.mol.mol_energy, attr, value)
-                    except Exception:
-                        pass
-                # Symmetric solution kept: the petite reduction is valid again.
-                if petite_staged:
-                    self._set_petite_enabled(True)
-                if not trah_ok:
-                    # Re-run the primary converger (warm-started) so mol_energy
-                    # is consistent with the restored orbitals.
-                    data.set_scf_converger_type(primary)
+                        self.scf()
+                    finally:
+                        data.set_scf_maxit(maxit)
+                    arh_ran = True
+                elif conv == 'trah' and arh_ran and arh_auto:
+                    # After an ARH stage the model has done what it can; a
+                    # hybrid TRAH would repeat model steps until |g| < 1e-4 and
+                    # on Fe2S2 UHF never got there in 200 macro-iterations.
+                    # Finish with the exact Hessian (benchmark: 22/22 converged
+                    # at conv 1e-8, 20/22 at 1e-6, vs 21/22 and 18/22 hybrid).
+                    data.set_trah_arh(0)
+                    try:
+                        self.scf()
+                    finally:
+                        data.set_trah_arh(-1)
+                else:
                     self.scf()
-                    converged = self.mol.mol_energy.SCF_converged
+                converged = self.mol.mol_energy.SCF_converged
 
-            # restore the user-configured stability flag for later SCF calls
-            data.set_trah_stability(trah_stab_default)
+            # --- Stage 3: stability safeguard ---
+            # Applied only when the user opts in with [scf] stability=true.  Covers
+            # ground-state targets (method='hf', and the coupled-cluster methods
+            # that build on the same ground-state determinant) and spin-flip
+            # excited-state reference SCFs (method='tdhf' with type sf/mrsf/umrsf).
+            # CCSD and CCSD(T) belong with 'hf' here: they correlate the converged
+            # reference, so an unstable UHF/ROHF determinant is exactly as wrong a
+            # starting point for them as it is for the HF energy itself, and
+            # silently ignoring the option the user asked for is the worst of the
+            # available behaviours.  A
+            # DIIS-converged but *unstable* open-shell solution is just as wrong a
+            # reference for spin-flip TDHF/MRSF as it is a wrong ground state:
+            # building MRSF on it makes the reference (and the excited states)
+            # disagree with the standalone SCF along a PES.  Do not apply this to
+            # ordinary closed-shell TDHF/TDA/RPA references.  The safeguard only
+            # KEEPS the relaxed orbitals when TRAH finds a genuinely lower solution
+            # (e_post < e_pre); an energy-invariant re-canonicalization (no lowering)
+            # is reverted below by restoring the snapshot.
+            td_type = str(getattr(self, 'td', '')).lower()
+            spin_flip_reference = self.method == 'tdhf' and td_type in ('sf', 'mrsf', 'umrsf')
+            ground_state_target = self.method in ('hf', 'ccsd', 'ccsd(t)')
+            if (converged and stability and not occupation_constrained
+                    and primary != 'trah'
+                    and (ground_state_target or spin_flip_reference)):
+                e_pre = self.mol.mol_energy.energy
+                mol_energy_snapshot = self._snapshot_mol_energy_state()
+                # Snapshot the converged orbitals so the safeguard is a true no-op
+                # at a stable minimum (TRAH may re-canonicalize/rotate orbitals
+                # energy-invariantly, which would otherwise perturb sensitive
+                # downstream quantities such as range-separated excited gradients).
+                snapshot = self._snapshot_scf_state()
+                dump_log(self.mol, title='PyOQP: Verifying SCF stability (TRAH)', section='input')
 
-        # restore the primary converger for any subsequent reference() calls
-        data.set_scf_converger_type(primary)
+                # Stability-following explores symmetry-breaking rotations whose
+                # densities are not totally symmetric, so the petite-list
+                # reduction must be off during (and after, if a broken-symmetry
+                # solution is kept) this stage.
+                petite_staged = self._petite_is_staged()
+                # The TRAH stage mutates the stability flag, the converger and
+                # (when staged) the petite flag.  Every exit -- including an error
+                # raised by a tag write -- must hand the molecule back with those
+                # restored; the error itself still propagates.  The petite flag
+                # stays off only when a lower, possibly symmetry-broken solution
+                # is actually kept.
+                petite_off = False
+                kept_broken_symmetry = False
+                try:
+                    if petite_staged:
+                        self._set_petite_enabled(False)
+                        petite_off = True
+
+                    data.set_scf_converger_type('trah')
+                    data.set_trah_stability(True)
+                    data.set_sd_scf(False)
+                    self.scf()
+                    trah_ok = self.mol.mol_energy.SCF_converged
+                    e_post = self.mol.mol_energy.energy
+
+                    if trah_ok and e_post < e_pre - 1.0e-7:
+                        # The converged point was unstable: keep the lower solution.
+                        # The kept density may be symmetry-broken: petite stays off.
+                        if petite_staged:
+                            kept_broken_symmetry = True
+                            self.mol.symmetry_metadata['integral_symmetry']['status'] = \
+                                'disabled_symmetry_broken_scf'
+                        dump_log(self.mol,
+                                 title='PyOQP: SCF point was unstable; relaxed to a lower '
+                                       'solution (dE = %.3e Hartree)' % (e_post - e_pre),
+                                 section='')
+                    else:
+                        # Stable (no lower solution found) or the verification did not
+                        # converge: restore the original converged orbitals unchanged.
+                        self._restore_scf_state(snapshot)
+                        self._restore_mol_energy_state(mol_energy_snapshot)
+                        # Symmetric solution kept: the petite reduction is valid again.
+                        if petite_off:
+                            self._set_petite_enabled(True)
+                            petite_off = False
+                        if not trah_ok:
+                            # Re-run the primary converger (warm-started) so mol_energy
+                            # is consistent with the restored orbitals.
+                            data.set_scf_converger_type(primary)
+                            self.scf()
+                            converged = self.mol.mol_energy.SCF_converged
+                finally:
+                    # restore the user-configured stability flag for later SCF calls
+                    data.set_trah_stability(trah_stab_default)
+                    if petite_off and not kept_broken_symmetry:
+                        self._set_petite_enabled(True)
+        finally:
+            # restore the primary converger for any subsequent reference() calls
+            data.set_scf_converger_type(primary)
         return converged
 
     # Wavefunction tags that define an SCF solution (alpha + beta channels).
-    _scf_state_tags = (
-        'OQP::VEC_MO_A', 'OQP::E_MO_A', 'OQP::DM_A', 'OQP::FOCK_A',
+    _scf_beta_state_tags = (
         'OQP::VEC_MO_B', 'OQP::E_MO_B', 'OQP::DM_B', 'OQP::FOCK_B',
     )
+    _scf_state_tags = (
+        'OQP::VEC_MO_A', 'OQP::E_MO_A', 'OQP::DM_A', 'OQP::FOCK_A',
+    ) + _scf_beta_state_tags
 
     def _petite_is_staged(self):
         """True when both metadata and the live native flag are active.
@@ -1104,38 +1407,55 @@ class SinglePoint(Calculator):
         if (not meta or
                 meta.get('integral_symmetry', {}).get('status') != 'active'):
             return False
+        # OQPData raises AttributeError for a tag that is not allocated, and
+        # the native consumers treat an absent flag exactly as 0.  Any other
+        # error (an unreadable or malformed flag) propagates: answering False
+        # would keep the petite reduction on during the symmetry-breaking
+        # TRAH stage.
         try:
-            flag = np.asarray(
-                self.mol.data['OQP::sym_petite_enable']).ravel()
-            return bool(flag.size and int(flag[0]) != 0)
-        except Exception:
+            raw = self.mol.data['OQP::sym_petite_enable']
+        except AttributeError:
             return False
+        flag = np.asarray(raw).ravel()
+        return bool(flag.size and int(flag[0]) != 0)
 
     def _set_petite_enabled(self, enabled):
-        import numpy as np
-        try:
-            self.mol.data['OQP::sym_petite_enable'] = \
-                np.array([1 if enabled else 0], dtype=np.int64)
-        except Exception:
-            pass
+        # No fallback: if the flag cannot be written, TRAH would run with the
+        # petite-list reduction on symmetry-broken densities.
+        self.mol.data['OQP::sym_petite_enable'] = \
+            np.array([1 if enabled else 0], dtype=np.int64)
 
     def _snapshot_scf_state(self):
-        """Deep-copy the tags that define the current converged SCF solution."""
+        """Deep-copy the tags that define the current converged SCF solution.
+
+        Every alpha tag is required.  The beta tags are required for UHF and
+        ROHF; an RHF run never allocates them (scf.F90 reserves ``tags_beta``
+        only for scftype >= 2), so for RHF their absence -- AttributeError
+        from OQPData -- is the one expected case.  Any other error stops the
+        safeguard instead of leaving a tag out of the snapshot, which would
+        make a later restore silently keep the TRAH value for that tag.
+        """
+        scf_type = str(self.mol.config.get('scf', {}).get('type', 'rhf')).lower()
+        beta_optional = scf_type == 'rhf'
         snap = {}
         for tag in self._scf_state_tags:
             try:
-                snap[tag] = np.array(self.mol.data[tag]).copy()
-            except Exception:
-                pass
+                value = self.mol.data[tag]
+            except AttributeError:
+                if beta_optional and tag in self._scf_beta_state_tags:
+                    continue
+                raise
+            snap[tag] = np.array(value).copy()
         return snap
 
     def _restore_scf_state(self, snap):
-        """Write a previously captured SCF solution back into the molecule."""
+        """Write a previously captured SCF solution back into the molecule.
+
+        A write that fails must stop the run: continuing would leave a mixture
+        of TRAH and pre-TRAH tags paired with the pre-TRAH energy.
+        """
         for tag, value in snap.items():
-            try:
-                self.mol.data[tag] = value
-            except Exception:
-                pass
+            self.mol.data[tag] = value
 
     _mol_energy_state_attrs = (
         'energy',
@@ -1146,18 +1466,16 @@ class SinglePoint(Calculator):
     def _snapshot_mol_energy_state(self):
         """Capture scalar energy/convergence metadata that must match SCF tags."""
         mol_energy = self.mol.mol_energy
-        snap = {}
-        try:
-            snap.update(getattr(mol_energy, '__dict__', {}))
-        except Exception:
-            pass
+        snap = dict(getattr(mol_energy, '__dict__', {}))
         for attr in self._mol_energy_state_attrs:
             if attr not in snap and hasattr(mol_energy, attr):
-                try:
-                    snap[attr] = getattr(mol_energy, attr)
-                except Exception:
-                    pass
+                snap[attr] = getattr(mol_energy, attr)
         return snap
+
+    def _restore_mol_energy_state(self, snap):
+        """Write captured energy/convergence metadata back; failures propagate."""
+        for attr, value in snap.items():
+            setattr(self.mol.mol_energy, attr, value)
 
     def excitation(self, ref_energy):
         if is_tb_method(self.method):
@@ -1170,10 +1488,19 @@ class SinglePoint(Calculator):
         if getattr(self.mol, 'symmetry_metadata', None):
             self.mol.stage_response_symmetry()
 
+        # Clear the previous solve's imaginary-root flags first: a TD solve
+        # that raises or exhausts its retries returns before they are set
+        # again, and get_results() would mask energies with stale flags.
+        self.mol.td_imaginary_states = ()
+        # Invalidate the previous TD outputs as well: if this solve raises or
+        # breaks down, get_results() must not publish the earlier run's
+        # excitation energies as the current result.
+        self.mol.energies = list(ref_energy)
+        self.mol.td_output_valid = False
         self.tddft()
-        energies = ref_energy + [ex + ref_energy[0] for ex in self.mol.data['OQP::td_energies']]
 
-        # check convergence
+        # Check convergence before reading the TD output tags: a Davidson
+        # breakdown returns before OQP::td_energies is written.
         td_flag = self.mol.mol_energy.Davidson_converged
 
         if self.method != 'hf' and not td_flag:
@@ -1181,10 +1508,32 @@ class SinglePoint(Calculator):
 
             if self.exception is True:
                 raise TDnotConverged()
-            else:
-                exit()
+            # A bare exit() raises SystemExit(None), i.e. process status 0,
+            # so a failed Davidson looked like a successful run.
+            raise RuntimeError("TD Davidson did not converge — stopping current run.")
+
+
+        energies = ref_energy + [ex + ref_energy[0] for ex in self.mol.data['OQP::td_energies']]
+
+        # RPA roots with omega^2 < 0 (unstable reference): td_energies holds
+        # |omega|, so the state energy above is not a physical state.  Only
+        # the conventional RPA driver writes this tag.
+        if str(self.mol.config.get('tdhf', {}).get('type', 'rpa')).lower() == 'rpa':
+            try:
+                flags = self.mol.data['OQP::td_imaginary']
+            except AttributeError:
+                flags = ()
+            self.mol.td_imaginary_states = tuple(
+                n + 1 for n, flag in enumerate(flags) if flag > 0.5)
+        # The solver never converges an imaginary root and has no energy for
+        # it: keep the unconverged |omega| out of the state energies (NaN), and
+        # let get_results() publish the per-root status.
+        for n in self.mol.td_imaginary_states:
+            if n < len(energies):
+                energies[n] = float('nan')
 
         self.mol.energies = energies
+        self.mol.td_output_valid = True
 
         # Metadata-only state irrep labels (no-op unless symmetry enabled).
         if getattr(self.mol, 'symmetry_metadata', None):
@@ -1255,13 +1604,19 @@ class Gradient(Calculator):
             'mrsf': oqp.tdhf_mrsf_z_vector,
         }
 
+        # Every native gradient kernel writes mol.data._data.grad in place, so
+        # it cannot go through Molecule.set_grad.  Wrap the dispatch once here
+        # -- this dict is the only reference to these entry points -- so the
+        # buffer is marked written wherever the kernel is invoked from.
         self.grad_func = {
-            'hf': oqp.hf_gradient,
-            'mp2': oqp.mp2_gradient,
-            'rpa': oqp.tdhf_gradient,
-            'tda': oqp.tdhf_gradient,
-            'sf': oqp.tdhf_sf_gradient,
-            'mrsf': oqp.tdhf_mrsf_gradient,
+            key: _marks_grad_buffer(func) for key, func in {
+                'hf': oqp.hf_gradient,
+                'mp2': oqp.mp2_gradient,
+                'rpa': oqp.tdhf_gradient,
+                'tda': oqp.tdhf_gradient,
+                'sf': oqp.tdhf_sf_gradient,
+                'mrsf': oqp.tdhf_mrsf_gradient,
+            }.items()
         }
 
     def gradient(self):
@@ -1400,6 +1755,13 @@ class Gradient(Calculator):
             buffer_row = int(getattr(self, '_sa_buffer_row', 0))
         elif self.method == 'tdhf' and len(self.grads):
             buffer_row = int(self.grads[-1])     # tddft_grad's last iteration
+        elif is_tb_method(self.method) and len(self.grads):
+            # The TB adapter fills only the requested rows of a
+            # (nstate+1, natom, 3) array and reports max(states) as the active
+            # state, so that is the row the buffer must hold.  Without this the
+            # buffer is never written on a TB gradient run and the saved
+            # 'grad' would be whatever the allocation contained.
+            buffer_row = max(int(s) for s in np.atleast_1d(self.grads))
         if buffer_row is not None:
             arr = np.asarray(grads, dtype=float).reshape(-1, self.natom, 3)
             if 0 <= buffer_row < arr.shape[0]:
@@ -1451,9 +1813,15 @@ class Gradient(Calculator):
     def _sc_nevpt2_grad_or_none(self):
         """The analytic SC-NEVPT2 gradient, or None if that route declines.
 
-        SC-NEVPT2 is `method=caspt2` with `[pt2] h0=dyall` and
-        `contraction=strong`; every other PT2 spelling belongs to the CASPT2
-        route, so this returns None immediately for them rather than probing.
+        SC-NEVPT2 is whatever resolves to `[pt2] h0=dyall` with
+        `contraction=strong`: `method=sc-nevpt2` (or `scnevpt2`) with the
+        controls unset, or the older `method=caspt2` spelling with both set.
+        sc_nevpt2_gradient_route() decides that ownership from the resolved
+        options -- as the fused energy pass does -- and answers OTHER_ROUTE for
+        every other PT2 calculation.  Gating on the method label here instead
+        sent a named `sc-nevpt2` run to the CASPT2 derivative, which refuses
+        strong contraction: `gradient=analytic` failed and `auto` discarded the
+        energy pass's analytic gradient for central differences.
 
         Returning None -- not falling back here -- is what keeps ONE
         central-difference fallback in the code: caspt2_grad() already owns it,
@@ -1464,9 +1832,6 @@ class Gradient(Calculator):
 
         The import stays local to avoid a circular module dependency.
         """
-        if self.method != 'caspt2':
-            return None
-
         from oqp.library.caspt2_dyall import _caspt2_options
         from oqp.library.nevpt2_gradient import (
             OTHER_ROUTE,
@@ -1710,6 +2075,13 @@ class Gradient(Calculator):
         if self.nstate < max(self.grads):
             raise ValueError(f'Gradient requested state {max(self.grads)} > the highest computed state {self.nstate}')
 
+        imaginary = set(getattr(self.mol, 'td_imaginary_states', ()) or ())
+        if self.td == 'rpa' and imaginary.intersection(self.grads):
+            raise RuntimeError(
+                'Gradient requested for RPA root(s) %s with omega^2 < 0 (imaginary, '
+                'not converged; the SCF reference is unstable).'
+                % ', '.join(str(i) for i in sorted(imaginary.intersection(self.grads))))
+
         grads = np.zeros((self.nstate + 1, self.natom, 3))
         for i in self.grads:
             target = (public_state_label(self.mol.config, i)
@@ -1726,8 +2098,8 @@ class Gradient(Calculator):
 
                 if self.exception is True:
                     raise ZVnotConverged()
-                else:
-                    exit()
+                # A bare exit() is SystemExit(None): status 0 for a failed run.
+                raise RuntimeError("TD Z-vector did not converge — stopping current run.")
             if self.td_prop == True:
                 oqp.electric_moments_excited(self.mol)
                 oqp.mulliken_excited(self.mol)
@@ -1748,7 +2120,27 @@ class Hessian(Calculator):
     def __init__(self, mol):
         super().__init__(mol)
         self.mol = mol
-        self.hess_type = mol.config['hess']['type']
+        self.hess_type = str(mol.config['hess']['type']).strip().lower()
+        self.hess_type_reason = f'[hess] type={self.hess_type} requested explicitly.'
+        if self.hess_type == 'auto':
+            from oqp.utils.input_checker import resolve_hessian_type
+            input_file = getattr(mol, 'input_file', None)
+            self.hess_type, self.hess_type_reason = resolve_hessian_type(
+                mol.config, os.path.dirname(os.path.abspath(input_file)) if input_file else None)
+            if self.hess_type == 'analytical' and self._no_virtual_orbitals():
+                # The native kernel has no response space to solve for and does
+                # not store a Hessian then (e.g. He2/STO-3G).
+                self.hess_type = 'numerical'
+                self.hess_type_reason = 'auto: no virtual orbitals (empty response space).'
+            if self.hess_type == 'analytical' and self._functional_needs_tau():
+                self.hess_type = 'numerical'
+                self.hess_type_reason = ('auto: meta-GGA functional (LibXC tau-dependent '
+                                         'family); the analytic Hessian has no tau channel.')
+        elif self.hess_type == 'analytical' and self._functional_needs_tau():
+            raise ValueError(
+                '[hess] type=analytical is not available for meta-GGA functionals: the '
+                'analytic Hessian does not differentiate the kinetic-energy-density (tau) '
+                'channel. Use [hess] type=numerical (or auto).')
         self.state = mol.config['hess']['state']
         self.read = mol.config['hess']['read']
         self.restart = mol.config['hess']['restart']
@@ -1810,6 +2202,9 @@ class Hessian(Calculator):
         workflow unchanged.
         """
         dump_log(self.mol, title='PyOQP: Entering Hessian Calculation')
+        self._analysis = analysis
+        if not self.read:
+            dump_log(self.mol, title=f'PyOQP: Hessian type {self.hess_type} -- {self.hess_type_reason}')
 
         if self.read:
             # read .hess file
@@ -1926,6 +2321,7 @@ class Hessian(Calculator):
         }
         config['input']['runtype'] = 'energy'
         _no_integral_symmetry_in_child(config)
+        _single_ladder_child(config)
         if config.get('guess', {}).get('type') == 'json':
             config['guess']['type'] = 'huckel'
         config['guess']['save_mol'] = 'false'
@@ -1958,38 +2354,72 @@ class Hessian(Calculator):
         self._collect_native_fort6_logs(runner.mol, append_to_log=False)
         return dipole, alpha
 
+    def _collect_analytic_property_derivatives(self):
+        """Pick up the dipole (and polarizability) nuclear derivatives the
+        native analytic Hessian stores, as (3, 3N) and (3, 3, 3N) arrays."""
+
+        self._analytic_dipole_derivs = None
+        self._analytic_polar_derivs = None
+        try:
+            ncoord = np.asarray(self.mol.get_system(), dtype=float).size
+        except (AttributeError, TypeError, ValueError):
+            return
+        for tag, shape, attr in (
+                ('OQP::hf_dipole_derivatives', (3, ncoord), '_analytic_dipole_derivs'),
+                ('OQP::hf_polarizability_derivatives', (3, 3, ncoord), '_analytic_polar_derivs')):
+            try:
+                raw = np.array(self.mol.data[tag], dtype=np.float64)
+            except (AttributeError, KeyError, TypeError, ValueError):
+                continue
+            # tagarray hands Fortran (3,3N) / (3,3,3N) arrays back with the
+            # dimensions reversed; the flat Fortran order is coordinate-slowest.
+            if raw.size != int(np.prod(shape)):
+                continue
+            arr = raw.reshape(-1, order='C').reshape(shape[::-1]).T
+            if np.all(np.isfinite(arr)):
+                setattr(self, attr, np.ascontiguousarray(arr))
+
     def _compute_vibrational_intensities(self, modes):
         """Compute IR/Raman intensities using native OpenQP property kernels."""
 
+        # A failure below propagates; results from an earlier run on this
+        # molecule must not survive it labelled 'computed'.
+        self.mol.reset_vibrational_intensities()
         modes = np.ascontiguousarray(np.asarray(modes, dtype=np.float64))
         coord0 = np.asarray(self.mol.get_system(), dtype=float).reshape((-1, 3))
         ncoord = coord0.size
         if modes.ndim != 2 or modes.shape[1] != ncoord:
-            self.mol.vibrational_intensity_metadata = {
-                'status': 'failed',
-                'reason': f'Expected modes with shape (nmode, {ncoord}), got {modes.shape}',
-            }
-            return
+            raise ValueError(
+                f'IR/Raman intensities: expected normal modes with shape '
+                f'(nmode, {ncoord}), got {modes.shape}')
 
         displacement = 1.0e-3
+        analytic_dip = getattr(self, '_analytic_dipole_derivs', None)
+        analytic_pol = getattr(self, '_analytic_polar_derivs', None)
+        if self.hess_type != 'analytical':
+            analytic_dip = analytic_pol = None
         dipole_derivs = np.zeros((3, ncoord), dtype=np.float64)
         polar_derivs = np.zeros((3, 3, ncoord), dtype=np.float64)
         flat0 = coord0.reshape(-1)
-        for idx in range(ncoord):
+        for idx in range(ncoord if analytic_dip is None or analytic_pol is None else 0):
             disp = np.zeros(ncoord, dtype=float)
             disp[idx] = displacement
-            try:
-                dip_plus, polar_plus = self._native_property_tensors_at((flat0 + disp).reshape(coord0.shape))
-                dip_minus, polar_minus = self._native_property_tensors_at((flat0 - disp).reshape(coord0.shape))
-            except Exception as exc:
-                self.mol.vibrational_intensity_metadata = {
-                    'status': 'failed',
-                    'backend': 'native_openqp_finite_difference',
-                    'reason': str(exc),
-                }
-                return
+            # No try/except: any child failure (rejected config, unconverged
+            # SCF, kernel error) means the requested intensities cannot exist.
+            dip_plus, polar_plus = self._native_property_tensors_at((flat0 + disp).reshape(coord0.shape))
+            dip_minus, polar_minus = self._native_property_tensors_at((flat0 - disp).reshape(coord0.shape))
             dipole_derivs[:, idx] = (dip_plus - dip_minus) / (2.0 * displacement)
             polar_derivs[:, :, idx] = (polar_plus - polar_minus) / (2.0 * displacement)
+        if analytic_dip is not None:
+            dipole_derivs = np.ascontiguousarray(analytic_dip)
+        if analytic_pol is not None:
+            polar_derivs = np.ascontiguousarray(analytic_pol)
+        backend = {
+            (True, True): 'native_openqp_analytic',
+            (True, False): 'native_openqp_analytic_dipole_finite_difference_polarizability',
+            (False, False): 'native_openqp_finite_difference',
+        }[(analytic_dip is not None, analytic_pol is not None and analytic_dip is not None)]
+        dump_log(self.mol, title=f'PyOQP: IR/Raman intensities from {backend}')
 
         nmode = modes.shape[0]
         ir = np.zeros(nmode, dtype=np.float64)
@@ -2015,11 +2445,11 @@ class Hessian(Calculator):
         self.mol.raman_mode_polarizability_derivatives = mode_polars
         self.mol.vibrational_intensity_metadata = {
             'status': 'computed',
-            'backend': 'native_openqp_finite_difference',
+            'backend': backend,
             'property_kernels': 'electric_dipole_au,cphf_static_polarizability,vibrational_intensities_native',
-            'displacement_bohr': float(displacement),
+            'displacement_bohr': float(displacement) if backend != 'native_openqp_analytic' else 0.0,
             'ir_units': 'km/mol',
-            'raman_units': 'a.u.',
+            'raman_units': 'bohr^4/amu',
         }
 
     def analytical_hess(self):
@@ -2037,6 +2467,24 @@ class Hessian(Calculator):
         raise NotImplementedError(
             f"Analytic Hessian is not implemented for method={method}, tdhf.type={td_type}"
         )
+
+    def _functional_needs_tau(self):
+        """True for a LibXC meta-GGA / hybrid meta-GGA functional (DFT runs only)."""
+        if str(self.mol.config.get('input', {}).get('method', 'hf')).strip().lower() != 'hf':
+            return False
+        functional = str(self.mol.config.get('input', {}).get('functional', '') or '').strip()
+        if not functional:
+            return False
+        return bool(oqp.lib.oqp_functional_needs_tau(self.mol.data._data))
+
+    def _no_virtual_orbitals(self):
+        """True when the occupied space fills the basis (nocc >= nbf)."""
+        try:
+            nbf = int(self.mol.data.get_basis()['nbf'])
+            nocc = max(int(self.mol.data['nelec_A']), int(self.mol.data['nelec_B']))
+        except Exception:
+            return False
+        return nbf - nocc <= 0
 
     def _spherical_ao_active(self):
         """Return True when the current basis is dimension-reduced by ispher."""
@@ -2057,6 +2505,10 @@ class Hessian(Calculator):
         native_hess_func = self.native_hess_func['hf']
         if native_hess_func is None:
             raise NotImplementedError('Native OpenQP analytic Hessian entry point oqp.hf_hessian is not available.')
+        # Matrix-only callers (native TS/IRC, analysis=False) skip the IR/Raman
+        # property derivatives in the native kernel.
+        self.mol.data["OQP::hess_properties"] = np.array(
+            [1 if getattr(self, '_analysis', True) else 0], dtype=np.int64)
         native_hess_func(self.mol)
         self._collect_native_fort6_logs(self.mol)
 
@@ -2066,6 +2518,7 @@ class Hessian(Calculator):
             raise RuntimeError('Native oqp.hf_hessian did not store OQP::hf_hessian.') from exc
 
         hessian = self.mol.set_hessian_result(raw_hessian)
+        self._collect_analytic_property_derivatives()
 
         # The native electronic Hessian excludes the empirical dftd4 dispersion
         # term.  The numerical Hessian includes it implicitly (each displaced
@@ -2093,9 +2546,40 @@ class Hessian(Calculator):
 
     def analytical_tddft_hess(self):
         td_type = self.mol.config['tdhf']['type']
-        raise NotImplementedError(
-            f'TDDFT analytic Hessian is not implemented yet for tdhf.type={td_type}.'
-        )
+        self.mol.data.set_tdhf_target(self.state)
+        oqp.tdhf_z_vector(self.mol)
+        if not self.mol.mol_energy.Z_Vector_converged:
+            raise ZVnotConverged()
+        native_hess_func = getattr(oqp, 'tdhf_hessian', None)
+        if native_hess_func is None:
+            raise RuntimeError('This OpenQP build does not export the native TD Hessian kernel.')
+        native_hess_func(self.mol)
+        self._collect_native_fort6_logs(self.mol)
+        try:
+            raw_hessian = self.mol.data['OQP::tdhf_hessian']
+        except (AttributeError, KeyError) as exc:
+            raise RuntimeError('Native oqp.tdhf_hessian did not store OQP::tdhf_hessian.') from exc
+        hessian = self.mol.set_hessian_result(raw_hessian)
+        disp_hessian = self._dispersion_hessian()
+        d4_added = np.ndim(disp_hessian) != 0
+        if d4_added:
+            hessian = hessian + disp_hessian
+            self.mol.hessian = hessian
+        metadata = dict(getattr(self.mol, 'hessian_metadata', {}) or {})
+        metadata.update({
+            'backend': 'native_openqp',
+            'native_openqp_kernel': True,
+            'native_openqp_coupled_td_response': True,
+            'native_openqp_z_response': True,
+            'native_openqp_final_assembly': True,
+            'native_openqp_d4_dispersion': d4_added,
+            'no_external_hessian_backend': True,
+            'no_numerical_fallback': True,
+            'tdhf_type': td_type,
+            'shape': list(hessian.shape),
+        })
+        setattr(self.mol, 'hessian_metadata', metadata)
+        return hessian, ['computed', 'native_openqp']
 
     def analytical_sf_hess(self):
         raise NotImplementedError(
@@ -2345,9 +2829,14 @@ class Hessian(Calculator):
         atoms = self.mol.get_atoms()
         guess_file = self.mol.log.replace('.log', '.json')
         # Provenance for the scratch tag -- see _displacement_run_signature.
+        # The children run at the response tolerances that
+        # _finite_difference_response_tolerances sets, not at the parent's;
+        # sign on those, so scratch gradients written at looser tolerances
+        # (before that tightening existed) are recomputed, not reused.
+        model_signature = _with_child_response_tolerances(
+            self.mol._hessian_request_signature(self.state), self.mol.config)
         run_signature = _displacement_run_signature(
-            origin_coord, atoms, dx,
-            self.mol._hessian_request_signature(self.state))
+            origin_coord, atoms, dx, model_signature)
         variables_wrapper = [
             {
                 'idx': idx,
@@ -2370,13 +2859,7 @@ class Hessian(Calculator):
             for idx, coord in enumerate(shifted_coord)
         ]
 
-        ## adjust multiprocessing if necessary
-        if self.mpi_manager.use_mpi:
-            ncpu = np.amin([ndim, self.mpi_manager.comm.size])
-            pool = MPIPool(processes=ncpu)
-        else:
-            ncpu = np.amin([ndim, nproc])
-            pool = multiprocessing.Pool(processes=ncpu)
+        pool, ncpu = _displacement_pool(self.mpi_manager, ndim, nproc)
 
         dump_log(self.mol,
                  title='',
@@ -2388,14 +2871,18 @@ class Hessian(Calculator):
         grads = [[] for _ in range(ndim)]
         flags = []
         n = 0
-        for val in pool.imap_unordered(grad_wrapper, variables_wrapper):
-            if self.mpi_manager.rank == 0:
-                n += 1
-                idx, grad, flag, timing = val
-                grads[idx] = grad
-                flags.append(flag)
-                dump_log(self.mol, title=None, section='hess_worker', info=[n, idx, flag, timing])
-                dump_data(self.mol, (n, idx, np.sum(grad ** 2) ** 2, timing), title='NUM_HESS', fpath=self.mol.log_path)
+        try:
+            for val in pool.imap_unordered(grad_wrapper, variables_wrapper):
+                if self.mpi_manager.rank == 0:
+                    n += 1
+                    idx, grad, flag, timing = val
+                    grads[idx] = grad
+                    flags.append(flag)
+                    dump_log(self.mol, title=None, section='hess_worker', info=[n, idx, flag, timing])
+                    dump_data(self.mol, (n, idx, np.sum(grad ** 2) ** 2, timing), title='NUM_HESS', fpath=self.mol.log_path)
+        except BaseException:
+            _abort_displacements(pool)
+            raise
 
         pool.close()
 
@@ -2449,6 +2936,53 @@ class Hessian(Calculator):
             shutil.rmtree(dir_hess)
 
         return hessian, flags
+
+
+def _displacement_pool(mpi_manager, ntask, nproc):
+    """Pool that runs the finite-difference displacement workers.
+
+    Under MPI the ranks are the workers (MPIPool).  Without MPI each worker
+    only writes an input file and waits on ``_run_oqp_external`` -- the
+    electronic structure runs in that subprocess -- so the workers are threads
+    of this process, not ``multiprocessing.Pool`` processes.
+
+    A process pool under the spawn start method (the macOS default) or
+    forkserver (Linux's default from Python 3.14) unpickles each task in a
+    process that has not imported ``oqp``, so every worker re-imported ``oqp``
+    -- liboqp, MPI_Init -- just to resolve ``grad_wrapper``, with whatever
+    ``sys.path`` the parent held.  When that import failed (pytest had
+    put the unbuilt source tree ``pyoqp/`` first on ``sys.path``, so the child
+    found an ``oqp`` with no liboqp), the worker died inside the pool's task
+    ``get()``.  ``multiprocessing.Pool`` replaces a dead worker but never
+    resubmits the task it had taken, so all 12 displacements of an OH Hessian
+    were lost one per replacement worker and ``imap_unordered`` waited forever
+    with the last replacement idle at 0% CPU.  Threads share the parent's
+    already-imported modules, need no pickling, and an exception in a worker
+    reaches the caller instead of being swallowed.
+
+    When that exception propagates, callers must call ``_abort_displacements``
+    so that no queued displacement starts and no running one is still active
+    when the exception reaches the caller.
+    """
+    if mpi_manager.use_mpi:
+        ncpu = int(min(ntask, mpi_manager.comm.size))
+        return MPIPool(processes=ncpu), ncpu
+    ncpu = int(min(ntask, nproc))
+    return ThreadPool(processes=ncpu), ncpu
+
+
+def _abort_displacements(pool):
+    """Stop a displacement driver after a worker raised.
+
+    ``terminate()`` drops the queued displacements; ``join()`` then waits for
+    the ones already running to finish, so no displaced job is still writing
+    into the driver's scratch directory when the exception reaches the
+    caller.  Nothing is signalled: the jobs stay in the driver's process
+    group, so a Ctrl-C or a supervisor's killpg reaches them as before, and a
+    job is never killed by a PID that might have been reused.
+    """
+    pool.terminate()
+    pool.join()
 
 
 def _run_oqp_external(inp, env_overrides=None):
@@ -2530,6 +3064,8 @@ def grad_wrapper(key_dict):
         # modify config
         config['input']['runtype'] = 'grad'
         _no_integral_symmetry_in_child(config)
+        _single_ladder_child(config)
+        _finite_difference_response_tolerances(config)
         config['input']['system'] = xyz
         config['guess']['type'] = 'json'
         config['guess']['file'] = guess_file
@@ -2633,7 +3169,7 @@ class BasisOverlap(Calculator):
         dims = np.asarray(data["OQP::dftb_wf_dims"]).ravel()
         nbf, noca, nocb = (int(round(v)) for v in dims[:3])
         mult = int(tb_config(self.mol.config).get('target_multiplicity', 1))
-        tlf = int(self.mol.config.get('tdhf', {}).get('tlf', 2))
+        tlf = 0
 
         def compute():
             return adapter.states_overlap(
@@ -2745,6 +3281,16 @@ class BasisOverlap(Calculator):
             self.mol.data["OQP::td_energies_old"] = previous_data["OQP::td_energies"]
         except KeyError:
             pass
+
+        # A spin-orbit run publishes the amplitudes of both ladders, so keep the
+        # per-manifold history: the generic tag holds one manifold only (the
+        # configured one, which the drivers solve last), and coupling a
+        # manifold against the other one's amplitudes is not a derivative
+        # coupling.
+        _carry_ladder_history(self.mol.data, previous_data)
+        # A new previous-step record: NACME.load_state_history keeps its own
+        # pristine copy of it once per step.
+        self.mol._unlabelled_state_history = None
         try:
             self.mol.data["OQP::state_tracking_lineage_old"] = previous_data[
                 "OQP::state_tracking_lineage"
@@ -2854,7 +3400,10 @@ class NACME(BasisOverlap):
         current_x = copy.deepcopy(self.mol.data['OQP::td_bvec_mo'])
         x_shape = current_x.shape
 
-        # reshape Fortran data into Python style
+        # The tag-array bridge exposes the Fortran (amplitude, state) buffer
+        # in a C-shaped view.  Its contiguous buffer remains state-major, so
+        # rebuild (state, amplitude) rows from that buffer.  JSON loading must
+        # first restore this bridge layout (see tag_array_from_json).
         current_x = current_x.reshape((x_shape[1], x_shape[0]))
         previous_x = previous_x.reshape((x_shape[1], x_shape[0]))
 
@@ -2943,13 +3492,22 @@ class NACME(BasisOverlap):
         self.mol.data['OQP::state_tracking_previous_phase_initial'] = previous_phase
         self.mol.data['OQP::state_tracking_overlap'] = matched
         self.mol.data['OQP::state_tracking_margin'] = margin
+        # A two-ladder run keeps this ladder's tracking under its own label as
+        # well (see load_state_history); the unlabelled record above is
+        # overwritten by the next ladder the run aligns.
+        history_label = getattr(self, '_history_label', None)
+        if history_label is not None:
+            self.mol.data[f'OQP::state_tracking_lineage_{history_label}'] = lineage.copy()
+            self.mol.data[f'OQP::state_tracking_phase_initial_{history_label}'] = \
+                phase_step.copy()
         # Only tracking performed in this calculation may be exposed through
         # Molecule.get_results()/Runner.results().  Guess JSON tags remain
         # available above as transport history, but are not current results.
         self.mol._state_tracking_fresh = True
 
-        # update x in Fortran data shape
-        self.mol.data['OQP::td_bvec_mo'] = current_x.reshape((x_shape[0], x_shape[1]))
+        # Restore the tag-array bridge shape without changing its state-major
+        # contiguous buffer.
+        self.mol.data['OQP::td_bvec_mo'] = current_x.reshape(x_shape)
 
         dump_log(self.mol, title='PyOQP: Aligning X amplitudes')
 
@@ -2962,7 +3520,7 @@ class NACME(BasisOverlap):
         dims = np.asarray(data["OQP::dftb_wf_dims"]).ravel()
         nbf, noca, nocb = (int(round(v)) for v in dims[:3])
         mult = int(tb_config(self.mol.config).get('target_multiplicity', 1))
-        tlf = int(self.mol.config.get('tdhf', {}).get('tlf', 2))
+        tlf = 0
         _, s_st = adapter.states_overlap(
             np.asarray(data["OQP::xyz_old"]).ravel(),
             np.asarray(self.mol.get_system(), dtype=float).ravel(),
@@ -2973,14 +3531,96 @@ class NACME(BasisOverlap):
             noca=noca, nocb=nocb, multiplicity=mult, tlf_order=tlf)
         data["OQP::td_states_overlap"] = s_st
 
-    def nacme(self, align=True, reorder_x=False):
+    _HISTORY_TAGS = ('OQP::td_bvec_mo_old', 'OQP::td_energies_old',
+                     'OQP::state_tracking_lineage_old',
+                     'OQP::state_tracking_phase_initial_old')
+
+    def load_state_history(self, spin_label, record_tracking=True):
+        """Pair the current amplitudes with the same manifold's previous step.
+
+        ``OQP::td_bvec_mo_old`` without a label holds whichever ladder that step
+        published, so a run reporting both manifolds has to take this one's own
+        record before overlapping them -- amplitudes, energies, and the
+        state-tracking lineage and initial phase.  Returns False when the
+        previous step published no such record, which means there is nothing
+        to couple against.  The unlabelled previous-step record as
+        BasisOverlap left it is kept once per step, so a ladder without a
+        labelled record is never aligned against the other ladder's history
+        that an earlier call installed.
+
+        ``record_tracking`` makes align_x also keep this ladder's tracking
+        under its label, which a two-ladder run needs for its next step.
+        """
+        data = self.mol.data
+        # align_x records the state tracking of this ladder under its label.
+        self._history_label = spin_label if record_tracking else None
+        pristine = getattr(self.mol, '_unlabelled_state_history', None)
+        if pristine is None:
+            pristine = {}
+            for key in self._HISTORY_TAGS:
+                try:
+                    pristine[key] = np.array(data[key], copy=True)
+                except (AttributeError, KeyError):
+                    pass
+            self.mol._unlabelled_state_history = pristine
+
+        ladder = 'singlet' if spin_label == 's' else 'triplet'
+        try:
+            amplitudes = np.array(data[f'OQP::td_bvec_mo_{spin_label}_old'], copy=True)
+            energies = np.array(data[f'OQP::td_{ladder}_energies_old'], copy=True)
+        except (AttributeError, KeyError):
+            # No labelled record: fall back to the unlabelled previous step,
+            # exactly as BasisOverlap left it.  Without one (first step) the
+            # ladder is its own reference and starts its lineage here; align_x
+            # would otherwise fall back to the current unlabelled tracking,
+            # which in a two-ladder run may belong to the other ladder.
+            for key, value in pristine.items():
+                data[key] = value
+            nroot = int(np.asarray(data['OQP::td_energies']).size)
+            if 'OQP::td_bvec_mo_old' not in pristine:
+                data['OQP::td_bvec_mo_old'] = np.array(data['OQP::td_bvec_mo'], copy=True)
+                data['OQP::td_energies_old'] = np.array(data['OQP::td_energies'], copy=True)
+            if 'OQP::state_tracking_lineage_old' not in pristine:
+                data['OQP::state_tracking_lineage_old'] = np.arange(nroot, dtype=np.int32)
+            if 'OQP::state_tracking_phase_initial_old' not in pristine:
+                data['OQP::state_tracking_phase_initial_old'] = np.ones(nroot, dtype=float)
+            return False
+        data['OQP::td_bvec_mo_old'] = amplitudes
+        data['OQP::td_energies_old'] = energies
+        # The state-tracking lineage and initial phase are per ladder too: the
+        # unlabelled *_old record belongs to whichever ladder the previous
+        # checkpoint published, and align_x would otherwise carry that ladder's
+        # identities into this one.  A previous step that recorded amplitudes
+        # but no tracking for this ladder starts its lineage here.
+        nroot = int(energies.size)
+        for record, start in (('OQP::state_tracking_lineage',
+                               np.arange(nroot, dtype=np.int32)),
+                              ('OQP::state_tracking_phase_initial',
+                               np.ones(nroot, dtype=float))):
+            try:
+                value = np.array(data[f'{record}_{spin_label}_old'], copy=True)
+            except (AttributeError, KeyError):
+                value = start
+            data[f'{record}_old'] = value
+        return True
+
+    def nacme(self, align=True, reorder_x=False, normalize_retained=False, spin_label=None):
         """
         Calculates the non-adiabatic coupling (NAC) matrix elements
         between the two geometries.
 
         Currently, adapted only for MRSF-TDDFT approach
         """
-        dump_log(self.mol, title='PyOQP: Entering State Overlap Calculation')
+        tlf_order = int(self.mol.config.get('tdhf', {}).get('tlf', 0))
+        if tlf_order == 0:
+            overlap_note = ('exact minor determinants (tlf=0 = notlf, default; '
+                            'no truncated-Leibniz approximation)')
+        else:
+            overlap_note = ('TLF(%d) truncated-Leibniz minors; assumes nearly '
+                            'orthonormal consecutive MOs, set tlf=0 for exact '
+                            'minors' % tlf_order)
+        dump_log(self.mol, title='PyOQP: Entering State Overlap Calculation '
+                                 '[state-overlap minors: %s]' % overlap_note)
 
         # align X amplitudes
         if align:
@@ -2999,6 +3639,8 @@ class NACME(BasisOverlap):
         state_overlap = canonical_state_overlap(
             self.mol.data["OQP::td_states_overlap"]
         )
+        if normalize_retained:
+            state_overlap = normalize_retained_state_overlap(state_overlap)
 
         # compute time-derivative nac
         dc_matrix = hst_derivative_coupling(state_overlap, self.dt)
@@ -3023,8 +3665,10 @@ class NACME(BasisOverlap):
 
         # export data
         if self.export:
-            dump_data(self.mol, (nac_matrix, self.export_title), title='NACME', fpath=self.mol.log_path)
-            dump_data(self.mol, (dc_matrix, self.export_title), title='DCME', fpath=self.mol.log_path)
+            dump_data(self.mol, (nac_matrix, self.export_title),
+                      title='NACME', spin_label=spin_label, fpath=self.mol.log_path)
+            dump_data(self.mol, (dc_matrix, self.export_title),
+                      title='DCME', spin_label=spin_label, fpath=self.mol.log_path)
 
         return dc_matrix, nac_matrix
 
@@ -3051,7 +3695,7 @@ class NAC(Calculator):
         else:
             self.nac_func = self.numerical_nac
 
-    def nac(self):
+    def nac(self, spin_label=None):
         dump_log(self.mol, title='PyOQP: Entering NAC Vector Calculation')
 
         # compute nacv
@@ -3073,7 +3717,8 @@ class NAC(Calculator):
 
             # export data
             if self.export:
-                dump_data(self.mol, (self.mol, nacv, self.export_title), title='NACV', fpath=self.mol.log_path)
+                dump_data(self.mol, (self.mol, nacv, self.export_title),
+                          title='NACV', spin_label=spin_label, fpath=self.mol.log_path)
 
         dump_log(self.mol, title='PyOQP: NAC Vector (h_ij)', section='nacv', info=nacv)
         dump_log(self.mol, title='PyOQP: DC Vector (d_ij)', section='dcv', info=dcv)
@@ -3138,7 +3783,8 @@ class NAC(Calculator):
         return x, y, sx, sy, pitch, tilt, peak, bifu
 
     def analytical_nac(self):
-        exit('analytical nac vector is not available yet, choose numerical')
+        raise NotImplementedError(
+            'analytical NAC vectors are not available; set [nac] type=numerical')
 
     def numerical_nac(self):
         dir_nacv = f'{self.mol.log_path}/{self.mol.project_name}_num_nacv'
@@ -3176,13 +3822,7 @@ class NAC(Calculator):
             for idx, coord in enumerate(shifted_coord)
         ]
 
-        ## adjust multiprocessing if necessary
-        if self.mpi_manager.use_mpi:
-            ncpu = np.amin([ndim, self.mpi_manager.comm.size])
-            pool = MPIPool(processes=ncpu)
-        else:
-            ncpu = np.amin([ndim, nproc])
-            pool = multiprocessing.Pool(processes=ncpu)
+        pool, ncpu = _displacement_pool(self.mpi_manager, ndim, nproc)
 
         dump_log(self.mol,
                  title='',
@@ -3194,14 +3834,18 @@ class NAC(Calculator):
         dcm = [[] for _ in range(ndim)]
         flags = []
         n = 0
-        for val in pool.imap_unordered(nacme_wrapper, variables_wrapper):
-            if self.mpi_manager.rank == 0:
-                n += 1
-                idx, dcme, flag, timing = val
-                dcm[idx] = dcme.reshape(-1)  # 1D nstate x nstate
-                flags.append(flag)
-                dump_log(self.mol, title=None, section='nacv_worker', info=[n, idx, flag, timing])
-                dump_data(self.mol, (n, idx, np.sum(dcme ** 2) ** 2, timing), title='NUM_NACV', fpath=self.mol.log_path)
+        try:
+            for val in pool.imap_unordered(nacme_wrapper, variables_wrapper):
+                if self.mpi_manager.rank == 0:
+                    n += 1
+                    idx, dcme, flag, timing = val
+                    dcm[idx] = dcme.reshape(-1)  # 1D nstate x nstate
+                    flags.append(flag)
+                    dump_log(self.mol, title=None, section='nacv_worker', info=[n, idx, flag, timing])
+                    dump_data(self.mol, (n, idx, np.sum(dcme ** 2) ** 2, timing), title='NUM_NACV', fpath=self.mol.log_path)
+        except BaseException:
+            _abort_displacements(pool)
+            raise
 
         pool.close()
 
@@ -3275,6 +3919,7 @@ def nacme_wrapper(key_dict):
         # modify config
         config['input']['runtype'] = 'nacme'
         _no_integral_symmetry_in_child(config)
+        _single_ladder_child(config)
         config['input']['system'] = xyz
         config['guess']['type'] = 'json'
         config['guess']['file'] = guess_file
@@ -3314,7 +3959,7 @@ def nacme_wrapper(key_dict):
             BasisOverlap(mol).overlap()
             sp.excitation(ref_energy)
             LastStep(mol).compute(mol)
-            NACME(mol).nacme(reorder_x=True)
+            NACME(mol).nacme(reorder_x=True, normalize_retained=True)
             dump_log(mol, title='', section='end')
 
         try:
@@ -3329,6 +3974,132 @@ def nacme_wrapper(key_dict):
     end_time = time.time()
 
     return idx, dcme, status, (start_time, end_time, rank, threads, host)
+
+
+@contextmanager
+def response_manifold(sp, spin_label):
+    """Answer the response equations of one spin manifold.
+
+    This changes control fields only: which multiplicity the native driver
+    answers, how many roots it converges, and the sign record sized to them.  The
+    amplitudes it leaves in the generic ``OQP::td_energies`` /
+    ``OQP::td_bvec_mo`` tags belong to that manifold, which is what
+    ``SOC.snapshot()`` and ``NACME.load_state_history()`` then read.
+    """
+    mol = sp.mol
+    td = mol.config['tdhf']
+    if spin_label not in ('s', 't'):
+        raise ValueError(f'spin label must be "s" or "t", got {spin_label!r}')
+    multiplicity = 1 if spin_label == 's' else 3
+    nstate = int(td.get(f'nstate_{spin_label}', 0)) or int(td.get('nstate', 1))
+
+    saved = (int(td.get('multiplicity', 1)), int(td.get('nstate', 1)))
+    # Keep config and native state synchronized, so the Python and native log
+    # labels describe the manifold actually being calculated.
+    td['multiplicity'] = multiplicity
+    td['nstate'] = nstate
+    mol.data.set_tdhf_multiplicity(multiplicity)
+    mol.data.set_tdhf_nstate(nstate)
+    sp.nstate = nstate
+    mol.data['OQP::state_sign'] = np.ones(nstate)
+    try:
+        yield
+    finally:
+        td['multiplicity'], td['nstate'] = saved
+        mol.data.set_tdhf_multiplicity(saved[0])
+        mol.data.set_tdhf_nstate(saved[1])
+        sp.nstate = saved[1]
+        mol.data['OQP::state_sign'] = np.ones(saved[1])
+
+
+class SOC(Calculator):
+    """
+    Class to calculate MRSF spin-orbit coupling
+
+    The kernel reads one pair of tags: the excitation ladders and response
+    amplitudes of both spin manifolds.  ``snapshot()`` publishes the manifold
+    currently selected into that pair and ``coupling()`` runs the kernel and
+    exports the result.  Solving a manifold, taking its gradient and computing
+    its couplings stay with the drivers that own them, so a run asks for each of
+    those separately.
+    """
+
+    def __init__(self, mol, sp=None, ref_energy=None, tb_soc=None):
+        super().__init__(mol)
+        self.mol = mol
+        self.sp = sp
+        self.tb_soc = tb_soc
+        self.ref_energy = None if ref_energy is None else list(ref_energy)
+
+    def snapshot(self, spin_label):
+        """Copy the selected manifold's response into the tags the kernel reads."""
+        data = self.mol.data
+        if spin_label == 's':
+            data['OQP::td_singlet_energies'] = data['OQP::td_energies'].copy()
+            data['OQP::td_bvec_mo_s'] = data['OQP::td_bvec_mo'].copy()
+        else:
+            data['OQP::td_triplet_energies'] = data['OQP::td_energies'].copy()
+            data['OQP::td_bvec_mo_t'] = data['OQP::td_bvec_mo'].copy()
+
+    def coupling(self):
+        """Compute the spin-orbit couplings and publish them."""
+        if self.tb_soc is not None:
+            self.tb_soc(self.mol)
+        else:
+            oqp.soc_mrsf(self.mol)
+
+        self.export_socme()
+
+        if self.save_mol:
+            self.mol.save_data()
+
+    def export_socme(self):
+        # The conversion factor comes in here rather than at module scope: some
+        # harnesses stub oqp.utils as a non-package module.
+        from oqp.utils.constants import SOC_AU_TO_WAVENUM
+
+        # The kernel prints its singlet-triplet table from the H_SOC it holds;
+        # this writes the same numbers as a file, so the row order and the
+        # labels have to match the log line for line.
+        if not self.export:
+            return
+        # OQP::soc_* is allocated only on the world root (soc_mrsf writes them
+        # under pe%rank == 0) and tag arrays are per rank, so the reads that
+        # build dump_data()'s arguments must be guarded here as well: the
+        # @mpi_dump on dump_data guards only its own body, not its arguments.
+        if getattr(self.mol, 'usempi', False) and MPIManager().world_rank != 0:
+            return
+
+        ns = int(np.asarray(self.mol.data['OQP::td_singlet_energies']).size)
+        nt = int(np.asarray(self.mol.data['OQP::td_triplet_energies']).size)
+        nmat = ns + 3 * nt
+
+        hs_re = np.asarray(self.mol.data['OQP::soc_hsoc_re'], dtype=float)
+        hs_im = np.asarray(self.mol.data['OQP::soc_hsoc_im'], dtype=float)
+        if hs_re.size != nmat * nmat or hs_im.size != nmat * nmat:
+            raise ValueError(
+                f'socme: OQP::soc_hsoc_* holds {hs_re.size} entries, expected '
+                f'{nmat * nmat} for ns={ns} singlets and nt={nt} triplets')
+
+        # A two-dimensional tag view is the TRANSPOSE of the Fortran matrix
+        # (same rule canonical_state_overlap applies to the state overlap).
+        # H_SOC is Hermitian, so skipping this leaves the imaginary column
+        # sign-flipped against the log.
+        hst = (hs_re.reshape((nmat, nmat)) + 1j * hs_im.reshape((nmat, nmat))).T[:ns, ns:]
+        # The tag holds the merged 1e+2e spin-orbits in atomic units, without
+        # the alpha^2/2 prefactor the kernel applies when it prints.
+        re = hst.real * SOC_AU_TO_WAVENUM
+        im = hst.imag * SOC_AU_TO_WAVENUM
+
+        rows = [
+            (ist, jst, ms, re[ist, 3 * jst + k], im[ist, 3 * jst + k],
+             float(np.hypot(re[ist, 3 * jst + k], im[ist, 3 * jst + k])))
+            for ist in range(ns)
+            for jst in range(nt)
+            for k, ms in enumerate((-1, 0, 1))
+        ]
+        dump_data(self.mol, (np.array(rows, dtype=float), self.export_title),
+                  title='SOCME', fpath=self.mol.log_path)
 
 
 class SCFnotConverged(Exception):

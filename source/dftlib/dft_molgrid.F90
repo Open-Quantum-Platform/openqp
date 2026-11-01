@@ -40,6 +40,13 @@ module mod_dft_molgrid
     !< total number of nonzero grid points
     integer :: nMolPts = 0
 
+    ! Partition-function metadata retained with the assembled grid.  These
+    ! quantities are required to differentiate the normalized atom-centred
+    ! quadrature weights in response-gradient calculations.
+    integer :: partFunType = 0
+    logical :: hasSurfaceShift = .false.
+    real(KIND=fp), allocatable :: surfaceShift(:,:)
+
     !< spherical atomic grids used in this molecular grid
     type(sorted_grid_t) :: spherical_grids
 
@@ -629,8 +636,10 @@ contains
 
     if (allocated(grid%totWts)) deallocate (grid%totWts)
     if (allocated(grid%wt_top)) deallocate (grid%wt_top)
+    if (allocated(grid%surfaceShift)) deallocate (grid%surfaceShift)
     allocate (grid%totWts(maxPtPerAt, nAt), source=0.0_fp)
     allocate (grid%wt_top(nAt), source=0)
+    allocate (grid%surfaceShift(nAt, nAt), source=0.0_fp)
 
     if (allocated(grid%rInner)) deallocate (grid%rInner)
     if (allocated(grid%dummyAtom)) deallocate (grid%dummyAtom)
@@ -642,6 +651,8 @@ contains
     grid%maxNRadTimesNAng = 0
     grid%nSlices = 0
     grid%nMolPts = 0
+    grid%partFunType = 0
+    grid%hasSurfaceShift = .false.
 
   end subroutine reset_dft_grid_t
 
@@ -1007,7 +1018,7 @@ contains
     real(KIND=fp), intent(IN) :: test(:), vecs(:, :)
     logical :: inside
 
-    integer :: i
+    integer :: i, ilo, ihi
     real(KIND=fp) :: sgn, sgnold, vectmp(3)
 
 !     Test vector must at least has same direction, as average vector
@@ -1018,10 +1029,15 @@ contains
 !     end if
 
     inside = .true.
-    vectmp = cross_product(vecs(:, ubound(vecs, 2)), vecs(:, lbound(vecs, 2)))
+    ! Bounds are taken into locals first: GCC 14/15 with -fcheck=bounds
+    ! miscompile the check for a vecs(:, ubound(vecs, 2)) section argument
+    ! and abort with a garbage index (GCC 12/13 are unaffected).
+    ilo = lbound(vecs, 2)
+    ihi = ubound(vecs, 2)
+    vectmp = cross_product(vecs(:, ihi), vecs(:, ilo))
     sgnold = sign(1.0_fp, sum(test(1:3)*vectmp(1:3)))
 
-    do i = lbound(vecs, 2), ubound(vecs, 2)-1
+    do i = ilo, ihi-1
       vectmp = cross_product(vecs(:, i), vecs(:, i+1))
       sgn = sign(1.0_fp, sum(test(1:3)*vectmp(1:3)))
       if (sgn * sgnold < 0.0d0) then ! different signs

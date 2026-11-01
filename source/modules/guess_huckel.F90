@@ -32,7 +32,7 @@ contains
 
   subroutine guess_huckel_driver(infos, modified)
     use precision, only: dp
-    use types, only: information
+    use types, only: information, GUESS_COLD
     use io_constants, only: IW
     use oqp_tagarray_driver
     use basis_tools, only: basis_set
@@ -80,6 +80,7 @@ contains
        basis_file(i:i) = basis_filename(i)
     end do
 
+    infos%control%guess = GUESS_COLD
     open (unit=IW, file=infos%log_filename, position="append")
 
     if (modified) then

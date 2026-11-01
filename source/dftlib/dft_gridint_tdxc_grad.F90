@@ -1,4 +1,5 @@
 module mod_dft_gridint_tdxc_grad
+  use mod_dft_gridint_response_cache, only: response_cache_t
 
   use precision, only: fp
   use mod_dft_gridint, only: xc_engine_t, xc_consumer_t
@@ -13,6 +14,18 @@ module mod_dft_gridint_tdxc_grad
     integer :: nMtx = 1
     logical :: do_fxc = .true. !< Whether to compute dF_xc / dR_i
     logical :: do_ground_state = .true. !< Whether to add g.s. XC gradient contribution
+    logical :: do_weight_derivative = .false. !< Moving-grid response for a linear probe
+    integer :: part_fun_type = 0
+    logical :: has_surface_shift = .false.
+    real(kind=fp), allocatable :: atom_xyz(:,:)
+    logical, allocatable :: dummy_atom(:)
+    real(kind=fp), allocatable :: surface_shift(:,:)
+    real(kind=fp), allocatable :: part_rij(:,:)
+    real(kind=fp), allocatable :: part_rhat(:,:,:)
+    real(kind=fp), allocatable :: part_dist(:,:)
+    real(kind=fp), allocatable :: part_cells(:,:)
+    real(kind=fp), allocatable :: part_dlog(:,:,:,:)
+    real(kind=fp), allocatable :: part_dsum(:,:,:)
     real(kind=fp), pointer :: pa(:,:,:)
     real(kind=fp), pointer :: pb(:,:,:)
     real(kind=fp), pointer :: xa(:,:,:)
@@ -20,10 +33,12 @@ module mod_dft_gridint_tdxc_grad
     real(kind=fp), allocatable :: rrho(:,:,:,:)
     real(kind=fp), allocatable :: drrho(:,:,:,:,:)
     real(kind=fp), allocatable :: rtau(:,:,:,:)
-    real(kind=fp), allocatable :: bfgrad(:,:,:)
-    real(kind=fp), allocatable :: grad_d(:,:,:,:) !< density gradient
-    real(kind=fp), allocatable :: grad_p(:,:,:,:) !< diff. density gradient
-    real(kind=fp), allocatable :: grad_x(:,:,:,:) !< transition (X+Y) gradient
+    real(kind=fp), allocatable :: bfgrad(:,:,:,:)
+    real(kind=fp), allocatable :: nucgrad(:,:,:,:)
+    real(kind=fp), allocatable :: probe_value(:,:,:)
+    real(kind=fp), allocatable :: grad_d(:,:,:,:,:) !< density gradient
+    real(kind=fp), allocatable :: grad_p(:,:,:,:,:) !< diff. density gradient
+    real(kind=fp), allocatable :: grad_x(:,:,:,:,:) !< transition (X+Y) gradient
 !   Temporary storage
     real(kind=fp), allocatable :: tmpGrad_(:,:)
     real(kind=fp), allocatable :: tmp_(:,:,:,:)
@@ -57,8 +72,8 @@ contains
     class(xc_consumer_tdg_t), target, intent(inout) :: self
     class(xc_engine_t), intent(in) :: xce
     integer, intent(in) :: nthreads
-    integer :: nspin, nterms, nDeriv
-    call self%clean()
+    integer :: nspin, nterms, nDeriv, nat, nat_stride, i, j
+    call clean_work(self)
     nterms = 1
     if (xce%funTyp /= OQP_FUNTYP_LDA) nterms = nterms + 3
     if (xce%funTyp == OQP_FUNTYP_MGGA) nterms = nterms + 1
@@ -66,13 +81,20 @@ contains
     nspin = merge(2, 1, xce%hasBeta)
     nDeriv = merge(2, 1, self%do_fxc)
     allocate( &
-        self%bfgrad(xce%numAOs, 3, nthreads) &
+        self%bfgrad(xce%numAOs, 3, self%nMtx, nthreads) &
+      , self%nucgrad(3, ((xce%numAtoms+7)/8)*8, &
+                     self%nMtx, nthreads) &
+      , self%probe_value(xce%maxPts, self%nMtx, nthreads) &
       , self%rrho(nspin, xce%maxPts, self%nMtx, nthreads) &
       , self%drrho(3, nspin, xce%maxPts, self%nMtx, nthreads) &
-      , self%grad_d(xce%maxPts, nterms, nspin, nthreads) &
-      , self%grad_p(xce%maxPts, nterms, nspin, nthreads) &
+      ! The update kernels associate rtau unconditionally and read it only for
+      ! meta-GGA functionals.  Keep a zero scratch slab for LDA/GGA as well so
+      ! that association is defined under bounds/runtime checking.
+      , self%rtau(nSpin, xce%maxPts, self%nMtx, nthreads) &
+      , self%grad_d(xce%maxPts, nterms, nspin, self%nMtx, nthreads) &
+      , self%grad_p(xce%maxPts, nterms, nspin, self%nMtx, nthreads) &
 !   Temporary storage
-      , self%tmpGrad_(xce%numAOs*3, nthreads) &
+      , self%tmpGrad_(xce%numAOs * 3 * self%nMtx, nthreads) &
       , self%tmp_(xce%numAOs * xce%numAOs * self%nMtx, nspin, nDeriv, nthreads) &
       , self%tmpV_(xce%numAOs * xce%maxPts * self%nMtx * nspin, nDeriv, nthreads) &
       , self%tmpG1_(xce%numAOs * xce%maxPts * 3 * self%nMtx * nspin, nDeriv, nthreads) &
@@ -80,14 +102,34 @@ contains
 
     if (self%do_fxc) then
       allocate( &
-          self%grad_x(xce%maxPts, nterms, nspin, nthreads) &
+          self%grad_x(xce%maxPts, nterms, nspin, self%nMtx, nthreads) &
         , source=0.0d0)
     end if
 
-    if (xce%funTyp == OQP_FUNTYP_MGGA) then
-        allocate( &
-            self%rtau(nSpin, xce%maxPts, self%nMtx, nthreads) &
-          , source=0.0d0)
+    if (self%do_weight_derivative) then
+      nat = xce%numAtoms
+      ! Each OpenMP thread writes its partition scratch on every grid point.
+      ! Pad the per-thread atom slab to a full 64-byte (eight-real) stride so
+      ! small molecules do not make adjacent threads bounce the same line.
+      nat_stride = ((nat+7)/8)*8
+      allocate( &
+          self%part_rij(nat,nat) &
+        , self%part_rhat(3,nat,nat) &
+        , self%part_dist(nat_stride,nthreads) &
+        , self%part_cells(nat_stride,nthreads) &
+        , self%part_dlog(3,nat,nat_stride,nthreads) &
+        , self%part_dsum(3,nat_stride,nthreads) &
+        , source=0.0_fp)
+      do i = 1, nat
+        do j = 1, nat
+          if (i == j) cycle
+          self%part_rij(i,j) = norm2( &
+            self%atom_xyz(:,i)-self%atom_xyz(:,j))
+          if (self%part_rij(i,j) > tiny(1.0_fp)) &
+            self%part_rhat(:,i,j) = &
+              (self%atom_xyz(:,i)-self%atom_xyz(:,j))/self%part_rij(i,j)
+        end do
+      end do
     end if
   end subroutine
 
@@ -97,26 +139,51 @@ contains
     implicit none
     class(xc_consumer_tdg_t), intent(inout) :: self
 
-    if (ubound(self%bfGrad,3) /= 1) then
-      self%bfGrad(:,:,lbound(self%bfGrad,3)) = sum(self%bfGrad, dim=3)
+    if (ubound(self%bfGrad,4) /= 1) then
+      self%bfGrad(:,:,:,lbound(self%bfGrad,4)) = sum(self%bfGrad, dim=4)
+      self%nucGrad(:,:,:,lbound(self%nucGrad,4)) = sum(self%nucGrad, dim=4)
     end if
-    call self%pe%allreduce(self%bfGrad(:,:,1), &
-              size(self%bfGrad(:,:,1)))
+    call self%pe%allreduce(self%bfGrad(:,:,:,1), &
+              size(self%bfGrad(:,:,:,1)))
+    call self%pe%allreduce(self%nucGrad(:,:,:,1), &
+              size(self%nucGrad(:,:,:,1)))
   end subroutine
+
+!-------------------------------------------------------------------------------
+
+  subroutine clean_work(self)
+    implicit none
+    class(xc_consumer_tdg_t), intent(inout) :: self
+    if (allocated(self%bfgrad)) deallocate(self%bfgrad)
+    if (allocated(self%nucgrad)) deallocate(self%nucgrad)
+    if (allocated(self%probe_value)) deallocate(self%probe_value)
+    if (allocated(self%rrho)) deallocate(self%rrho)
+    if (allocated(self%drrho)) deallocate(self%drrho)
+    if (allocated(self%rtau)) deallocate(self%rtau)
+    if (allocated(self%grad_d)) deallocate(self%grad_d)
+    if (allocated(self%grad_p)) deallocate(self%grad_p)
+    if (allocated(self%grad_x)) deallocate(self%grad_x)
+    if (allocated(self%tmpGrad_)) deallocate(self%tmpGrad_)
+    if (allocated(self%tmp_)) deallocate(self%tmp_)
+    if (allocated(self%tmpV_)) deallocate(self%tmpV_)
+    if (allocated(self%tmpG1_)) deallocate(self%tmpG1_)
+    if (allocated(self%part_rij)) deallocate(self%part_rij)
+    if (allocated(self%part_rhat)) deallocate(self%part_rhat)
+    if (allocated(self%part_dist)) deallocate(self%part_dist)
+    if (allocated(self%part_cells)) deallocate(self%part_cells)
+    if (allocated(self%part_dlog)) deallocate(self%part_dlog)
+    if (allocated(self%part_dsum)) deallocate(self%part_dsum)
+  end subroutine clean_work
 
 !-------------------------------------------------------------------------------
 
   subroutine clean(self)
     implicit none
     class(xc_consumer_tdg_t), intent(inout) :: self
-    if (allocated(self%bfgrad)) deallocate(self%bfgrad)
-    if (allocated(self%rrho)) deallocate(self%rrho)
-    if (allocated(self%drrho)) deallocate(self%drrho)
-    if (allocated(self%rtau)) deallocate(self%rtau)
-    if (allocated(self%tmpGrad_)) deallocate(self%tmpGrad_)
-    if (allocated(self%tmp_)) deallocate(self%tmp_)
-    if (allocated(self%tmpV_)) deallocate(self%tmpV_)
-    if (allocated(self%tmpG1_)) deallocate(self%tmpG1_)
+    call clean_work(self)
+    if (allocated(self%atom_xyz)) deallocate(self%atom_xyz)
+    if (allocated(self%dummy_atom)) deallocate(self%dummy_atom)
+    if (allocated(self%surface_shift)) deallocate(self%surface_shift)
   end subroutine
 
 !-------------------------------------------------------------------------------
@@ -126,35 +193,36 @@ contains
  subroutine resetGradPointers(self, xce, tmpGrad, tmpV, tmpG1, myThread)
     class(xc_consumer_tdg_t), target, intent(inout) :: self
     class(xc_engine_t), intent(in) :: xce
-    real(kind=fp), intent(out), pointer :: tmpGrad(:,:)
+    real(kind=fp), intent(out), pointer :: tmpGrad(:,:,:)
     real(kind=fp), intent(out), pointer, optional :: tmpV(:,:,:,:,:)
     real(kind=fp), intent(out), pointer, optional :: tmpG1(:,:,:,:,:,:)
     integer, intent(in) :: myThread
-    integer :: nSpin
+    integer :: nSpin, nDeriv
 
     nspin = merge(2, 1, xce%hasBeta)
+    nDeriv = merge(2, 1, self%do_fxc)
     associate ( numAOs => xce%numAOs_p &  ! number of pruned AOs
               , numPts => xce%numPts &
               , nMtx   => self%nMtx &
       )
 
-      tmpGrad(1:numAOs,1:3) => self%tmpGrad_(1:numAOs*3, myThread)
+      ! Pack the active AO prefix for every probe contiguously.  Pointing at
+      ! the full numAOs allocation here makes compAtGrad* use the global AO
+      ! extent even when xce has pruned the current slice.
+      tmpGrad(1:numAOs,1:3,1:nMtx) => &
+        self%tmpGrad_(1:numAOs*3*nMtx,myThread)
 
+      ! Remap both derivative slabs (ground state and, with do_fxc, X+Y) in
+      ! one association over the contiguous per-thread block.  Remapping the
+      ! second slab separately as 2:2 replaced the first association, so every
+      ! later tmpV(...,1)/tmpG1(...,1) reference was out of bounds.
       if (present(tmpV)) &
-        tmpV(1:numAOs, 1:numPts, 1:nMtx, 1:nSpin, 1:1) => &
-           self%tmpV_(1:numAOs*numPts*nMtx*nspin, 1, myThread)
+        tmpV(1:numAOs, 1:numPts, 1:nMtx, 1:nSpin, 1:nDeriv) => &
+           self%tmpV_(:, :, myThread)
 
       if (present(tmpG1)) &
-        tmpG1(1:numAOs, 1:numPts, 1:3, 1:nMtx, 1:nSpin, 1:1) => &
-          self%tmpG1_(1:numAOs*numPts*3*nMtx*nspin, 1, mythread)
-
-      if (present(tmpV) .and. self%do_fxc) &
-        tmpV(1:numAOs, 1:numPts, 1:nMtx, 1:nSpin, 2:2) => &
-          self%tmpV_(1:numAOs*numPts*nMtx*nspin, 2, myThread)
-
-      if (present(tmpG1) .and. self%do_fxc) &
-          tmpG1(1:numAOs, 1:numPts, 1:3, 1:nMtx, 1:nSpin, 2:2) => &
-            self%tmpG1_(1:numAOs*numPts*3*nMtx*nspin, 2, mythread)
+        tmpG1(1:numAOs, 1:numPts, 1:3, 1:nMtx, 1:nSpin, 1:nDeriv) => &
+          self%tmpG1_(:, :, mythread)
 
     end associate
 
@@ -220,8 +288,8 @@ contains
 
     class(xc_consumer_tdg_t), intent(inout) :: self
     class(xc_engine_t), intent(in) :: xce
-    integer :: mythread
-    real(kind=fp), pointer :: tmpGrad(:,:)
+    integer :: mythread, j
+    real(kind=fp), pointer :: tmpGrad(:,:,:)
     real(kind=fp), pointer :: Pa(:,:,:)
     real(kind=fp), pointer :: Pb(:,:,:)
     real(kind=fp), pointer :: Xa(:,:,:)
@@ -234,10 +302,9 @@ contains
     ! Needs to nullify it for each update
     tmpGrad = 0.0d0
 
-    associate ( bfgrad => self%bfgrad(:,:,mythread) &
-              , grad_d => self%grad_d(:,:,:,mythread) &
-              , grad_p => self%grad_p(:,:,:,mythread) &
-              , grad_x => self%grad_x(:,:,:,mythread) &
+    associate ( bfgrad => self%bfgrad(:,:,:,mythread) &
+              , grad_d => self%grad_d(:,:,:,:,mythread) &
+              , grad_p => self%grad_p(:,:,:,:,mythread) &
               , aoV    => xce%aoV &
               , aoG1   => xce%aoG1 &
               , aoG2   => xce%aoG2 &
@@ -321,34 +388,54 @@ contains
       ! TODO: make it consistent
       if (.not. xce%hasBeta) grad_d = 0.5*grad_d
 
-      ! Compute contribution to the AO gradient from all `grad_P` terms
-      call compAtGradAll(tmpGrad, grad_D(:,:,1), xce%funTyp, &
-                         moVA, moG1A, aoG1, aoG2, numPts)
-      call compAtGradAll(tmpGrad, grad_P(:,:,1), xce%funTyp, &
-                         tmpV(:,:,1,1,1), tmpG1(:,:,:,1,1,1), aoG1, aoG2, numPts)
+      do j = 1, self%nMtx
+        ! Compute contribution to the AO gradient from all `grad_P` terms.
+        ! Ground-state orbitals are invariant, while every probe retains its
+        ! own gradient accumulator in the fourth consumer dimension.
+        call compAtGradAll(tmpGrad(:,:,j), grad_D(:,:,1,j), xce%funTyp, &
+                           moVA, moG1A, aoG1, aoG2, numPts)
+        call compAtGradAll(tmpGrad(:,:,j), grad_P(:,:,1,j), xce%funTyp, &
+                           tmpV(:,:,j,1,1), tmpG1(:,:,:,j,1,1), &
+                           aoG1, aoG2, numPts)
 
-      if (xce%hasBeta) then
-        call compAtGradAll(tmpGrad, grad_D(:,:,2), xce%funTyp, &
-                           moVB, moG1B, aoG1, aoG2, numPts)
-        call compAtGradAll(tmpGrad, grad_P(:,:,2), xce%funTyp, &
-                           tmpV(:,:,1,2,1), tmpG1(:,:,:,1,2,1), aoG1, aoG2, numPts)
-      end if
+        if (xce%hasBeta) then
+          call compAtGradAll(tmpGrad(:,:,j), grad_D(:,:,2,j), xce%funTyp, &
+                             moVB, moG1B, aoG1, aoG2, numPts)
+          call compAtGradAll(tmpGrad(:,:,j), grad_P(:,:,2,j), xce%funTyp, &
+                             tmpV(:,:,j,2,1), tmpG1(:,:,:,j,2,1), &
+                             aoG1, aoG2, numPts)
+        end if
 
-      ! d F_xc / dR_i
-      if (self%do_fxc) then
+        ! d F_xc / dR_i
+        if (self%do_fxc) then
+          call compAtGradAll(tmpGrad(:,:,j), &
+                             self%grad_x(:,:,1,j,mythread), xce%funTyp, &
+                             tmpV(:,:,j,1,2), tmpG1(:,:,:,j,1,2), &
+                             aoG1, aoG2, numPts)
+          if (xce%hasBeta) &
+            call compAtGradAll(tmpGrad(:,:,j), &
+                               self%grad_x(:,:,2,j,mythread), xce%funTyp, &
+                               tmpV(:,:,j,2,2), tmpG1(:,:,:,j,2,2), &
+                               aoG1, aoG2, numPts)
+        end if
+      end do
 
-        ! Compute contribution to the AO gradient from all `grad_X` terms
-        call compAtGradAll(tmpGrad, grad_X(:,:,1), xce%funTyp, &
-                           tmpV(:,:,1,1,2), tmpG1(:,:,:,1,1,2), aoG1, aoG2, numPts)
-        if (xce%hasBeta) &
-          call compAtGradAll(tmpGrad, grad_X(:,:,2), xce%funTyp, &
-                             tmpV(:,:,1,2,2), tmpG1(:,:,:,1,2,2), aoG1, aoG2, numPts)
-
+      if (self%do_weight_derivative) then
+        call add_partition_weight_gradient(self, xce, mythread)
+        ! Differentiate the discrete atom-centred quadrature consistently:
+        ! the grid point moves with the atom that owns the current slice.
+        ! tmpGrad contains both spin contributions in the unrestricted path,
+        ! but only the alpha contribution in the restricted path.
+        self%nucgrad(:,xce%currAtom,:,mythread) = &
+          self%nucgrad(:,xce%currAtom,:,mythread) + &
+          merge(1.0_fp,2.0_fp,xce%hasBeta)*sum(tmpGrad, dim=1)
       end if
 
    end associate
 
  end subroutine
+
+
 
  subroutine postUpdate(self, xce, mythread)
 
@@ -356,7 +443,7 @@ contains
     class(xc_engine_t), intent(in) :: xce
     integer :: mythread
 
-    real(kind=fp), pointer :: tmpGrad(:,:)
+    real(kind=fp), pointer :: tmpGrad(:,:,:)
 
     call self%resetGradPointers(xce, tmpGrad,  myThread=myThread)
 
@@ -366,17 +453,159 @@ contains
 
       if (xce%skip_p) then
 
-        self%bfGrad(:,:,myThread) = self%bfGrad(:,:,myThread) + tmpGrad
+        self%bfGrad(:,:,:,myThread) = &
+          self%bfGrad(:,:,:,myThread) + tmpGrad
 
       else
 
-        self%bfGrad(indices(1:numAOs), :, mythread) = &
-          self%bfGrad(indices(1:numAOs), :, mythread) + tmpGrad(1:numAOs, :)
+        self%bfGrad(indices(1:numAOs), :, :, mythread) = &
+          self%bfGrad(indices(1:numAOs), :, :, mythread) + &
+          tmpGrad(1:numAOs, :, :)
 
       end if
 
    end associate
  end subroutine
+
+!> Add the derivative of the normalized atom-centred fuzzy-cell weights for
+!> a *linear* density probe P.  The AO/basis part is handled above; this is the
+!> missing second term in
+!>
+!>   d sum_g w_g q_g / dR = sum_g w_g dq_g/dR + sum_g (dw_g/dR) q_g.
+!>
+!> To match the finite quadrature used by the production energy and numerical
+!> reference, the point moves with its slice owner.  Its contribution to the
+!> partition derivative is retained here and the compensating dq/dr term is
+!> accumulated from tmpGrad in update above.  Keeping only one of these two
+!> moving-grid pieces produces a large spurious term.  The radial/angular base
+!> measure is geometry independent; only p_O = c_O/sum_K c_K is differentiated.
+ subroutine add_partition_weight_gradient(self, xce, mythread)
+    use mod_dft_partfunc, only: partition_function
+
+    class(xc_consumer_tdg_t), intent(inout) :: self
+    class(xc_engine_t), intent(in) :: xce
+    integer, intent(in) :: mythread
+
+    type(partition_function) :: partfunc
+    real(kind=fp) :: point(3), ui(3), uj(3), df(3)
+    real(kind=fp) :: dri(3), drj(3), drij(3), dmu(3)
+    real(kind=fp) :: mu0, mu, f, fi, fj, dfi_scale, dfj_scale
+    real(kind=fp) :: sumc, p_owner, q_weighted, aij, dfactor
+    integer :: nat, owner, ipt, i, j, b, ib, nb, imtx
+    integer :: derivative_atoms(3)
+
+    nat = xce%numAtoms
+    owner = xce%currAtom
+    if (owner < 1 .or. owner > nat) return
+    if (.not. allocated(self%atom_xyz)) return
+    call partfunc%set(self%part_fun_type)
+
+    associate ( &
+        dist => self%part_dist(1:nat,mythread) &
+      , cells => self%part_cells(1:nat,mythread) &
+      , dlog => self%part_dlog(:,:,1:nat,mythread) &
+      , dsum => self%part_dsum(:,1:nat,mythread))
+      do ipt = 1, xce%numPts
+        if (maxval(abs(self%probe_value(ipt,:,mythread))) <= &
+            tiny(1.0_fp)) cycle
+
+        point = xce%xyzw(ipt,1:3)
+        do i = 1, nat
+          dist(i) = norm2(point-self%atom_xyz(:,i))
+        end do
+
+        cells = 1.0_fp
+        where (self%dummy_atom) cells = 0.0_fp
+        dlog = 0.0_fp
+
+        do i = 2, nat
+          if (self%dummy_atom(i)) cycle
+          do j = 1, i-1
+            if (self%dummy_atom(j)) cycle
+            if (self%part_rij(j,i) <= tiny(1.0_fp)) cycle
+
+            mu0 = (dist(i)-dist(j))/self%part_rij(j,i)
+            mu = mu0
+            aij = 0.0_fp
+            if (self%has_surface_shift) then
+              aij = self%surface_shift(j,i)
+              mu = mu0 + aij*(1.0_fp-mu0*mu0)
+            end if
+            f = partfunc%eval(mu)
+            fi = abs(f)
+            fj = abs(1.0_fp-f)
+            dfi_scale = sign(1.0_fp, f)
+            dfj_scale = -sign(1.0_fp, 1.0_fp-f)
+
+            ui = 0.0_fp
+            uj = 0.0_fp
+            if (dist(i) > tiny(1.0_fp)) &
+              ui = (point-self%atom_xyz(:,i))/dist(i)
+            if (dist(j) > tiny(1.0_fp)) &
+              uj = (point-self%atom_xyz(:,j))/dist(j)
+
+            ! Only the point owner and the two atoms in this pair can change
+            ! mu.  Accumulating logarithmic cell derivatives avoids rescaling
+            ! a dense (3,natom) derivative for every atom pair, reducing the
+            ! moving-grid work from O(Ngrid*Natom**3) to O(Ngrid*Natom**2).
+            derivative_atoms = owner
+            derivative_atoms(2) = i
+            derivative_atoms(3) = j
+            nb = 1
+            if (i /= owner) nb = nb + 1
+            if (j /= owner .and. j /= i) nb = nb + 1
+            if (nb == 2) then
+              if (i == owner) derivative_atoms(2) = j
+            else if (nb == 3) then
+              derivative_atoms(2) = i
+              derivative_atoms(3) = j
+            end if
+
+            do ib = 1, nb
+              b = derivative_atoms(ib)
+              dri = ui * real(merge(1,0,b == owner) - &
+                              merge(1,0,b == i), fp)
+              drj = uj * real(merge(1,0,b == owner) - &
+                              merge(1,0,b == j), fp)
+              drij = self%part_rhat(:,i,j) * &
+                      real(merge(1,0,b == i) - merge(1,0,b == j), fp)
+              dmu = (dri-drj-mu0*drij)/self%part_rij(j,i)
+              if (self%has_surface_shift) &
+                dmu = (1.0_fp-2.0_fp*aij*mu0)*dmu
+              df = partfunc%deriv(mu)*dmu
+              if (fi > tiny(1.0_fp)) &
+                dlog(:,b,i) = dlog(:,b,i) + dfi_scale*df/fi
+              if (fj > tiny(1.0_fp)) &
+                dlog(:,b,j) = dlog(:,b,j) + dfj_scale*df/fj
+            end do
+            cells(i) = cells(i)*fi
+            cells(j) = cells(j)*fj
+          end do
+        end do
+
+        sumc = sum(cells)
+        if (sumc <= tiny(1.0_fp)) cycle
+        p_owner = cells(owner)/sumc
+        if (p_owner <= sqrt(tiny(1.0_fp))) cycle
+        dsum = 0.0_fp
+        do i = 1, nat
+          do b = 1, nat
+            dsum(:,b) = dsum(:,b) + cells(i)*dlog(:,b,i)
+          end do
+        end do
+        dfactor = 1.0_fp/sumc
+        do imtx = 1, self%nMtx
+          q_weighted = self%probe_value(ipt,imtx,mythread)
+          if (abs(q_weighted) <= tiny(1.0_fp)) cycle
+          do b = 1, nat
+            self%nucgrad(:,b,imtx,mythread) = &
+              self%nucgrad(:,b,imtx,mythread) + &
+              q_weighted * (dlog(:,b,owner)-dfactor*dsum(:,b))
+          end do
+        end do
+      end do
+    end associate
+ end subroutine add_partition_weight_gradient
 
 !> @brief Compute contribution to the AO gradient from
 !>   LDA, GGA and metaGGA functional derivatives
@@ -433,8 +662,8 @@ contains
     real(kind=fp) :: f_r(2), f_s(3), f_t(2)
     real(kind=fp) :: rhoab(2), tauab(2), sigma(3)
 
-    associate ( grad_d  => dat%grad_d(:,:,:,mythread) &
-              , grad_p  => dat%grad_p(:,:,:,mythread) &
+    associate ( grad_d  => dat%grad_d(:,:,:,:,mythread) &
+              , grad_p  => dat%grad_p(:,:,:,:,mythread) &
               , aoG1    => xce%aoG1 &
               , aoV     => xce%aoV  &
               , rrho    => dat%rrho(:,:,:,mythread)  &
@@ -466,6 +695,18 @@ contains
                 rhoab, sigma, tauab, &
                 f_r, f_s, f_t)
 
+        if (dat%do_weight_derivative) then
+          dat%probe_value(i,j,mythread) = dot_product(d_r, rhoab)
+          if (xce%funTyp /= OQP_FUNTYP_LDA) &
+            dat%probe_value(i,j,mythread) = dat%probe_value(i,j,mythread) &
+                                        + dot_product(d_s, sigma)
+          if (xce%funTyp == OQP_FUNTYP_MGGA) &
+            dat%probe_value(i,j,mythread) = dat%probe_value(i,j,mythread) &
+                                        + dot_product(d_t, tauab)
+          if (dat%do_ground_state) dat%probe_value(i,j,mythread) = &
+            dat%probe_value(i,j,mythread) + xc%exc(i)*xce%xyzw(i,4)
+        end if
+
 !        if (maxval(abs([dsaa,dsbb,dsab,dsba]))<xce%threshold) then
 !          d_s = 0
 !          f_s = 0
@@ -475,22 +716,22 @@ contains
 !          f_t = 0
 !        end if
 
-        grad_d(i,1,1) = f_r(1)
-        grad_p(i,1,1) = d_r(1)
+        grad_d(i,1,1,j) = f_r(1)
+        grad_p(i,1,1,j) = d_r(1)
 
         if (xce%funTyp /= OQP_FUNTYP_LDA) then
 
-          grad_d(i,2:4,1) = &
+          grad_d(i,2:4,1,j) = &
               (2*f_s(1)+f_s(3)) * drho(1:3,i) &
             + (2*d_s(1)+d_s(3)) * drrho(:,1,i,j)
 
-          grad_p(i,2:4,1) = &
+          grad_p(i,2:4,1,j) = &
               (2*d_s(1)+d_s(3))*drho(1:3,i)
         end if
 
         if (xce%funTyp == OQP_FUNTYP_MGGA) then
-          grad_d(i,5,1) = f_t(1)
-          grad_p(i,5,1) = d_t(1)
+          grad_d(i,5,1,j) = f_t(1)
+          grad_p(i,5,1,j) = d_t(1)
         end if
 
       end do
@@ -520,8 +761,8 @@ contains
     real(kind=fp) :: f_r(2), f_s(3), f_t(2)
     real(kind=fp) :: rhoab(2), tauab(2), sigma(3), dsaa, dsab, dsba, dsbb
 
-    associate ( grad_d  => dat%grad_d(:,:,:,mythread) &
-              , grad_p  => dat%grad_p(:,:,:,mythread) &
+    associate ( grad_d  => dat%grad_d(:,:,:,:,mythread) &
+              , grad_p  => dat%grad_p(:,:,:,:,mythread) &
               , aoG1    => xce%aoG1 &
               , aoV     => xce%aoV  &
               , rrho    => dat%rrho(:,:,:,mythread)  &
@@ -561,6 +802,26 @@ contains
                 rhoab, sigma, tauab, &
                 f_r, f_s, f_t)
 
+        ! Directional XC energy density, already multiplied by the current
+        ! quadrature weight because xc_der1 returns the scaled libxc arrays:
+        ! q_w = w * delta_P e_xc[D].  It remains separate from the
+        ! ground-state XC energy because the moving-grid response is linear
+        ! in the relaxed probe P.
+        if (dat%do_weight_derivative) then
+          if (dat%do_ground_state) then
+            dat%probe_value(i,j,mythread) = &
+              xc%exc(i)*xce%xyzw(i,4)
+          else
+            dat%probe_value(i,j,mythread) = dot_product(d_r, rhoab)
+            if (xce%funTyp /= OQP_FUNTYP_LDA) &
+              dat%probe_value(i,j,mythread) = dat%probe_value(i,j,mythread) &
+                                          + dot_product(d_s, sigma)
+            if (xce%funTyp == OQP_FUNTYP_MGGA) &
+              dat%probe_value(i,j,mythread) = dat%probe_value(i,j,mythread) &
+                                          + dot_product(d_t, tauab)
+          end if
+        end if
+
 !        if (maxval(abs([dsaa,dsbb,dsab,dsba]))<xce%threshold) then
 !          d_s = 0
 !          f_s = 0
@@ -570,47 +831,47 @@ contains
 !          f_t = 0
 !        end if
 
-        grad_d(i,1,1) = f_r(1)
-        grad_p(i,1,1) = d_r(1)
+        grad_d(i,1,1,j) = f_r(1)
+        grad_p(i,1,1,j) = d_r(1)
 
         if (xce%funTyp /= OQP_FUNTYP_LDA) then
 
-          grad_d(i,2:4,1) = &
+          grad_d(i,2:4,1,j) = &
               2*f_s(1) * drho(1:3,i) &
             +   f_s(3) * drho(4:6,i) &
             + 2*d_s(1) * drrho(:,1,i,j) &
             +   d_s(3) * drrho(:,2,i,j)
 
-          grad_p(i,2:4,1) = &
+          grad_p(i,2:4,1,j) = &
               2*d_s(1)*drho(1:3,i) &
             +   d_s(3)*drho(4:6,i)
         end if
 
         if (xce%funTyp == OQP_FUNTYP_MGGA) then
-          grad_d(i,5,1) = f_t(1)
-          grad_p(i,5,1) = d_t(1)
+          grad_d(i,5,1,j) = f_t(1)
+          grad_p(i,5,1,j) = d_t(1)
         end if
 
         if (.not.xce%hasBeta) cycle
 
-        grad_d(i,1,2) = f_r(2)
-        grad_p(i,1,2) = d_r(2)
+        grad_d(i,1,2,j) = f_r(2)
+        grad_p(i,1,2,j) = d_r(2)
 
         if (xce%funTyp /= OQP_FUNTYP_LDA) then
-          grad_d(i,2:4,2) = &
+          grad_d(i,2:4,2,j) = &
               2*f_s(2)*drho(4:6,i) &
             +   f_s(3)*drho(1:3,i) &
             + 2*d_s(2)*drrho(:,2,i,j) &
             +   d_s(3)*drrho(:,1,i,j)
 
-          grad_p(i,2:4,2) = &
+          grad_p(i,2:4,2,j) = &
               2*d_s(2)*drho(4:6,i) &
             +   d_s(3)*drho(1:3,i)
         end if
 
         if (xce%funTyp == OQP_FUNTYP_MGGA) then
-          grad_d(i,5,2) = f_t(2)
-          grad_p(i,5,2) = d_t(2)
+          grad_d(i,5,2,j) = f_t(2)
+          grad_p(i,5,2,j) = d_t(2)
         end if
 
       end do
@@ -641,8 +902,8 @@ contains
     real(kind=fp) :: c(3)
     real(kind=fp) :: rhoab(2), tauab(2), sigma(3), ssigma(3)
 
-    associate ( grad_d  => dat%grad_d(:,:,:,mythread) &
-              , grad_x  => dat%grad_x(:,:,:,mythread) &
+    associate ( grad_d  => dat%grad_d(:,:,:,:,mythread) &
+              , grad_x  => dat%grad_x(:,:,:,:,mythread) &
               , aoG1    => xce%aoG1 &
               , aoV     => xce%aoV  &
               , rrho    => dat%rrho(:,:,:,mythread)  &
@@ -686,6 +947,23 @@ contains
                 ff_s, &
                 g_r, g_s, g_t)
 
+        if (dat%do_weight_derivative) then
+          ! Second variation of the XC energy along rho(X+Y), the integrand
+          ! whose quadrature weights move with the nuclei:
+          !   f_r.rho_X + f_s.sigma_X + d_s.(2 grad rho_X . grad rho_X) [+ f_t.tau_X].
+          ! The last GGA term is first order in e_xc but quadratic in rho_X; it is
+          ! the d_s part of grad_x below and must enter the weight response too.
+          dat%probe_value(i,j,mythread) = dat%probe_value(i,j,mythread) &
+                                      + dot_product(f_r,rhoab)
+          if (xce%funTyp /= OQP_FUNTYP_LDA) &
+            dat%probe_value(i,j,mythread) = dat%probe_value(i,j,mythread) &
+                                        + dot_product(f_s,sigma) &
+                                        + dot_product(d_s,ssigma)
+          if (xce%funTyp == OQP_FUNTYP_MGGA) &
+            dat%probe_value(i,j,mythread) = dat%probe_value(i,j,mythread) &
+                                        + dot_product(f_t,tauab)
+        end if
+
 !        if (maxval(abs([dsaa,dsbb,dsab,dsba]))<xce%threshold) then
 !          f_s = 0
 !          g_s = 0
@@ -696,8 +974,8 @@ contains
 !          g_t = 0
 !        end if
 
-        grad_x(i,1,1) = 2*f_r(1)
-        grad_d(i,1,1) = grad_d(i,1,1) + g_r(1)
+        grad_x(i,1,1,j) = 2*f_r(1)
+        grad_d(i,1,1,j) = grad_d(i,1,1,j) + g_r(1)
 
         if (xce%funTyp /= OQP_FUNTYP_LDA) then
 
@@ -705,17 +983,17 @@ contains
               (2*f_s(1)+f_s(3))*drho(1:3,i) &
             + (2*d_s(1)+d_s(3))*drrho(:,1,i,j)
 
-          grad_x(i,2:4,1) = 2*c
+          grad_x(i,2:4,1,j) = 2*c
 
-          grad_d(i,2:4,1) = grad_d(i,2:4,1) &
+          grad_d(i,2:4,1,j) = grad_d(i,2:4,1,j) &
             + 2*(2*f_s(1)+f_s(3))*drrho(:,1,i,j) &
             +   (2*g_s(1)+g_s(3)) * drho(1:3,i)
 
         end if
 
         if (xce%funTyp == OQP_FUNTYP_MGGA) then
-           grad_x(i,5,1) = 2*f_t(1)
-           grad_d(i,5,1) = grad_d(i,5,1) + g_t(1)
+           grad_x(i,5,1,j) = 2*f_t(1)
+           grad_d(i,5,1,j) = grad_d(i,5,1,j) + g_t(1)
         end if
 
       end do
@@ -747,8 +1025,8 @@ contains
     real(kind=fp) :: rhoab(2), tauab(2), sigma(3), ssigma(3), dsaa, dsab, dsba, dsbb
     real(kind=fp) :: ssaa, ssab, ssbb
 
-    associate ( grad_d  => dat%grad_d(:,:,:,mythread) &
-              , grad_x  => dat%grad_x(:,:,:,mythread) &
+    associate ( grad_d  => dat%grad_d(:,:,:,:,mythread) &
+              , grad_x  => dat%grad_x(:,:,:,:,mythread) &
               , aoG1    => xce%aoG1 &
               , aoV     => xce%aoV  &
               , rrho    => dat%rrho(:,:,:,mythread)  &
@@ -803,6 +1081,22 @@ contains
                 ff_s, &
                 g_r, g_s, g_t)
 
+        if (dat%do_weight_derivative) then
+          ! Second variation of the XC energy along the spin-resolved
+          ! rho(X+Y) (both spins), the integrand whose quadrature weights move
+          ! with the nuclei; spin-resolved form of the grad_f_xc_np term:
+          !   f_r.rho_X + f_s.sigma_X + d_s.sigma_XX [+ f_t.tau_X].
+          dat%probe_value(i,j,mythread) = dat%probe_value(i,j,mythread) &
+                                      + dot_product(f_r,rhoab)
+          if (xce%funTyp /= OQP_FUNTYP_LDA) &
+            dat%probe_value(i,j,mythread) = dat%probe_value(i,j,mythread) &
+                                        + dot_product(f_s,sigma) &
+                                        + dot_product(d_s,ssigma)
+          if (xce%funTyp == OQP_FUNTYP_MGGA) &
+            dat%probe_value(i,j,mythread) = dat%probe_value(i,j,mythread) &
+                                        + dot_product(f_t,tauab)
+        end if
+
 !        if (maxval(abs([dsaa,dsbb,dsab,dsba]))<xce%threshold) then
 !          f_s = 0
 !          g_s = 0
@@ -813,8 +1107,8 @@ contains
 !          g_t = 0
 !        end if
 
-        grad_x(i,1,1) = 2*f_r(1)
-        grad_d(i,1,1) = grad_d(i,1,1) + g_r(1)
+        grad_x(i,1,1,j) = 2*f_r(1)
+        grad_d(i,1,1,j) = grad_d(i,1,1,j) + g_r(1)
 
         if (xce%funTyp /= OQP_FUNTYP_LDA) then
 
@@ -824,12 +1118,12 @@ contains
             + 2*d_s(1)*drrho(:,1,i,j) &
             +   d_s(3)*drrho(:,2,i,j)
 
-          grad_x(i,2:4,1) = 2*c
+          grad_x(i,2:4,1,j) = 2*c
 
           c = &
             + 2*f_s(1) * drrho(:,1,i,j) &
             +   f_s(3) * drrho(:,2,i,j)
-          grad_d(i,2:4,1) = grad_d(i,2:4,1) &
+          grad_d(i,2:4,1,j) = grad_d(i,2:4,1,j) &
             + 2*c &
             + 2*g_s(1) * drho(1:3,i) &
             +   g_s(3) * drho(4:6,i)
@@ -837,14 +1131,14 @@ contains
         end if
 
         if (xce%funTyp == OQP_FUNTYP_MGGA) then
-           grad_x(i,5,1) = 2*f_t(1)
-           grad_d(i,5,1) = grad_d(i,5,1) + g_t(1)
+           grad_x(i,5,1,j) = 2*f_t(1)
+           grad_d(i,5,1,j) = grad_d(i,5,1,j) + g_t(1)
         end if
 
         if (.not.xce%hasBeta) cycle
 
-        grad_x(i,1,2) = 2*f_r(2)
-        grad_d(i,1,2) = grad_d(i,1,2) + g_r(2)
+        grad_x(i,1,2,j) = 2*f_r(2)
+        grad_d(i,1,2,j) = grad_d(i,1,2,j) + g_r(2)
 
         if (xce%funTyp /= OQP_FUNTYP_LDA) then
 
@@ -854,13 +1148,13 @@ contains
             + 2*d_s(2)*drrho(:,2,i,j) &
             +   d_s(3)*drrho(:,1,i,j)
 
-          grad_x(i,2:4,2) = 2*c
+          grad_x(i,2:4,2,j) = 2*c
 
           c = &
             + 2*f_s(2) * drrho(:,2,i,j) &
             +   f_s(3) * drrho(:,1,i,j)
 
-          grad_d(i,2:4,2) = grad_d(i,2:4,2) &
+          grad_d(i,2:4,2,j) = grad_d(i,2:4,2,j) &
             + 2*c &
             + 2*g_s(2) * drho(4:6,i) &
             +   g_s(3) * drho(1:3,i)
@@ -868,8 +1162,8 @@ contains
         end if
 
         if (xce%funTyp == OQP_FUNTYP_MGGA) then
-           grad_x(i,5,2) = 2*f_t(2)
-           grad_d(i,5,2) = grad_d(i,5,2) + g_t(2)
+           grad_x(i,5,2,j) = 2*f_t(2)
+           grad_d(i,5,2,j) = grad_d(i,5,2,j) + g_t(2)
         end if
 
       end do
@@ -891,18 +1185,21 @@ contains
 !> @author Vladimir Mironov
   subroutine utddft_xc_gradient(basis, molGrid, dedft, &
                   da, db, pa, pb, xa, xb, &
-                  nMtx, threshold, infos)
+                  nMtx, threshold, infos, &
+                  include_ground_state, include_weight_derivative, &
+                  weight_derivative_only, dedft_mtx, cache)
 !$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
     use basis_tools, only: basis_set
     use mod_dft_gridint, only: xc_options_t, run_xc
     use types, only: information
     use mod_dft_molgrid, only: dft_grid_t
+    use messages, only: show_message, with_abort
 
     implicit none
 
     type(information), target, intent(in) :: infos
     type(dft_grid_t), target, intent(in) :: molGrid
-    real(kind=fp), intent(out) :: dedft(:,:)
+    real(kind=fp), intent(inout) :: dedft(:,:)
 
     type(basis_set) :: basis
     integer, intent(in) :: nMtx
@@ -911,14 +1208,45 @@ contains
     real(kind=fp), intent(inout), optional, target :: &
             xa(:,:,:), xb(:,:,:)
     real(kind=fp), intent(in) :: threshold
+    logical, intent(in), optional :: include_ground_state
+    logical, intent(in), optional :: include_weight_derivative
+    logical, intent(in), optional :: weight_derivative_only
+    real(kind=fp), intent(inout), optional :: dedft_mtx(:,:,:)
 
     type(xc_consumer_tdg_t) :: dat
     type(xc_options_t) :: xc_opts
+    type(response_cache_t), target, intent(inout), optional :: cache
 
-    integer :: i, j, nbf, nxcder
-    logical :: doFxc
+    integer :: i, j, imtx, nbf, nxcder
+    logical :: doFxc, requested_weight_derivative, requested_weight_only, with_ground
+    real(kind=fp) :: shell_gradient(3)
 
     nbf = ubound(da,1)
+    doFxc = present(xa)
+    requested_weight_derivative = .false.
+    if (present(include_weight_derivative)) &
+      requested_weight_derivative = include_weight_derivative
+    requested_weight_only = .false.
+    if (present(weight_derivative_only)) &
+      requested_weight_only = weight_derivative_only
+    ! With xa/xb the moving-grid response covers the f_xc term (grad_f_xc);
+    ! the ground state must then be excluded and handled by its own sweep,
+    ! as for the linear probe.
+    with_ground = .true.
+    if (present(include_ground_state)) with_ground = include_ground_state
+    if (requested_weight_derivative .and. doFxc .and. with_ground) &
+      call show_message('XC moving-grid response with xa/xb requires '// &
+                        'include_ground_state=.false. (separate reference sweep).', with_abort)
+    if (requested_weight_only .and. .not. requested_weight_derivative) &
+      call show_message('XC weight_derivative_only requires '// &
+                        'include_weight_derivative=.true..', with_abort)
+    if (present(dedft_mtx)) then
+      if (size(dedft_mtx,1) /= 3 .or. &
+          size(dedft_mtx,2) /= infos%mol_prop%natom .or. &
+          size(dedft_mtx,3) /= nMtx) &
+        call show_message('XC matrix-resolved gradient has wrong dimensions.', &
+                          with_abort)
+    end if
 
     ! Scale densities by B.F. norms
       do i = 1, nbf
@@ -939,8 +1267,6 @@ contains
                  * basis%bfnrm(:)
       end do
     end do
-
-    doFxc = present(xa)
 
     if (doFxc) then
       do j = 1, nMtx
@@ -985,9 +1311,21 @@ contains
     end if
     dat%nMtx = nMtx
     dat%do_fxc = doFxc
+    dat%do_ground_state = .true.
+    if (present(include_ground_state)) &
+      dat%do_ground_state = include_ground_state
+    dat%do_weight_derivative = requested_weight_derivative
+    if (dat%do_weight_derivative) then
+      dat%part_fun_type = molGrid%partFunType
+      dat%has_surface_shift = molGrid%hasSurfaceShift
+      dat%atom_xyz = infos%atoms%xyz
+      dat%dummy_atom = molGrid%dummyAtom
+      dat%surface_shift = molGrid%surfaceShift
+    end if
 
     call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
 
+    if(present(cache)) xc_opts%response_cache=>cache
     call run_xc(xc_opts, dat, basis)
 
     ! Scale densities back
@@ -1023,15 +1361,37 @@ contains
       end do
     end if
 
-    do j = 1, basis%nshell
-      associate (atom => basis%origin(j), &
-                 offset => basis%ao_offset(j), &
-                 naos => basis%naos(j))
-        dedft(1, atom) = dedft(1, atom)-sum(dat%bfGrad(offset:offset+naos-1, 1, 1))
-        dedft(2, atom) = dedft(2, atom)-sum(dat%bfGrad(offset:offset+naos-1, 2, 1))
-        dedft(3, atom) = dedft(3, atom)-sum(dat%bfGrad(offset:offset+naos-1, 3, 1))
-      end associate
-    end do
+    if (.not. requested_weight_only) then
+      do j = 1, basis%nshell
+        associate (atom => basis%origin(j), &
+                   offset => basis%ao_offset(j), &
+                   naos => basis%naos(j))
+          do imtx = 1, nMtx
+            shell_gradient(1) = &
+              sum(dat%bfGrad(offset:offset+naos-1,1,imtx,1))
+            shell_gradient(2) = &
+              sum(dat%bfGrad(offset:offset+naos-1,2,imtx,1))
+            shell_gradient(3) = &
+              sum(dat%bfGrad(offset:offset+naos-1,3,imtx,1))
+            dedft(:,atom) = dedft(:,atom) - shell_gradient
+            if (present(dedft_mtx)) &
+              dedft_mtx(:,atom,imtx) = &
+                dedft_mtx(:,atom,imtx) - shell_gradient
+          end do
+        end associate
+      end do
+    end if
+
+    if (dat%do_weight_derivative) then
+      do imtx = 1, nMtx
+        dedft = dedft + &
+          dat%nucGrad(:,1:infos%mol_prop%natom,imtx,1)
+        if (present(dedft_mtx)) &
+          dedft_mtx(:,:,imtx) = &
+            dedft_mtx(:,:,imtx) + &
+            dat%nucGrad(:,1:infos%mol_prop%natom,imtx,1)
+      end do
+    end if
 
     call dat%clean()
   end subroutine
@@ -1050,7 +1410,8 @@ contains
 !> @author Vladimir Mironov
   subroutine tddft_xc_gradient(basis, molGrid, dedft, &
                   da, pa, xa, &
-                  nMtx, threshold, infos)
+                  nMtx, threshold, infos, include_weight_derivative, &
+                  include_ground_state, cache, dedft_mtx)
 !$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
     use basis_tools, only: basis_set
     use mod_dft_gridint, only: xc_options_t, run_xc
@@ -1061,7 +1422,7 @@ contains
 
     type(information), target, intent(in) :: infos
     type(dft_grid_t), target, intent(in) :: molGrid
-    real(kind=fp), intent(out) :: dedft(:,:)
+    real(kind=fp), intent(inout) :: dedft(:,:)
 
     type(basis_set) :: basis
     integer, intent(in) :: nMtx
@@ -1069,15 +1430,20 @@ contains
     real(kind=fp), intent(inout), target :: pa(:,:,:)
     real(kind=fp), intent(inout), optional, target :: xa(:,:,:)
     real(kind=fp), intent(in) :: threshold
+    logical, intent(in), optional :: include_weight_derivative
+    logical, intent(in), optional :: include_ground_state
 
     type(xc_consumer_tdg_t) :: dat
     type(xc_options_t) :: xc_opts
+    type(response_cache_t), target, intent(inout), optional :: cache
+    !> optional per-matrix gradients (3,natom,nMtx), as in utddft_xc_gradient;
+    !> dedft still receives their sum
+    real(kind=fp), intent(inout), optional :: dedft_mtx(:,:,:)
 
-    integer :: i, j, nbf, nxcder
-    logical :: doFxc
+    integer :: i, j, imtx, nbf, nxcder
+    logical :: doFxc, doWeight
 
     nbf = ubound(da,1)
-
     ! Scale densities by B.F. norms
       do i = 1, nbf
         da(:,i) = da(:,i) &
@@ -1093,6 +1459,8 @@ contains
     end do
 
     doFxc = present(xa)
+    doWeight = .false.
+    if (present(include_weight_derivative)) doWeight = include_weight_derivative
 
     if (doFxc) then
       do j = 1, nMtx
@@ -1131,9 +1499,21 @@ contains
     end if
     dat%nMtx = nMtx
     dat%do_fxc = doFxc
+    dat%do_ground_state = .true.
+    if (present(include_ground_state)) &
+      dat%do_ground_state = include_ground_state
+    dat%do_weight_derivative = doWeight
+    if (doWeight) then
+      dat%part_fun_type = molGrid%partFunType
+      dat%has_surface_shift = molGrid%hasSurfaceShift
+      dat%atom_xyz = infos%atoms%xyz
+      dat%dummy_atom = molGrid%dummyAtom
+      dat%surface_shift = molGrid%surfaceShift
+    end if
 
     call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
 
+    if(present(cache)) xc_opts%response_cache=>cache
     call run_xc(xc_opts, dat, basis)
 
     ! Scale densities back
@@ -1166,11 +1546,33 @@ contains
       associate (atom => basis%origin(j), &
                  offset => basis%ao_offset(j), &
                  naos => basis%naos(j))
-        dedft(1, atom) = dedft(1, atom)-2*sum(dat%bfGrad(offset:offset+naos-1, 1, 1))
-        dedft(2, atom) = dedft(2, atom)-2*sum(dat%bfGrad(offset:offset+naos-1, 2, 1))
-        dedft(3, atom) = dedft(3, atom)-2*sum(dat%bfGrad(offset:offset+naos-1, 3, 1))
+        do imtx = 1, nMtx
+          dedft(1,atom) = dedft(1,atom) - &
+            2*sum(dat%bfGrad(offset:offset+naos-1,1,imtx,1))
+          dedft(2,atom) = dedft(2,atom) - &
+            2*sum(dat%bfGrad(offset:offset+naos-1,2,imtx,1))
+          dedft(3,atom) = dedft(3,atom) - &
+            2*sum(dat%bfGrad(offset:offset+naos-1,3,imtx,1))
+          if (present(dedft_mtx)) then
+            dedft_mtx(1,atom,imtx) = dedft_mtx(1,atom,imtx) - &
+              2*sum(dat%bfGrad(offset:offset+naos-1,1,imtx,1))
+            dedft_mtx(2,atom,imtx) = dedft_mtx(2,atom,imtx) - &
+              2*sum(dat%bfGrad(offset:offset+naos-1,2,imtx,1))
+            dedft_mtx(3,atom,imtx) = dedft_mtx(3,atom,imtx) - &
+              2*sum(dat%bfGrad(offset:offset+naos-1,3,imtx,1))
+          end if
+        end do
       end associate
     end do
+
+    ! The partition-weight probe is already spin summed by grad_v_xc_np and
+    ! grad_f_xc_np.  The restricted factor for owner motion is applied where
+    ! that one-spin AO contribution enters nucGrad.
+    if (dat%do_weight_derivative) then
+      dedft = dedft + sum(dat%nucGrad(:,1:infos%mol_prop%natom,:,1), dim=3)
+      if (present(dedft_mtx)) dedft_mtx = dedft_mtx + &
+        dat%nucGrad(:,1:infos%mol_prop%natom,1:nMtx,1)
+    end if
 
     call dat%clean()
   end subroutine

@@ -8,8 +8,13 @@ module c_interop
   implicit none
 
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: oqp_alloc, oqp_clean, oqp_del, oqp_get, &
+            oqp_get_basis, oqp_get_basis_spherical, oqp_get_natom, oqp_get_nbf, &
+            oqp_set_atoms
 
   public oqp_handle_t
+  public oqp_alloc_create_code
 
   public oqp_init
   public oqp_handle_refresh_ptr
@@ -67,7 +72,10 @@ contains
     if (ok /= 0) return
 
     allocate(c_handle, stat=ok)
-    if (ok /= 0) return
+    if (ok /= 0) then
+      deallocate(inf)
+      return
+    end if
 
     c_handle%inf = c_loc(inf)
     call oqp_handle_refresh_ptr(c_handle)
@@ -386,7 +394,14 @@ contains
 !> @param[in]    v[out]        Pointer to the data
 !> @return       positive value:  success, returns size of the data
 !>               negative values: -1 - handle not initialized;
-!>                                -2 - data not available
+!>                                -2 - out of memory: tagarray could not
+!>                                     allocate the record, or the created
+!>                                     record has no data pointer
+!>                                -3 - tagarray refused to create the record
+!>                                     (invalid tag, invalid dimensions or
+!>                                     element count, record conflict); no
+!>                                     pointer is returned
+!>               The create status is mapped by oqp_alloc_create_code.
   function oqp_alloc(c_handle, tag, type_id, ndims, dims, v) result(n) bind(C, name='oqp_alloc')
     use strings, only: c_f_char
     use oqp_tagarray_driver, only: tagarray_get_cptr
@@ -413,9 +428,38 @@ contains
 
     ! 1. allocate the memory in container (override, if it already exists)
     status_ = inf%dat%create(tag_str, type_id, dims(:ndims), override=.true.)
+    ! A refused create must not fall through to the lookup below: whatever
+    ! record that lookup finds was not created by this call, and the caller
+    ! would copy its own buffer into storage of a different size.
+    v = c_null_ptr
+    n = oqp_alloc_create_code(status_)
+    if (n /= 0) return
     ! 2. Get the pointer to the freshly allocated data
     n = tagarray_get_cptr(inf%dat, tag_str, v, type_id, ndims, dims, data_size)
     if (.not.c_associated(v))  n = -2
+
+  end function
+
+!--------------------------------------------------------------------------------
+
+!> @brief oqp_alloc return code for a tagarray Container::create status
+!> @details An allocation failure must reach Python as MemoryError (-2), not
+!>          as the invalid-tag/invalid-dimension ValueError (-3).
+!> @param[in]    status  tagarray create status (TA_* from tagarray_defines)
+!> @return       0 for TA_OK, -2 for TA_MEMORY_ALLOCATION_ERROR, -3 otherwise
+  pure function oqp_alloc_create_code(status) result(n)
+    use tagarray_defines, only: TA_OK, TA_MEMORY_ALLOCATION_ERROR
+    integer(c_int32_t), intent(in) :: status
+    integer(c_int64_t) :: n
+
+    select case (status)
+    case (TA_OK)
+      n = 0
+    case (TA_MEMORY_ALLOCATION_ERROR)
+      n = -2
+    case default
+      n = -3
+    end select
 
   end function
 
@@ -430,13 +474,10 @@ contains
 !>                                -3 - error removing data
   function oqp_del(c_handle, tag) result(n) bind(C, name='oqp_del')
     use strings, only: c_f_char
-    use oqp_tagarray_driver, only: data_has_tags, TA_OK
-    use tagarray_defines
 
     type(oqp_handle_t) :: c_handle
     integer(c_int64_t) :: n
     character(kind=c_char) :: tag(*)
-    integer(c_int32_t) :: stat
 
     type(information), pointer :: inf
     character(:), allocatable :: tag_str
@@ -448,8 +489,12 @@ contains
     tag_str = trim(adjustl(c_f_char(tag)))
 
     n = -2
-    call data_has_tags(inf%dat, [tag_str], 'c_interop', 'oqp_del', WITHOUT_ABORT, status=stat)
-    if (stat /= TA_OK) return
+    ! A missing record is an ordinary query result for the C/Python deletion
+    ! interface.  In particular, symmetry invalidation deliberately attempts
+    ! to erase every optional staging record.  Do not route that expected
+    ! condition through data_has_tags(), which writes a diagnostic to the
+    ! default Fortran unit and creates an otherwise spurious fort.6 file.
+    if (.not. inf%dat%contains(tag_str)) return
 
     n = -3
     call inf%dat%erase([tag_str])

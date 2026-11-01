@@ -3,11 +3,6 @@ set(dir "${CMAKE_CURRENT_SOURCE_DIR}")
 set(SOURCES)
 file(GLOB SOURCES CONFIGURE_DEPENDS "*.F90" "*.c")
 
-# otr_interface.F90 binds against the external OpenTrustRegion module; drop it when
-# OpenTRAH is disabled (run_otr then dispatches everything to the native solver).
-if(NOT ENABLE_OPENTRAH)
-  list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/otr_interface.F90")
-endif()
 
 # dftd4_interface.F90 is the bind(C) shim over the external DFT-D4 library;
 # drop it when the backend is disabled (see ENABLE_DFTD4 in the top-level
@@ -28,18 +23,46 @@ add_subdirectory(dftlib)
 # not globbed: tests/fortran/ also holds standalone test PROGRAMs that must NOT
 # be compiled into the library.
 list(APPEND SOURCES
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/response_cache_selftest.F90"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/functional_owner_cache_selftest.F90"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/response_workspace_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/fock_deriv_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/hess1_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/grd2_hess_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/fci_symmetry_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/cholesky_eri_selftest.F90"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/int2_shell_block_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/simplex_qp_selftest.F90"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/ecp_selftest.F90"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/rpa_residual_selftest.F90"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/mrsf_spin_square_selftest.F90"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/davidson_orthogonalization_selftest.F90"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/mp2_gradient_density_test.F90"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/oqp_alloc_status_selftest.F90"
 )
+
+# Keep module data accesses inside liboqp. Windows DLL import libraries expose
+# procedure calls, but a standalone Fortran program cannot directly use these
+# module data objects without additional compiler-specific import declarations.
+if(BUILD_TESTING)
+  list(APPEND SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/test_int2_rys_pure.F90"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/test_int2_rotaxis_pure.F90")
+endif()
 
 message(STATUS ${SOURCES})
 message(STATUS "CMAKE_INSTALL_LIBDIR = ${CMAKE_INSTALL_LIBDIR}")
-set(OTR_LIB_NAME "${CMAKE_STATIC_LIBRARY_PREFIX}opentrustregion${OTR_SUFFIX}${CMAKE_STATIC_LIBRARY_SUFFIX}")
 add_library(oqp ${SOURCES})
+# Instrument the actual MP2 implementation without changing external-library
+# compiler flags or their cache key. This is a build diagnostic, not a method.
+option(OQP_MP2_BOUNDS_CHECK "Check production MP2 array bounds" OFF)
+if(OQP_MP2_BOUNDS_CHECK)
+  if(NOT CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
+    message(FATAL_ERROR "OQP_MP2_BOUNDS_CHECK requires GNU Fortran")
+  endif()
+  set_property(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/mp2_lib.F90"
+               APPEND PROPERTY COMPILE_OPTIONS "-fcheck=bounds")
+endif()
 # The log banner prints this; PROJECT_VERSION comes from the VERSION in the
 # top-level project() call, which the release-metadata test keeps in sync with
 # pyproject.toml.
@@ -56,13 +79,8 @@ if(WIN32)
 else()
   set(_OQP_RUNTIME_DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
-add_dependencies(oqp libxc libtagarray libecpint)
-target_link_libraries(oqp xcf03 xc tagarray_f tagarray ecpint Faddeeva)
-if(ENABLE_OPENTRAH)
-  add_dependencies(oqp libopentrustregion)
-  target_link_libraries(oqp ${OTR_LIB_NAME})
-  target_compile_definitions(oqp PRIVATE OQP_HAVE_OPENTRAH)
-endif()
+add_dependencies(oqp libxc libtagarray)
+target_link_libraries(oqp xcf03 xc tagarray_f tagarray)
 # dlsym() in mathlib/blas_thread_ctl.c
 target_link_libraries(oqp ${CMAKE_DL_LIBS})
 if(WIN32)
@@ -70,8 +88,13 @@ if(WIN32)
   # the platform dynamic loader; on Windows that is kernel32, not libdl.
   target_compile_definitions(oqp PRIVATE OQP_DL_WIN32)
 endif()
+# TagArray is C++, and liboqp has no C++ source of its own (the C++ ECP
+# wrapper that used to make CMake link with the C++ driver is gone), so the
+# Fortran link must name the C++ runtime for every compiler, not just GNU.
 if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU")
   target_link_libraries(oqp stdc++)
+elseif(NOT WIN32)
+  target_link_libraries(oqp ${CMAKE_CXX_IMPLICIT_LINK_LIBRARIES})
 endif()
 # Optional GPU acceleration: no-op unless OPENQP_WITH_GPU=ON (see cmake/openqp_gpu.cmake).
 openqp_gpu_attach(oqp)
@@ -79,13 +102,6 @@ target_link_directories(oqp PUBLIC ${LIBXC_LIBRARY_DIR})
 target_include_directories(oqp PUBLIC ${LIBXC_INCLUDE_DIR})
 target_link_directories(oqp PUBLIC ${TAGARRAY_LIBRARY_DIR})
 target_include_directories(oqp PUBLIC ${TAGARRAY_INCLUDE_DIRS})
-target_link_directories(oqp PUBLIC ${LIBECPINT_LIBRARY_DIR}
-	                              ${FADDEEVA_LIBRARY_DIR})
-target_include_directories(oqp PUBLIC ${LIBECPINT_INCLUDE_DIRS})
-if(ENABLE_OPENTRAH)
-  target_link_directories(oqp PUBLIC ${OPENTRUSTREGION_BUILD_DIR})
-  target_include_directories(oqp PUBLIC ${OPENTRUSTREGION_BUILD_DIR})
-endif()
 
 set_target_properties(oqp PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if(ENABLE_OPENMP)
@@ -108,8 +124,6 @@ if(ENABLE_MPI)
     target_compile_definitions(oqp PRIVATE ENABLE_MPI)
     target_link_libraries(oqp MPI::MPI_Fortran)
 endif()
-set(WRAPPER_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/wrapper/libecpint_wrapper.cpp)
-target_sources(oqp PRIVATE ${WRAPPER_SOURCES})
 if(USE_LIBINT)
   target_compile_definitions(oqp PRIVATE OQP_LIBINT_ENABLE)
   add_dependencies(oqp libint2)

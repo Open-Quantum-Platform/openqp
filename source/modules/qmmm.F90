@@ -2,11 +2,19 @@ module qmmm_mod
 
   use oqp_linalg
   use resp_mod, only: add_atom_grid
+  use selftest_output, only: selftest_output_path
   implicit none
 
   character(len=*), parameter :: module_name = "qmmm_mod"
 
+  !> Memory for one pass of packed ESPF operators, nbf(nbf+1)/2 doubles per
+  !> QM atom.  Larger QM regions are processed in blocks of atoms, see
+  !> espf_atom_block.
+  integer, parameter :: ESPF_OP_BLOCK_MIB = 256
+
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: espf_op_corr_C, form_esp_charges_C, grad_esp_qmmm_C, grad_esp_qmmm_excited_C
   public get_mm_energy
   public form_esp_charges
   public print_mm_energy
@@ -62,7 +70,7 @@ module qmmm_mod
     use messages, only: show_message, with_abort
     use types, only: information
     use oqp_tagarray_driver
-    use int1, only: omp_qmmm
+    use int1, only: omp_qmmm_all
     use constants, only: tol_int
     use mathlib, only: traceprod_sym_packed
     implicit none
@@ -74,24 +82,28 @@ module qmmm_mod
     type(basis_set), pointer :: basis
 
     integer :: nat, nbf, nbf2, ok, istate
-    integer :: npt, nptcur, i
-    logical :: urohf, use_relaxed
+    integer :: npt, nptcur, i, i0, i1, nblk
+    logical :: urohf, use_relaxed, log_was_open
 
-    real(dp), allocatable :: tmp(:), chg_op(:)
+    real(dp), allocatable :: tmp(:), chg_op(:,:)
     real(dp), allocatable, target :: xyz(:,:), ttt(:,:)
     real(dp), pointer :: wn(:,:)
     real(dp) :: tol, chg, corr
 
     real(dp), contiguous, pointer :: dmat_a(:), dmat_b(:), partial_charges(:)
-    real(dp), contiguous, pointer :: td_p(:,:), td_abxc(:)
+    real(dp), contiguous, pointer :: td_p(:,:)
 
-    character(len=*), parameter :: tags_required(5) = (/ character(len=80) :: &
-         OQP_DM_A, OQP_DM_B, OQP_TD_P, OQP_TD_ABXC, OQP_SM /)
+    ! OQP::DM_B exists only for ROHF/UHF references; requested where read.
+    character(len=*), parameter :: tags_required(3) = (/ character(len=80) :: &
+         OQP_DM_A, OQP_TD_P, OQP_SM /)
+    character(len=*), parameter :: tags_beta(1) = (/ character(len=80) :: &
+         OQP_DM_B /)
 
     character(len=*), parameter :: tags_qmmm(1) = (/ character(len=80) :: &
          OQP_partial_charges /)
 
-    open (unit=IW, file=infos%log_filename, position="append")
+    inquire(unit=iw, opened=log_was_open)
+    if (.not. log_was_open) open(unit=iw, file=infos%log_filename, position="append")
 
     basis => infos%basis
     basis%atoms => infos%atoms
@@ -126,20 +138,22 @@ module qmmm_mod
     call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a)
     tmp = dmat_a
     if (urohf) then
+      call data_has_tags(infos%dat, tags_beta, module_name, subroutine_name, WITH_ABORT)
       call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b)
       tmp = tmp + dmat_b
     end if
 
     if (use_relaxed) then
       call tagarray_get_data(infos%dat, OQP_TD_P, td_p)
-      tmp = tmp + td_p(:,1) + td_p(:,2)
+      tmp = tmp + td_p_spin_sum(td_p)
       write(iw,'(4x,a,i4)') 'Using RELAXED excited-state density for ESPF charges, state ', istate
     else
       write(iw,'(4x,a,i4)') 'Using ROHF reference density for ESPF charges (ESPF_ROHF), state ', istate
     end if
 
     npt = nat * (132 + 152 + 192 + 350)
-    allocate(xyz(npt,3), ttt(nat,npt), chg_op(nbf2), stat=ok)
+    nblk = espf_atom_block(nbf2, nat)
+    allocate(xyz(npt,3), ttt(nat,npt), chg_op(nbf2,nblk), stat=ok)
     if (ok /= 0) call show_message('Cannot allocate ESPF arrays', WITH_ABORT)
 
     call form_espf_grid(nat, npt, 4, [1.4_dp,1.6_dp,1.8_dp,2.0_dp], &
@@ -158,11 +172,15 @@ module qmmm_mod
     call tagarray_get_data(infos%dat, OQP_partial_charges, partial_charges)
 
     corr=0.0_dp
-    do i = 1, nat
-      call omp_qmmm(basis, i, transpose(xyz(1:nptcur,:)), wn, chg_op, nat, logtol=tol)
-      chg = traceprod_sym_packed(tmp, chg_op, nbf)
-      partial_charges(i) = infos%atoms%zn(i) + chg
-      corr = corr + partial_charges(i)
+    do i0 = 1, nat, nblk
+      i1 = min(nat, i0+nblk-1)
+      call omp_qmmm_all(basis, transpose(xyz(1:nptcur,:)), wn(i0:i1,:), &
+                        chg_op(:,1:i1-i0+1), logtol=tol)
+      do i = i0, i1
+        chg = traceprod_sym_packed(tmp, chg_op(:,i-i0+1), nbf)
+        partial_charges(i) = infos%atoms%zn(i) + chg
+        corr = corr + partial_charges(i)
+      end do
     end do
 
     do i = 1, nat
@@ -172,6 +190,7 @@ module qmmm_mod
     call print_charges(infos, partial_charges, iw)
 
     deallocate(tmp, xyz, ttt, chg_op)
+    if (.not. log_was_open) close(iw)
   end subroutine form_esp_charges_excited
 
 
@@ -182,7 +201,7 @@ module qmmm_mod
     use messages, only: show_message, with_abort
     use types, only: information
     use strings, only: Cstring, fstring
-    use int1, only: omp_qmmm
+    use int1, only: omp_qmmm_all
     use constants, only: tol_int
     use mathlib, only: traceprod_sym_packed
     implicit none
@@ -195,7 +214,6 @@ module qmmm_mod
 
     integer :: nat,nelec,nbf2,ok
     type(basis_set), pointer :: basis
-    real(kind=dp), allocatable :: chg_op(:)
     real(kind=dp), target, allocatable :: ttt(:,:), xyz(:,:)
     real(kind=dp), pointer :: coord(:,:)
     real(kind=dp), pointer :: wn(:,:)
@@ -239,7 +257,6 @@ module qmmm_mod
 
     allocate(xyz(npt,3), &
              ttt(nat,npt), &
-             chg_op(nbf2), &
              sum_op(nbf2), &
              corr(nbf2), &
              stat=ok)
@@ -257,17 +274,8 @@ module qmmm_mod
     wn => ttt(:,:nptcur)
     tol = log(10.0d0)*tol_int
     sum_op = 0
+    call omp_qmmm_all(basis, transpose(xyz(1:nptcur,:)), wn, chg_ops_corr, logtol = tol)
     do i = 1, nat
-       chg_ops_corr(:,i) = 0.0_dp
-       call omp_qmmm( &
-            basis,                        &
-            i,                            &
-            transpose(xyz(1:nptcur,:)),   &
-            wn,                           &
-            chg_ops_corr(:,i),            &
-            nat,                          &
-            logtol = tol )
-
        sum_op(:) = sum_op(:) + chg_ops_corr(:,i)
     end do
 
@@ -276,7 +284,7 @@ module qmmm_mod
     do i = 1, nat
        chg_ops_corr(:,i) = chg_ops_corr(:,i) - corr(:)
     end do
-    deallocate(xyz, ttt, chg_op, sum_op, corr)
+    deallocate(xyz, ttt, sum_op, corr)
 
   end subroutine espf_op_corr
 
@@ -497,7 +505,7 @@ module qmmm_mod
     use messages, only: show_message, with_abort
     use types, only: information
     use strings, only: Cstring, fstring
-    use int1, only: omp_qmmm
+    use int1, only: omp_qmmm_all
     use constants, only: tol_int
     use mathlib, only: traceprod_sym_packed
     implicit none
@@ -515,13 +523,13 @@ module qmmm_mod
 
     integer :: nat,nelec,nbf2,ok
     type(basis_set), pointer :: basis
-    real(kind=dp), allocatable :: chg_op(:)
+    real(kind=dp), allocatable :: chg_op(:,:)
     real(kind=dp), target, allocatable :: ttt(:,:), xyz(:,:)
     real(kind=dp), pointer :: coord(:,:)
     real(kind=dp), pointer :: wn(:,:)
 
     integer :: npt, nptcur
-    integer :: i
+    integer :: i, i0, i1, nblk
     real(kind=dp) :: chg,corr
 
     integer, parameter :: nlayers = 4
@@ -560,9 +568,10 @@ module qmmm_mod
       call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b)
     end if
 
+    nblk = espf_atom_block(nbf2, nat)
     allocate(xyz(npt,3), &
              ttt(nat,npt), &
-             chg_op(nbf2), &
+             chg_op(nbf2,nblk), &
              dmat(nbf2), &
              stat=ok)
     if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
@@ -585,11 +594,15 @@ module qmmm_mod
 ! Form partial charges and compute the correction for total charge
     corr=0.0_dp!nelec/nat
 
-    do i=1,nat
-       call omp_qmmm(basis, i, transpose(xyz(1:nptcur,:)), wn, chg_op, nat, logtol=tol)
-       chg = traceprod_sym_packed(dmat,chg_op,nbf)
-       partial_charges(i) = infos%atoms%zn(i) + chg
-       corr = corr + partial_charges(i)
+    do i0 = 1, nat, nblk
+       i1 = min(nat, i0+nblk-1)
+       call omp_qmmm_all(basis, transpose(xyz(1:nptcur,:)), wn(i0:i1,:), &
+                         chg_op(:,1:i1-i0+1), logtol=tol)
+       do i = i0, i1
+          chg = traceprod_sym_packed(dmat,chg_op(:,i-i0+1),nbf)
+          partial_charges(i) = infos%atoms%zn(i) + chg
+          corr = corr + partial_charges(i)
+       end do
     end do
 
 ! Correct for the total charge
@@ -622,7 +635,7 @@ module qmmm_mod
     use messages, only: show_message, with_abort
     use types, only: information
     use strings, only: Cstring, fstring
-    use int1, only: omp_qmmm
+    use int1, only: omp_qmmm_all
     use lebedev, only: lebedev_get_grid
     use elements, only: ELEMENTS_VDW_RADII
     implicit none
@@ -636,14 +649,14 @@ module qmmm_mod
 
     integer :: nbf, nbf2, ok
     type(basis_set), pointer :: basis
-    real(kind=dp), allocatable :: wt(:), chg_op(:)
+    real(kind=dp), allocatable :: wt(:), chg_op(:,:)
     real(kind=dp), allocatable :: xyz(:,:)
     real(kind=dp), target, allocatable :: ttt(:,:)
     real(kind=dp), pointer :: coord(:,:)
     real(kind=dp), pointer :: wn(:,:)
 
     integer :: nat, npt, nptcur
-    integer :: i
+    integer :: i, i0, i1, nblk
     real(kind=dp) :: mm_pot_av
 
     integer, parameter :: nlayers = 4
@@ -664,10 +677,11 @@ module qmmm_mod
     nat = ubound(infos%atoms%zn, 1)
     npt = nat * sum(npt_layer)
 
+    nblk = espf_atom_block(nbf2, nat)
     allocate(xyz(npt,3), &
              wt(npt), &
              ttt(nat,npt), &
-             chg_op(nbf2), &
+             chg_op(nbf2,nblk), &
              stat=ok)
     if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
 
@@ -678,9 +692,13 @@ module qmmm_mod
     wn => ttt(:,:nptcur)
     mm_pot_av = sum(mm_potential)/nat
     hqmmm = -smat*mm_pot_av
-    do i=1,nat
-       call omp_qmmm(basis, i, transpose(xyz(1:nptcur,:)), wn, chg_op, nat, logtol)
-       hqmmm = hqmmm + (mm_potential(i)-mm_pot_av)*chg_op
+    do i0 = 1, nat, nblk
+       i1 = min(nat, i0+nblk-1)
+       call omp_qmmm_all(basis, transpose(xyz(1:nptcur,:)), wn(i0:i1,:), &
+                         chg_op(:,1:i1-i0+1), logtol)
+       do i = i0, i1
+          hqmmm = hqmmm + (mm_potential(i)-mm_pot_av)*chg_op(:,i-i0+1)
+       end do
     end do
 
   end subroutine oqp_esp_qmmm
@@ -727,6 +745,8 @@ module qmmm_mod
     real(kind=dp), allocatable :: wt(:), dens(:)
     real(kind=dp), allocatable :: xyz(:,:)
     real(kind=dp), target, allocatable :: ttt(:,:)
+    integer, allocatable :: parent(:)
+    real(kind=dp), allocatable :: gpt(:,:)
 
     integer :: nat, npt, nptcur
     integer :: i, j, k
@@ -775,10 +795,12 @@ module qmmm_mod
              wt(npt), &
              ttt(nat,npt), &
              dens(nbf2), &
+             parent(npt), &
+             gpt(3,nat), &
              stat=ok)
     if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
 
-    call form_espf_grid(nat,npt,nlayers,layers,npt_layer,typ_layer,infos%atoms%zn,infos%atoms%xyz,xyz,ttt,nptcur)
+    call form_espf_grid(nat,npt,nlayers,layers,npt_layer,typ_layer,infos%atoms%zn,infos%atoms%xyz,xyz,ttt,nptcur,parent)
 
 ! ESP gradient contribution
 !   Tagarray
@@ -805,9 +827,16 @@ module qmmm_mod
     end do
 
 !   Add integral gradient term, mm_potential*[(T^+T)^-1*T^+]*V^x
+!   The grid point g_i rides rigidly on its parent atom.  grad_elpot returns the
+!   basis-centre (Pulay-type) derivatives of Tr[P V(g_i)]; by translational
+!   invariance of the integral, the derivative with respect to g_i itself is
+!   minus their sum, and it is charged to the parent atom.
     do i=1,nptcur
        wt(i)=-dot_product(ttt(:,i),mm_potential)
-       call grad_elpot(basis, xyz(i,:), wt(i), dens, espf_grad_ta)
+       gpt = 0.0_dp
+       call grad_elpot(basis, xyz(i,:), wt(i), dens, gpt)
+       espf_grad_ta = espf_grad_ta + gpt
+       espf_grad_ta(:,parent(i)) = espf_grad_ta(:,parent(i)) - sum(gpt, dim=2)
     end do
 
 !   Add overlap derivative correction for the total charge conservation
@@ -834,7 +863,7 @@ module qmmm_mod
 !   Complete pseudoinverse-weight derivative dZ/dR (a_i = phi_i-<phi> = -mm_potential)
     call espf_grad_weight(basis, nat, nptcur, infos%atoms%xyz, xyz, &
                           ttt, -mm_potential(1:nat), dens, espf_grad_ta, logtol, &
-                          ELEMENTS_VDW_RADII(int(infos%atoms%zn)))
+                          ELEMENTS_VDW_RADII(int(infos%atoms%zn)), parent)
 
 !   Restablish mm potential to the original one
     do i=1,nat
@@ -869,6 +898,8 @@ module qmmm_mod
     real(kind=dp), allocatable :: wt(:), dens(:)
     real(kind=dp), allocatable :: xyz(:,:)
     real(kind=dp), target, allocatable :: ttt(:,:)
+    integer, allocatable :: parent(:)
+    real(kind=dp), allocatable :: gpt(:,:)
 
     integer :: nat, npt, nptcur
     integer :: i, j, k
@@ -883,10 +914,10 @@ module qmmm_mod
     real(kind=dp), contiguous, pointer :: partial_charges(:), mm_potential(:),&
                                           espf_grad_ta(:,:), &
                                           dmat_a(:), dmat_b(:)
-    real(dp), contiguous, pointer :: td_p(:,:), td_abxc(:)
-    character(len=*), parameter :: tags_qmmm(6) = (/ character(len=80) :: &
+    real(dp), contiguous, pointer :: td_p(:,:)
+    character(len=*), parameter :: tags_qmmm(5) = (/ character(len=80) :: &
       OQP_partial_charges, OQP_POTMM, OQP_ESPF_GRAD, OQP_DM_A, &
-      OQP_TD_P, OQP_TD_ABXC/)
+      OQP_TD_P/)
     character(len=*), parameter :: tags_beta(1) = (/ character(len=80) :: &
       OQP_DM_B/)
 
@@ -931,10 +962,12 @@ module qmmm_mod
              wt(npt), &
              ttt(nat,npt), &
              dens(nbf2), &
+             parent(npt), &
+             gpt(3,nat), &
              stat=ok)
     if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
 
-    call form_espf_grid(nat,npt,nlayers,layers,npt_layer,typ_layer,infos%atoms%zn,infos%atoms%xyz,xyz,ttt,nptcur)
+    call form_espf_grid(nat,npt,nlayers,layers,npt_layer,typ_layer,infos%atoms%zn,infos%atoms%xyz,xyz,ttt,nptcur,parent)
 
 ! ESP gradient contribution
 !   Tagarray
@@ -957,7 +990,7 @@ module qmmm_mod
     if (use_relaxed) then
       ! Default: S1 relaxed density = ROHF + td_p (orbital-relaxation correction)
       call tagarray_get_data(infos%dat, OQP_TD_P, td_p)
-      dens = dens + td_p(:,1) + td_p(:,2)
+      dens = dens + td_p_spin_sum(td_p)
     else
       ! ESPF_ROHF=1: stop at the ROHF reference density -- do NOT add td_abxc.
       ! This option uses the ROHF reference density for ESPF fitting
@@ -973,9 +1006,16 @@ module qmmm_mod
     end do
 
 !   Add integral gradient term, mm_potential*[(T^+T)^-1*T^+]*V^x
+!   The grid point g_i rides rigidly on its parent atom.  grad_elpot returns the
+!   basis-centre (Pulay-type) derivatives of Tr[P V(g_i)]; by translational
+!   invariance of the integral, the derivative with respect to g_i itself is
+!   minus their sum, and it is charged to the parent atom.
     do i=1,nptcur
        wt(i)=-dot_product(ttt(:,i),mm_potential)
-       call grad_elpot(basis, xyz(i,:), wt(i), dens, espf_grad_ta)
+       gpt = 0.0_dp
+       call grad_elpot(basis, xyz(i,:), wt(i), dens, gpt)
+       espf_grad_ta = espf_grad_ta + gpt
+       espf_grad_ta(:,parent(i)) = espf_grad_ta(:,parent(i)) - sum(gpt, dim=2)
     end do
 
 !   Add overlap derivative correction for the total charge conservation
@@ -1004,7 +1044,7 @@ module qmmm_mod
 !   a_i = phi_i - <phi> = -mm_potential.
     call espf_grad_weight(basis, nat, nptcur, infos%atoms%xyz, xyz, &
                           ttt, -mm_potential(1:nat), dens, espf_grad_ta, logtol, &
-                          ELEMENTS_VDW_RADII(int(infos%atoms%zn)))
+                          ELEMENTS_VDW_RADII(int(infos%atoms%zn)), parent)
 
 !   Restablish mm potential to the original one
     do i=1,nat
@@ -1083,7 +1123,7 @@ module qmmm_mod
 !>          an s_k factor), an extra weight-derivative term:
 !>            dE/dR += sum_k ds_k/dR * B_k (u_k - G_k),
 !>          with ds_k/dR_{J} = [prod_{b/=J} S_b] S'_J (1/delta) (R_J-g_k)/|g_k-R_J|.
-  subroutine espf_grad_weight(basis, nat, nptcur, at, gxyz, zmat, amm, dens, grad, logtol, rvdw)
+  subroutine espf_grad_weight(basis, nat, nptcur, at, gxyz, zmat, amm, dens, grad, logtol, rvdw, parent)
     use precision, only: dp
     use basis_tools, only: basis_set
     use int1, only: electrostatic_potential_unweighted
@@ -1099,6 +1139,14 @@ module qmmm_mod
     real(kind=dp), intent(inout)         :: grad(:,:)      ! (3,nat) accumulated dE/dR
     real(kind=dp), intent(in)            :: logtol
     real(kind=dp), intent(in)            :: rvdw(:)        ! (nat) base VDW radii
+    !> Parent atom of each grid point.  Every term below depends on the grid
+    !> point position g_k only through differences (g_k - R_i), so the derivative
+    !> with respect to g_k is minus the sum over atoms of the (g_k - R_i)
+    !> derivatives; since g_k rides rigidly on its parent atom that counter-term
+    !> is charged to the parent.  Without it the atom-centred grid is treated as
+    !> fixed in space and the gradient is neither translationally invariant nor
+    !> the derivative of the energy.
+    integer, intent(in), optional        :: parent(:)
 
     real(kind=dp), allocatable :: gx(:), gy(:), gz(:), u(:)
     real(kind=dp), allocatable :: tmat(:,:), minv(:,:), bvec(:), gvec(:), &
@@ -1132,6 +1180,12 @@ module qmmm_mod
     if (status == 0) then
       if (len_trim(envv) > 0) read(envv,*) sw_delta
     end if
+    ! 1.8 is the whole-molecule default and over-smooths at a COVALENT QM/MM
+    ! boundary, where the gradient residual concentrates on the MM host atom:
+    ! ESPF_SWSCALE=1.5 cuts that residual 5-13x on both measured link-atom
+    ! systems, while being ~20% worse without a cut bond.  Not a safe global
+    ! default, so it is documented rather than changed -- see
+    ! openqp-devkit docs/espf_qmmm_switching.md and issue #260.
     sw_scale = 1.8_dp
     call get_environment_variable('ESPF_SWSCALE', envv, status=status)
     if (status == 0) then
@@ -1193,6 +1247,11 @@ module qmmm_mod
         grad(1,i) = grad(1,i) + fac*dx
         grad(2,i) = grad(2,i) + fac*dy
         grad(3,i) = grad(3,i) + fac*dz
+        if (present(parent)) then
+          grad(1,parent(k)) = grad(1,parent(k)) - fac*dx
+          grad(2,parent(k)) = grad(2,parent(k)) - fac*dy
+          grad(3,parent(k)) = grad(3,parent(k)) - fac*dz
+        end if
       end do
     end do
 
@@ -1214,6 +1273,11 @@ module qmmm_mod
           grad(1,j) = grad(1,j) - coef*dx
           grad(2,j) = grad(2,j) - coef*dy
           grad(3,j) = grad(3,j) - coef*dz
+          if (present(parent)) then
+            grad(1,parent(k)) = grad(1,parent(k)) + coef*dx
+            grad(2,parent(k)) = grad(2,parent(k)) + coef*dy
+            grad(3,parent(k)) = grad(3,parent(k)) + coef*dz
+          end if
         end do
       end do
     end if
@@ -1383,7 +1447,7 @@ module qmmm_mod
 !
 !     REVISION HISTORY:
 !> @date _Oct, 2024_ Initial release
-  subroutine form_espf_grid(nat,npt,nlayers,layers,npt_layer,typ_layer,zn,atoms_xyz,xyz,ttt,nptcur)
+  subroutine form_espf_grid(nat,npt,nlayers,layers,npt_layer,typ_layer,zn,atoms_xyz,xyz,ttt,nptcur,parent)
     use precision, only: dp
     use lebedev, only: lebedev_get_grid
     use elements, only: ELEMENTS_VDW_RADII
@@ -1396,6 +1460,10 @@ module qmmm_mod
     integer, intent(in) :: npt_layer(nlayers),typ_layer(nlayers)
     real(kind=dp), intent(inout) :: xyz(npt,3),ttt(nat,npt)
     integer, intent(inout) :: nptcur
+    !> Optional: parent atom of every kept grid point.  The grid is atom-centred
+    !> and translates rigidly with its atom, so the analytic gradient needs to
+    !> know which atom each point rides on (see espf_grad_weight / grad_esp_qmmm).
+    integer, intent(inout), optional :: parent(:)
 
     real(kind=dp), allocatable :: leb(:,:), lebw(:)
     real(kind=dp), allocatable :: vdwrad(:), excl_vdw(:), wt(:)
@@ -1594,6 +1662,7 @@ module qmmm_mod
             neighbours=neigh, &
             excl_rad=excl_vdw)
         end if
+        if (present(parent)) parent(nptcur+1:nptcur+nadd) = i
         nptcur = nptcur + nadd
       end do
     end do
@@ -1616,6 +1685,7 @@ module qmmm_mod
             nkeep = nkeep + 1
             xyz(nkeep,:) = xyz(kk,:)
             s(nkeep) = s(kk)
+            if (present(parent)) parent(nkeep) = parent(kk)
           end if
         end do
         nptcur = nkeep
@@ -1636,7 +1706,7 @@ module qmmm_mod
       if (st_k == 0 .and. trim(env_k) == '1') then
         block
           integer :: ud
-          open(newunit=ud, file='/tmp/espf_npts.txt', position='append', action='write')
+          open(newunit=ud, file=selftest_output_path('espf_npts.txt'), position='append', action='write')
           if (hard_grid_mode) then
             write(ud,'(a,i7)') 'hard-grid nptcur=', nptcur
           else if (smooth) then
@@ -1698,5 +1768,36 @@ module qmmm_mod
     write(iw,'(30("="))')
 
   end subroutine print_charges
+
+!> @brief Number of QM atoms whose packed ESPF operators are formed in one
+!>  pass of omp_qmmm_all
+!
+!> @details One pass evaluates the grid-point integrals once for all atoms of
+!>  the block, but holds nbf2 doubles per atom.  The block is limited to
+!>  ESPF_OP_BLOCK_MIB, so a large basis on a large QM region costs a few
+!>  passes instead of an allocation failure.  The operators do not depend on
+!>  the block size.  ESPF_ATOM_BLOCK=n (n > 0) sets it explicitly.
+  integer function espf_atom_block(nbf2, nat) result(nblk)
+    use precision, only: dp
+    integer, intent(in) :: nbf2, nat
+
+    character(len=16) :: env_b
+    integer :: st_b, ios, nreq
+
+    nblk = int(min(real(nat, dp), &
+                   max(1.0_dp, ESPF_OP_BLOCK_MIB*1048576.0_dp/(8.0_dp*nbf2))))
+
+    call get_environment_variable('ESPF_ATOM_BLOCK', env_b, status=st_b)
+    if (st_b == 0) then
+      ! A list-directed null value (',' or '/') leaves nreq unassigned, and a
+      ! failed read leaves it undefined; both keep the memory-bounded default.
+      nreq = 0
+      read(env_b, *, iostat=ios) nreq
+      if (ios /= 0) nreq = 0
+      if (nreq > 0) nblk = min(nat, nreq)
+    end if
+    nblk = max(1, nblk)
+
+  end function espf_atom_block
 
 end module qmmm_mod

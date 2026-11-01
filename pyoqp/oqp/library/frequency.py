@@ -5,10 +5,23 @@ from oqp.utils.constants import SPEED_OF_LIGHT, ATMOS, BOHR
 from oqp.utils.constants import FREQ_TO_INV_CM, AMU_to_KG, J_TO_AU
 from oqp.utils.constants import GAS_CONSTANT, PLANCK_CONSTANT, BOLTZMANN_CONSTANT, AVOGADRO_CONSTANT
 
-# Common atomic-unit IR conversion used by quantum-chemistry frequency analyses:
-# (d dipole / d normal coordinate)^2 -> km/mol.  Dipole derivatives are in
-# e*Bohr and normal coordinates use amu-normalized Cartesian modes.
-IR_INTENSITY_CONVERSION_KM_MOL = 42.255
+# IR intensity A = N_A / (12 eps0 c^2) |d mu / d Q|^2 (SI).  Dipole derivatives
+# are in atomic units (e*Bohr/Bohr = e) and normal coordinates Q are in
+# sqrt(amu)*Bohr (amu-normalized Cartesian modes), so |d mu / d Q|^2 is in
+# e^2/amu.  With e^2/(4 pi eps0) = alpha hbar c this is
+# N_A alpha h / (6 c amu) = 974.880 km/mol per e^2/amu (CODATA 2018).
+# It must equal physical_constants::IR_INTENSITY_AU_TO_KM_MOL used by the
+# native kernel.  The former 42.255 is the (Debye/Angstrom)^2/amu factor and
+# made every intensity 23.07 times too small.
+_N_AVOGADRO = 6.02214076e23
+_FINE_STRUCTURE = 7.2973525693e-3
+_PLANCK = 6.62607015e-34  # J s
+_SPEED_OF_LIGHT = 299792458.0  # m / s
+_ATOMIC_MASS_UNIT = 1.66053906660e-27  # kg
+IR_INTENSITY_CONVERSION_KM_MOL = (
+    _N_AVOGADRO * _FINE_STRUCTURE * _PLANCK
+    / (6.0 * _SPEED_OF_LIGHT * _ATOMIC_MASS_UNIT) / 1000.0
+)
 
 
 def infrared_intensities(dipole_derivatives, modes):
@@ -112,7 +125,7 @@ def normal_mode(coord, mass, hessian):
         mij = mi ** 0.5
         for j in range(3):
             tr[3*i+j, 3] = + mij * (p_xyz[i, 1] * p_axis[j, 2] - p_xyz[i, 2] * p_axis[j, 1])
-            tr[3*i+j, 4] = - mij * (p_xyz[i, 0] * p_axis[j, 2] + p_xyz[i, 2] * p_axis[j, 0])
+            tr[3*i+j, 4] = - mij * (p_xyz[i, 0] * p_axis[j, 2] - p_xyz[i, 2] * p_axis[j, 0])
             tr[3*i+j, 5] = + mij * (p_xyz[i, 0] * p_axis[j, 1] - p_xyz[i, 1] * p_axis[j, 0])
 
     u, s, v = np.linalg.svd(tr, full_matrices=True)

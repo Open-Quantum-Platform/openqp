@@ -1,8 +1,8 @@
 """Validate the native analytic Hessian with effective core potentials (ECP).
 
-ECP second derivatives are supplied by libecpint (derivative order 2):
+ECP second derivatives are supplied by ecp_tool::ecp_raw_ints (derivative order 2):
   * the ECP skeleton d^2 V_ECP/dR^2 (fixed density) is contracted analytically
-    via ecp_tool::add_ecphess into the Cartesian Hessian, packed by the libecpint
+    via ecp_tool::add_ecphess into the Cartesian Hessian, packed in the
     atom-pair convention {AA, AB, AC, ..., BB, ...};
   * the ECP first-derivative integrals enter the core-Hamiltonian derivative
     dHcore/dR (ecp_tool::ecp_deriv_ints added into the nuclear-attraction
@@ -22,12 +22,12 @@ Skipped unless the compiled OpenQP runtime is importable.
 """
 
 import os
+import tempfile
 import unittest
 from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(__file__).resolve().parents[1]
 
 INPUT_TMPL = """[input]
 system=
@@ -52,7 +52,6 @@ nproc=1
 
 def _runtime_available():
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         import oqp  # noqa: F401
         from oqp.pyoqp import Runner  # noqa: F401
@@ -63,11 +62,16 @@ def _runtime_available():
 
 @unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime not available")
 class EcpAnalyticHessian(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="oqp_ecp_hess_")
+        self.addCleanup(tmp.cleanup)
+        self.tmpdir = Path(tmp.name)
+
     def _hessian(self, tag, charge, mult, scf, hess_type):
         from oqp.pyoqp import Runner
 
-        workdir = Path(f"/tmp/oqp_ecp_hess_{tag}_{hess_type}")
-        workdir.mkdir(exist_ok=True)
+        workdir = self.tmpdir / f"{tag}_{hess_type}"
+        workdir.mkdir()
         inp = workdir / "hbr.inp"
         inp.write_text(INPUT_TMPL.format(charge=charge, mult=mult, scf=scf,
                                          hess_type=hess_type))

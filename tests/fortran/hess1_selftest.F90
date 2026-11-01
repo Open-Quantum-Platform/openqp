@@ -10,6 +10,7 @@ module hess1_selftest_mod
 !>   This is a validation harness only; it does not compute or return a physical
 !>   Hessian and is independent of the guarded hf_hessian kernel.
 
+  use selftest_output, only: selftest_output_path
   implicit none
 
   character(len=*), parameter :: module_name = "hess1_selftest_mod"
@@ -240,7 +241,7 @@ contains
         end do
         block
           integer :: u2
-          open(newunit=u2, file='/tmp/hess1_sep.out', status='replace', action='write')
+          open(newunit=u2, file=selftest_output_path('hess1_sep.out'), status='replace', action='write')
           write(u2,'(a,es12.4)') 'sum(fd_bb+fd_bc+fd_cb+fd_cc) vs total fd = ', &
             maxval(abs((fd_bb+fd_bc+fd_cb+fd_cc) - hess_v_fd))
           write(u2,'(a)') '--- fd_bb (d2E/dbasis dbasis) ---'
@@ -315,7 +316,7 @@ contains
 
         allocate(PAA(3,3,nbf,nbf), PAB(3,3,nbf,nbf))
         call ecab%alloc(basis)
-        open(newunit=u3, file='/tmp/hess_nuc_blocks.txt', status='replace', action='write')
+        open(newunit=u3, file=selftest_output_path('hess_nuc_blocks.txt'), status='replace', action='write')
         write(u3,'(2i6)') nbf, natom
         ! Shell-basis export so the oracle can build PySCF from OpenQP's EXACT
         ! basis (exponents + contraction coefficients), making the radial AOs
@@ -387,7 +388,7 @@ contains
 
     block
       integer :: u
-      open(newunit=u, file='/tmp/hess1_selftest.out', status='replace', action='write')
+      open(newunit=u, file=selftest_output_path('hess1_selftest.out'), status='replace', action='write')
       write(u,'(a,es12.4)') 'overlap max|an-fd| = ', err_o
       write(u,'(a,es12.4)') 'kinetic max|an-fd| = ', err_k
       write(u,'(a,es12.4)') 'overlap asymmetry  = ', sym_o

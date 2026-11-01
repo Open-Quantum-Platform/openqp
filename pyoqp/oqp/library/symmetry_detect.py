@@ -182,9 +182,23 @@ def _candidate_directions(charges: np.ndarray, coords: np.ndarray) -> list[np.nd
 
 
 def _dedupe_directions(candidates: list[np.ndarray]) -> list[np.ndarray]:
+    """Keep the first of every group of (anti)parallel directions, in order.
+
+    Same greedy rule as comparing each candidate against every kept direction
+    one dot product at a time, but each candidate is tested against the kept
+    set in one array operation. A geometry without symmetry keeps almost all of
+    its O(N^2) candidates, so the scalar form spent O(N^4) Python-level dot
+    products here (minutes at a few hundred atoms).
+    """
+    if not candidates:
+        return []
+    kept = np.empty((len(candidates), 3))
+    nkept = 0
     unique: list[np.ndarray] = []
     for vec in candidates:
-        if all(abs(float(np.dot(vec, u))) < 1.0 - 1.0e-6 for u in unique):
+        if nkept == 0 or float(np.max(np.abs(kept[:nkept] @ vec))) < 1.0 - 1.0e-6:
+            kept[nkept] = vec
+            nkept += 1
             unique.append(vec)
     return unique
 
@@ -259,12 +273,47 @@ class _ElementSurvey:
         self.proper_axes: list[tuple[np.ndarray, int]] = []
         self.mirror_normals: list[np.ndarray] = []
 
+        if not self.has_inversion and self._survey_without_partners():
+            return
+
         for direction in _candidate_directions(charges, coords):
             order = _proper_axis_order(charges, coords, direction, tolerance)
             if order > 1:
                 self.proper_axes.append((direction, order))
             if _is_symmetry_op(charges, coords, _reflection_matrix(direction), tolerance):
                 self.mirror_normals.append(direction)
+
+    def _survey_without_partners(self) -> bool:
+        """Survey a geometry in which no atom can be mapped onto another.
+
+        When ``_every_atom_is_its_own_class`` holds, every operation fixes
+        every atom. For a geometry that is not (nearly) linear -- the screen
+        declines those -- the only proper operation fixing every atom is the
+        identity, and the only improper one is the mirror plane of a planar
+        geometry, whose normal is a principal axis of the inertia tensor (the
+        first candidates the full search would try). So the O(N^2) candidate
+        search can only rediscover that plane. Returns False, and leaves the
+        survey to the full search, when the screen does not apply or a
+        geometry that is planar within tolerance shows no mirror among the
+        principal axes.
+        """
+        charges, coords, tolerance = self.charges, self.coords, self.tolerance
+        try:
+            if not _every_atom_is_its_own_class(charges, coords, tolerance):
+                return False
+        except Exception:
+            return False
+        _, axes = np.linalg.eigh(_inertia_tensor(charges, coords))
+        normals = [axes[:, k] for k in range(3)
+                   if _is_symmetry_op(charges, coords,
+                                      _reflection_matrix(axes[:, k]), tolerance)]
+        if not normals:
+            centered = coords - np.einsum('i,ij->j', charges, coords) / float(np.sum(charges))
+            singular = np.linalg.svd(centered, compute_uv=False)
+            if singular.size < 3 or singular[-1] <= np.sqrt(coords.shape[0]) * tolerance:
+                return False
+        self.mirror_normals = _dedupe_directions(normals)
+        return True
 
     @property
     def c2_axes(self) -> list[np.ndarray]:

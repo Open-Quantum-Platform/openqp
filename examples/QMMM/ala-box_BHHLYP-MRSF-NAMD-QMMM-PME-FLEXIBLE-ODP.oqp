@@ -1,0 +1,7 @@
+mrsf(nstate=2)/bhhlyp/6-31g
+namd(S0,scheme=Overlap) scf(conv=1e-09)
+md(nstep=2,ensemble=nvt,restart_interval=2)
+qmmm(forcefield_files="amber14-all.xml amber14/tip3p.xml",qm_atoms="8,9,16,17,18,244,245,246",cutoff=PME,ewald_tol=1e-06,lj_switch=true,h_lj=true,mm_charge_width=0.7)
+flexible(enabled=true,alpha=5.0,temperature=300,atoms="8,9,16,17,18")
+odp(enabled=true,cv="distance(17,245); distance(9,245)",scale="1.0,1.0",reference_r="6.2,7.3",reference_p="5.4,5.5",center=0.1,k_parallel=0.05,k_perpendicular=0.01,window=1)
+geom="ala_box.pdb"

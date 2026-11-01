@@ -1,7 +1,8 @@
 !> @brief SCF wiring for the trust-region augmented-Hessian (TRAH) solver.
 !> @detail Method: Helmich-Paris, J. Chem. Phys. 154, 164104 (2021); the
 !>         augmented-Hessian/level-shift lineage traces to Bacskay, Chem. Phys.
-!>         61, 385 (1981). Selected by control%trh_impl = 1.
+!>         61, 385 (1981). This is the only TRAH implementation; control%trh_impl
+!>         is retained as an accepted input but selects nothing.
 !>
 !>         The optimizer itself -- the macro trust-region loop, the
 !>         Steihaug-Toint preconditioned CG, the augmented-Hessian Davidson step
@@ -13,7 +14,7 @@
 !>         `casscf_driver.F90` supplies a different provider over the same core.
 !>
 !>         Convention: calc_g_h / calc_h_op return HALF the true orbital
-!>         gradient / Hessian (the same convention otr_interface shares with
+!>         gradient / Hessian (the convention shared with
 !>         them, which is why it scales by 2). The factor of 2 is applied HERE,
 !>         at exactly the places it was applied before, so the core sees the
 !>         true gradient/Hessian and no second convention is introduced.
@@ -39,12 +40,30 @@ module trah_native
   private
   public :: trah_native_run
 
+  !> Hybrid TRAH: the ARH model Hessian is used from the first macro-iteration
+  !> until the RMS gradient falls below arh_gnorm_off, then the exact Hessian
+  !> (the tight tail, where Fock builds switch to full density).  A model step
+  !> that predicts the energy poorly is retried with the exact Hessian.
+  !> arh_default_rohf is the memory used when trh_arh < 0 and the reference
+  !> is open-shell (ROHF/ROKS, UHF/UKS), and by converger_type=arh when
+  !> trh_arh <= 0.
+  !> converger_type=arh (control%trh_arh_only) is ARH as a method of its own:
+  !> the model in every macro-iteration, tail included, with one trust radius,
+  !> and no exact-Hessian stability check (opt-in via [scf] stability).
+  real(dp), parameter :: arh_gnorm_on  = huge(1.0_dp)
+  real(dp), parameter :: arh_gnorm_off = 1.0e-4_dp
+  integer,  parameter :: arh_default_rohf = 20
+
   !> SCF's implementation of the four TRAH physics callbacks.
   type, extends(trah_provider_t) :: scf_trah_provider_t
     type(information), pointer :: infos => null()
     type(dft_grid_t),  pointer :: molgrid => null()
     type(trah_converger), pointer :: conv => null()
     type(scf_energy_t), pointer :: energy => null()
+    integer :: model_builds = 0
+    integer :: fock_builds = 0          !< SCF Fock builds (gradient + trial energies)
+    logical :: full_fock = .false.
+    logical :: arh_tail = .false.       !< tight tail reached: exact Hessian from here on
   contains
     procedure :: grad_hdiag   => scf_grad_hdiag
     procedure :: hess_vec     => scf_hess_vec
@@ -64,7 +83,7 @@ contains
     class(scf_conv_result), intent(inout)         :: res
     type(scf_energy_t),     intent(inout), target :: energy
 
-    integer  :: n, irst, nrst, ierr, macro
+    integer  :: n, irst, nrst, ierr, macro, resp_builds, diag_builds, narh
     real(dp) :: e0, e_best, gnorm
     real(dp), allocatable :: mo0_a(:,:), mo0_b(:,:), mob_a(:,:), mob_b(:,:)
     real(dp), allocatable :: mo_e_a(:), mo_e_b(:), g(:), hdiag(:)
@@ -76,10 +95,13 @@ contains
     n = int(conv%n_param)
 
     prov%nparam  = n
+    prov%refresh_on_rejection = .true.
+    prov%hess_vec_is_linear = .true.
     prov%infos   => infos
     prov%molgrid => molgrid
     prov%conv    => conv
     prov%energy  => energy
+    prov%model_only = infos%control%trh_arh_only
 
     par%nmac       = int(infos%control%maxit)
     par%nmic       = int(infos%control%trh_nmic)
@@ -92,15 +114,45 @@ contains
     ! state, so the conservative Steihaug step is forced and the stability
     ! check -- which would kick off the targeted state -- is skipped.
     par%deterministic = infos%control%mom
+    ! converger_type=arh, like DIIS, does no exact-Hessian work of its own: its
+    ! model is positive semidefinite by construction and cannot see a saddle,
+    ! so stability is the opt-in [scf] stability safeguard (an exact TRAH pass
+    ! after convergence).  The in-loop check cost 40 response Fock builds on
+    ! FeCl4- (ROHF, ROKS, UHF) and found no saddle there.
+    par%stability  = .not. prov%model_only
     par%rms_gnorm  = .true.
     par%verbose    = .true.
+    par%iterations = infos%control%verbose >= 1
     par%want_history = .false.
 
     allocate(mo_e_a(conv%nbf), mo_e_b(conv%nbf), g(n), hdiag(n))
     conv%f_old = 0.0_dp
     conv%d_old = 0.0_dp
 
-    write(IW,'(/5X,"Native TRAH (trust-region Newton, Steihaug-CG)"/5X,46("-"))')
+    if (prov%model_only) then
+      write(IW,'(/5X,"Native ARH (augmented Roothaan-Hall trust region)"/5X,49("-"))')
+    else if (par%sub_solver == 2 .or. par%deterministic) then
+      write(IW,'(/5X,"Native TRAH (trust-region Newton, Steihaug-CG)"/5X,46("-"))')
+    else
+      write(IW,'(/5X,"Native TRAH (trust-region Newton, augmented-Hessian Davidson)"/5X,61("-"))')
+    end if
+    ! trh_arh < 0 (default) selects by reference: ARH for open shells, exact
+    ! response for RHF.  With the secant model, UHF FeCl4- took 138 against 196
+    ! exact-Hessian Fock builds alone and 203 against 327 after DIIS and SOSCF
+    ! (the indefinite symmetric model made UHF slower).  RHF water saves no
+    ! exact build: the model is stiffer than F' outside its span.
+    narh = int(infos%control%trh_arh)
+    if (narh < 0) narh = merge(0, arh_default_rohf, infos%control%scftype == scf_rhf)
+    if (prov%model_only .and. narh <= 0) narh = arh_default_rohf
+    if (prov%model_only) then
+      write(IW,'(5X,"Hessian: augmented Roothaan-Hall model in every step, memory =",I4, &
+                &" (no stability check; see [scf] stability)")') narh
+    else if (narh > 0) then
+      write(IW,'(5X,"Hessian: augmented Roothaan-Hall model, memory =",I4, &
+                &" (exact response in the stability check)")') narh
+    else
+      write(IW,'(5X,"Hessian: exact response")')
+    end if
     write(IW,'(5X,"start trust radius =",F7.3,"   conv =",ES9.2,"   max micro =",I4)') &
               par%r0, par%conv_tol, par%nmic
     write(IW,'(/4x,"Macro",6x,"Energy",13x,"|grad|",7x,"rho",6x,"trust",3x,"micro",3x,"step")')
@@ -123,7 +175,14 @@ contains
     e0 = 0.0_dp
     macro = 0
 
+    prov%fock_builds = 0
+    resp_builds = 0
+    diag_builds = 0
     do irst = 1, nrst
+      prov%model_builds = 0
+      prov%arh_tail = .false.
+      call conv%arh_init(narh)
+      prov%full_fock = infos%control%scf_incremental == 0
       conv%mo_a = mo0_a; conv%mo_b = mo0_b
       conv%f_old = 0.0_dp; conv%d_old = 0.0_dp
       if (nrst > 1) write(IW,'(/5X,"--- restart ",I0," of ",I0," ---")') irst, nrst
@@ -133,13 +192,15 @@ contains
       end if
 
       call trah_run(prov, par, tres)
+      resp_builds = resp_builds + conv%n_resp_builds
+      diag_builds = diag_builds + conv%n_diag_builds
       e0    = tres%energy
       gnorm = tres%gnorm
       macro = tres%iter
       res%error = tres%error
-      if (tres%ierr > 0) res%ierr = tres%ierr
+      res%ierr = tres%ierr
 
-      conv_ok = (tres%gnorm < 1.0e-4_dp)
+      conv_ok = tres%converged .and. tres%ierr == 0 .and. tres%gnorm < par%conv_tol
       if (conv_ok .and. e0 < e_best) then
         e_best = e0; mob_a = conv%mo_a; mob_b = conv%mo_b; have_best = .true.
       end if
@@ -154,11 +215,26 @@ contains
     if (have_best) then
       conv%mo_a = mob_a; conv%mo_b = mob_b
       conv%f_old = 0.0_dp; conv%d_old = 0.0_dp
-      call build_fock_grad(infos, molgrid, conv, energy, conv%mo_a, conv%mo_b, g, hdiag, e0)
-      res%error = min(sqrt(dot_product(g, g)/real(n, dp)), 0.99_dp*par%conv_tol)
-      res%ierr  = 0
+      call build_fock_grad(infos, molgrid, conv, energy, conv%mo_a, conv%mo_b, g, hdiag, e0, .true.)
+      prov%fock_builds = prov%fock_builds + 1
+      res%error = sqrt(dot_product(g, g)/real(max(1,n), dp))
+      res%ierr = 4
+      if (res%error < par%conv_tol) res%ierr = 0
+      write(IW,'(5X,"Native TRAH: final fresh-Fock residual =",ES12.4,"  tolerance =",ES12.4)') &
+        res%error, par%conv_tol
+      if (res%ierr /= 0) write(IW,'(5X,"Native TRAH: final fresh-Fock residual did not converge.")')
       if (nrst > 1) write(IW,'(/5X,"best of ",I0," restarts: E =",F20.10)') nrst, e_best
+    else
+      if (res%ierr == 0) res%ierr = 4
     end if
+
+    write(IW,'(5X,"Native TRAH: Fock builds =",I6,"   response Fock builds =",I6, &
+              &"   total =",I6)') prov%fock_builds, resp_builds, prov%fock_builds + resp_builds
+    ! The verbose>=3 linearity diagnostic builds exact responses outside the
+    ! algorithm; report them apart so the counts above compare across verbosity.
+    if (diag_builds > 0) write(IW,'(5X,"Native TRAH: diagnostic response Fock builds =",I6, &
+              &" (scf verbose>=3 linearity check, not in the total)")') diag_builds
+    call conv%arh_init(0)
 
     conv%etot = e0
     call compute_native_mo_energies(conv%nbf, conv%fock_ao(:,1), conv%mo_a, &
@@ -195,20 +271,66 @@ contains
     real(dp), intent(out) :: g(:), hdiag(:), e
     integer,  intent(out) :: ierr
     ierr = 0
+    this%model_builds = this%model_builds + 1
+    this%fock_builds = this%fock_builds + 1
     call build_fock_grad(this%infos, this%molgrid, this%conv, this%energy, &
-                         this%conv%mo_a, this%conv%mo_b, g, hdiag, e)
+                         this%conv%mo_a, this%conv%mo_b, g, hdiag, e, &
+                         this%full_fock .or. mod(this%model_builds, 10) == 0)
+    ! Match the DIIS refresh threshold. Once in the tight tail, both the
+    ! model and every trial energy must use full-density Fock builds.
+    if (.not. this%full_fock .and. sqrt(dot_product(g,g)/real(max(1,size(g)),dp)) < 1.0e-4_dp) then
+      this%full_fock = .true.
+      this%fock_builds = this%fock_builds + 1
+      call build_fock_grad(this%infos, this%molgrid, this%conv, this%energy, &
+                           this%conv%mo_a, this%conv%mo_b, g, hdiag, e, .true.)
+    end if
+    ! The accepted point becomes the reference of the ARH response model.
+    call this%conv%arh_push()
+    call this%conv%arh_set_reference()
+    ! Hybrid TRAH: the ARH model is used only while the RMS gradient lies in
+    ! [arh_gnorm_off, arh_gnorm_on).  Far from convergence the energy is not
+    ! close to quadratic over a trust-region step, and in the tight tail the
+    ! model differences are at the level of build noise (DFT grid, the
+    ! incremental -> full Fock switch); both use the exact Hessian.  Pairs are
+    ! stored in every phase, so the model is ready when it is switched on.
+    block
+      real(dp) :: grms
+      grms = sqrt(dot_product(g,g)/real(max(1,size(g)),dp))
+      if (grms < arh_gnorm_off .and. .not. this%model_only) this%arh_tail = .true.
+      this%model_hessian = this%conv%arh_mem > 0 .and. .not. this%arh_tail &
+                           .and. grms < arh_gnorm_on
+    end block
+    if (this%infos%control%verbose >= 3 .and. this%conv%arh_nb > 0) &
+      write(IW,'(5X,"ARH model: ",I3," pairs, linearity residual of the newest =",ES10.2)') &
+        this%conv%arh_nb, this%conv%arh_linearity_residual(this%infos)
   end subroutine scf_grad_hdiag
 
   !> hv = H.v via the converger's Fock-like contraction (calc_h_op returns half
   !> the true Hessian, hence the 2).
+  !>
+  !> calc_h_op builds the response Fock of the trial density through the
+  !> density-screened two-electron driver, whose cutoff is absolute
+  !> (Schwarz bound x max|D| < int2e_cutoff).  The Davidson start vector and the
+  !> Newton steps near convergence have norms down to |g|/diag(H) ~ 1e-10, so
+  !> an unnormalised product loses most of its response part and H.v stops
+  !> being linear in v.  H is linear, so the product is formed for v/|v| (the
+  !> density scale the screening is set for) and scaled back.
   subroutine scf_hess_vec(this, v, hv, ierr)
     class(scf_trah_provider_t), intent(inout) :: this
     real(dp), intent(in)  :: v(:)
     real(dp), intent(out) :: hv(:)
     integer,  intent(out) :: ierr
+    real(dp) :: vnorm
     ierr = 0
-    call this%conv%calc_h_op(this%infos, v, hv)
-    hv = 2.0_dp * hv
+    this%conv%arh_exact = this%exact_hessian .or. this%model_untrusted .or. &
+                          .not. this%model_hessian
+    vnorm = norm2(v)
+    if (vnorm == 0.0_dp) then
+      hv = 0.0_dp
+      return
+    end if
+    call this%conv%calc_h_op(this%infos, v/vnorm, hv)
+    hv = (2.0_dp*vnorm) * hv
   end subroutine scf_hess_vec
 
   !> Energy at a trial step p, evaluated on copies of the orbitals.
@@ -224,7 +346,12 @@ contains
     allocate(ma, source=this%conv%mo_a)
     allocate(mb, source=this%conv%mo_b)
     call rotate_mo(this%conv, this%infos%control%scftype, p, ma, mb)
-    call rebuild_fock(this%infos, this%molgrid, this%conv, this%energy, ma, mb, nschwz)
+    call rebuild_fock(this%infos, this%molgrid, this%conv, this%energy, ma, mb, nschwz, this%full_fock)
+    this%fock_builds = this%fock_builds + 1
+    ! A trial point is a free (D, F) pair for the ARH history; the model itself
+    ! is rebuilt only at the next accepted point, so the Hessian stays fixed
+    ! within one micro solve.
+    call this%conv%arh_push()
     ep => this%energy
     e = compute_energy(ep)
     deallocate(ma, mb)
@@ -265,16 +392,17 @@ contains
 
   !> @brief Build density+Fock from the given orbitals and return the (scaled)
   !>        orbital gradient, Hessian diagonal, and total energy.
-  subroutine build_fock_grad(infos, molgrid, conv, energy, mo_a, mo_b, g, hdiag, e)
+  subroutine build_fock_grad(infos, molgrid, conv, energy, mo_a, mo_b, g, hdiag, e, full_fock)
     type(information),    intent(inout), target :: infos
     type(dft_grid_t),     intent(in)            :: molgrid
     type(trah_converger), intent(inout)         :: conv
     type(scf_energy_t),   intent(inout), target :: energy
     real(dp),             intent(inout) :: mo_a(:,:), mo_b(:,:)
     real(dp),             intent(out)   :: g(:), hdiag(:), e
+    logical,              intent(in)    :: full_fock
     type(scf_energy_t), pointer :: ep
     integer :: nschwz
-    call rebuild_fock(infos, molgrid, conv, energy, mo_a, mo_b, nschwz)
+    call rebuild_fock(infos, molgrid, conv, energy, mo_a, mo_b, nschwz, full_fock)
     call conv%calc_g_h(g, hdiag)
     g     = 2.0_dp * g
     hdiag = 2.0_dp * hdiag
@@ -302,20 +430,28 @@ contains
     end select
   end subroutine rotate_mo
 
-  !> @brief density (from mo) -> Fock (calc_fock). Mirrors otr_interface.
-  subroutine rebuild_fock(infos, molgrid, conv, energy, mo_a, mo_b, nschwz)
+  !> @brief density (from mo) -> Fock (calc_fock), with optional history refresh.
+  subroutine rebuild_fock(infos, molgrid, conv, energy, mo_a, mo_b, nschwz, full_fock)
     type(information),    intent(inout), target :: infos
     type(dft_grid_t),     intent(in)            :: molgrid
     type(trah_converger), intent(inout)         :: conv
     type(scf_energy_t),   intent(inout), target :: energy
     real(dp),             intent(inout) :: mo_a(:,:), mo_b(:,:)
     integer,              intent(out)   :: nschwz
+    logical,              intent(in)    :: full_fock
     type(basis_set), pointer :: basis
     basis => infos%basis
     if (int(infos%control%scftype) == 1) then
       call get_ab_initio_density(conv%dens(:,1), mo_a, conv%dens(:,1), mo_a, infos, basis)
     else
       call get_ab_initio_density(conv%dens(:,1), mo_a, conv%dens(:,2), mo_b, infos, basis)
+    end if
+    ! Screened difference-density builds accumulate errors larger than the
+    ! predicted energy decrease near convergence. Refresh like DIIS while
+    ! retaining incremental builds during the initial descent.
+    if (full_fock) then
+      conv%f_old = 0.0_dp
+      conv%d_old = 0.0_dp
     end if
     call calc_fock(basis, infos, molgrid, conv%fock_ao, energy, mo_a, conv%dens, &
                    mo_b, nschwz, conv%f_old, conv%d_old)

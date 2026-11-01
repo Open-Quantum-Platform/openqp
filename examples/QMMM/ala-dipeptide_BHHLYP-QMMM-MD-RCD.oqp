@@ -1,3 +1,10 @@
-rks/bhhlyp/6-31g md(S0)
-qmmm(forcefield_files="amber14-all.xml",qm_atoms="8,9,16,17,18",frontier_scheme=rcd,n_steps=2,timestep=0.5)
+# Ground-state QM/MM MD across a COVALENT QM/MM boundary (see the
+# frontier_scheme section of README.md): alanine dipeptide with AMBER-14,
+# QM = the C-terminal amide, so the partition cuts the ALA C-CA bond and the
+# MM host charge is redistributed by frontier_scheme=rcd.
+# qmmm(qm_atoms=...) is the one definition of the QM region (0-based PDB
+# order); the QM molecule, link hydrogen included, is built from it.
+# velocity=zero keeps the two steps reproducible.  Requires OpenMM.
+rks/bhhlyp/6-31g md(nstep=2,dt=0.5,velocity=zero,ensemble=nve)
+qmmm(forcefield_files="amber14-all.xml",qm_atoms="8,9,16,17,18",frontier_scheme=rcd,cutoff=NoCutoff)
 geom="ala.pdb"

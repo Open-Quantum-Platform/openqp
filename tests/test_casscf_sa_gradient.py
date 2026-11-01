@@ -1,7 +1,7 @@
 """SA-CASSCF nuclear gradients: the weighted objective, and individual roots.
 
 Two derivatives are under test and they are not variants of one another
-(``docs/sa_casscf_gradients.md``):
+(``openqp-devkit docs/sa_casscf_gradients.md``):
 
 * the WEIGHTED OBJECTIVE ``L = sum_I w_I E_I`` is stationary in every
   wavefunction parameter, so its gradient carries no response term;

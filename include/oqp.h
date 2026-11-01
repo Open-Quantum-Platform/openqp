@@ -9,6 +9,23 @@ void oqp_simplex_qp_solve_avoid(int64_t n, const double *h, const double *g,
                                 int64_t forbid_vertices_before, double *x,
                                 double *value, int *status);
 
+/* Internal ECP-integral self-test: err[0..9] (see tests/fortran/ecp_selftest.F90). */
+void oqp_ecp_selftest(double *err);
+
+/* Internal self-test of the tagarray create status -> oqp_alloc return code
+   mapping (tests/fortran/oqp_alloc_status_selftest.F90). */
+void oqp_alloc_status_selftest(int64_t nmax, int32_t *statuses, int64_t *codes,
+                               int64_t *n);
+
+/* Internal TDHF Davidson residual self-test (tests/fortran/rpa_residual_selftest.F90).
+   Arrays are column-major: w_l, w_r, v_l, v_r (n, ndsr); q (n, ndsr, 2). */
+void oqp_rpa_residual_selftest(int64_t n, int64_t ndsr, int64_t imax,
+                               bool tamm_dancoff, double tol,
+                               double *w_l, double *w_r, double *v_l, double *v_r,
+                               const double *ee, const double *abd,
+                               double *errors, double *q, double *mxerr,
+                               int *converged);
+
 typedef double xyz_t[3];
 
 typedef struct oqp_handle_t {
@@ -26,6 +43,12 @@ typedef struct oqp_handle_t {
     struct electron_shell *elshell;
     struct trah_control *trah;
 } oqp_handle_t;
+
+/* Internal LibXC owner/setup regression; compares signed XC Fock matrices. */
+void functional_owner_cache_compare(oqp_handle_t *a, oqp_handle_t *b,
+                                    double *error, int *failed);
+int64_t functional_owner_cache_revision(oqp_handle_t *owner);
+void functional_owner_cache_clean(oqp_handle_t *owner);
 
 struct Cstring{
   int64_t length;
@@ -151,6 +174,7 @@ struct control_parameters {
     double    conf_print_threshold;
     bool      rstctmo;
     int64_t   scal_rel;
+    int64_t   scal_rel_decontract;
     int64_t   soc_2e;
     int64_t   converger_type;
     double    soscf_lvl_shift;
@@ -165,6 +189,8 @@ struct control_parameters {
     double    trh_gred;
     double    trh_lred;
     int64_t   trh_impl;
+    int64_t   trh_arh;
+    bool      trh_arh_only;
     bool      sd_scf;
     bool      pcm_enabled;
     double    pcm_epsilon;
@@ -186,6 +212,7 @@ struct control_parameters {
     int64_t   cc_cholesky;
     double    cc_cholesky_tol;
     int64_t   cc_cholesky_direct;
+    int64_t   mp2_transform;
 };
 
 struct mpi_communicator {
@@ -240,6 +267,10 @@ int64_t oqp_get_basis_spherical(struct oqp_handle_t *c_handle,
 int oqp_set_atoms(struct oqp_handle_t * c_handle, int64_t natoms, double * x, double * y, double * z, double * q, double * mass);
 void oqp_set_harmonic_active(bool flag);
 void oqp_banner(struct oqp_handle_t *inf);
+/* Start the DFT set-up and functional description records afresh.  Called when a run
+   starts its log from scratch (not for evaluations appended to it), so a reused log
+   path is described again and the records stay bounded in a long-lived process. */
+void oqp_log_restarted(struct oqp_handle_t *inf);
 
 void apply_basis(struct oqp_handle_t *inf);
 
@@ -362,18 +393,46 @@ enum {
   FCI_I_NTHREADS  = 11, /* OpenMP threads for the kernels                 */
   FCI_I_WANT_S2   = 12, /* 1 = also return <S^2> per returned root        */
   FCI_I_GUESS     = 13, /* 1 = civecs holds nroot Davidson start vectors  */
-  FCI_NIOPT       = 14
+  FCI_NIOPT_V1    = 14, /* what fci_solve() reads -- the v1.3.x layout    */
+  FCI_I_IRREP     = 14, /* target irrep index (1-based), 0 = any          */
+  FCI_I_NIRREP    = 15, /* irreps in the staged table, 0 = no symmetry    */
+  FCI_NIOPT       = 16  /* what fci_solve_ex() reads                      */
+  /* When iopt[FCI_I_IRREP] != 0 the symmetry tables follow the fixed
+   * options in the same array:
+   *
+   *   iopt[FCI_NIOPT        .. FCI_NIOPT+nirrep-1]      XOR code per irrep
+   *   iopt[FCI_NIOPT+nirrep .. +nirrep+nact-1]          XOR code per active MO
+   *
+   * so niopt is FCI_NIOPT + nirrep + nact for such a call.
+   */
 };
 enum {
   FCI_D_ECORE     = 0,  /* scalar added to every returned root            */
   FCI_D_EIG_TOL   = 1,  /* eigenpair residual tolerance                   */
   FCI_D_CUTOFF    = 2,  /* integral screening cutoff                      */
-  FCI_NDOPT       = 3
+  FCI_NDOPT_V1    = 3,  /* what fci_solve() reads -- the v1.3.x layout    */
+  FCI_D_MIN_PURITY = 3, /* min weight in the dominant irrep to accept root */
+  FCI_NDOPT       = 4   /* what fci_solve_ex() reads                      */
 };
+/* The v1.3.0/v1.3.1 entry point, unchanged. Reads exactly FCI_NIOPT_V1 integer
+ * and FCI_NDOPT_V1 real options and nothing past them, so a binary compiled
+ * against those headers keeps working against a newer liboqp. Options added
+ * after v1.3.x are reachable only through fci_solve_ex below. */
 int64_t fci_solve(const int32_t *iopt, const double *dopt,
     const int32_t *active, const int32_t *core,
     const double *h1e, const double *eri,
     double *energies, double *civecs, double *s2);
+/* Length-negotiated entry point. `niopt`/`ndopt` are how many entries the
+ * CALLER allocated, so the library never reads past them; a request whose
+ * symmetry tables do not fit inside `niopt` is refused rather than read.
+ * `roots` receives, for each returned root, its 0-based index among the roots
+ * the solve computed -- the provenance a spin or irrep filter would otherwise
+ * discard. Pass nroot entries. */
+int64_t fci_solve_ex(int32_t niopt, int32_t ndopt,
+    const int32_t *iopt, const double *dopt,
+    const int32_t *active, const int32_t *core,
+    const double *h1e, const double *eri,
+    double *energies, double *civecs, double *s2, int32_t *roots);
 /* Spin-orbital determinant RDMs (rdm_kernel.F90). rdm2_spinorb returns 0 on
  * success and -1 when `cap` was too small for the reachable intermediates,
  * in which case the caller falls back to the Python enumeration. */
@@ -435,6 +494,22 @@ void casscf_hess_bmat(int32_t nbf, int32_t ncore, int32_t nact, int32_t npar,
  * determinant encoding, in which case the caller falls back to Python. */
 int64_t casscf_excitation_stack(int32_t nact, int64_t ndet, const int64_t *dets,
     double *stack);
+/* W[t,u,a] = sum_b <a|E_tu|b> civec[b], C-order [nact,nact,ndet].
+ * Requires 1 <= nact <= 31, positive ndet, and sorted keys with their
+ * zero-based permutation to CI order. Returns 0 on success, -1 for invalid
+ * dimensions/encoding or out-of-range permutation (output untouched).
+ * Successful calls initialize W. */
+int64_t casscf_exc_stack_apply_wmat(int32_t nact, int64_t ndet,
+    const int64_t *dets, const int64_t *skeys, const int64_t *sperm,
+    const double *civec, double *wmat);
+/* Matrix-free counterpart of casscf_hess_amp. Same C-order operands, but
+ * determinant keys replace the dense excitation stack. Returns 0 on success,
+ * -1 for invalid dimensions/encoding/permutation or allocation failure
+ * (amp untouched). */
+int64_t casscf_hess_amp_mf(int32_t nact, int64_t ndet, int32_t npar,
+    const int64_t *dets, const int64_t *skeys, const int64_t *sperm,
+    const double *fder, const double *gder, const double *wmat,
+    const double *vecs, double *amp);
 /* Determinant-space bookkeeping and mean-field Fock of the PT2 path
  * (pt2_kernel.F90).  Determinant keys are the fci.py integers, so these need
  * 2*norb <= 62.  pt2_external_indices returns the number of external
@@ -707,6 +782,7 @@ int64_t casscf_ao_gradient(struct oqp_handle_t *inf, int32_t nbf,
     int32_t nvec, const double *lam, const double *avm,
     double *info);
 void hf_hessian(struct oqp_handle_t *inf);
+int oqp_functional_needs_tau(struct oqp_handle_t *inf);
 void hess1_selftest(struct oqp_handle_t *inf);
 void grd2_hess_selftest(struct oqp_handle_t *inf);
 void cholesky_eri_selftest(struct oqp_handle_t *inf);
@@ -736,6 +812,10 @@ void tdhf_sf_hessian(struct oqp_handle_t *inf);
 
 void tdhf_mrsf_energy(struct oqp_handle_t *inf);
 void tdhf_umrsf_energy(struct oqp_handle_t *inf);
+void mrsf_spin_square_selftest(double *error, int *checks);
+void davidson_orthogonalization_selftest(double *error, int *checks, int *failures);
+void mrsf_spin_square_evaluate(int n, int nc, int mult, const double *mo_a,
+                               const double *mo_b, const double *smat, const double *x, double *ss);
 void tdhf_mrsf_ekt_ip(struct oqp_handle_t *inf);
 void tdhf_mrsf_ekt_ea(struct oqp_handle_t *inf);
 void tdhf_mrsf_z_vector(struct oqp_handle_t *inf);
@@ -743,6 +823,8 @@ void tdhf_mrsf_gradient(struct oqp_handle_t *inf);
 
 void mp2_energy(struct oqp_handle_t *inf);
 void mp2_gradient(struct oqp_handle_t *inf);
+void mp2_gradient_density_test(int64_t n, int64_t no, const double *c,
+                               const double *l2, double *gao);
 void ccsd_t_energy(struct oqp_handle_t *inf);
 
 /* Derivative-integral contraction for the analytic SC-NEVPT2 nuclear gradient

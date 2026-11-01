@@ -5,6 +5,11 @@ module tdhf_sf_lib
     use oqp_linalg
 
     real(kind=dp), parameter :: SF_DAVIDSON_DENOMINATOR_FLOOR = 1.0e-8_dp
+    ! Residual rounding floor in units of u*s(k) (see sfresvec).  Measured
+    ! rounding residuals of converged MRSF roots are ~1.5 u*s; 1e4 leaves room
+    ! for summation error already present in the sigma vectors and still sits
+    ! many orders below any residual a convergence threshold can ask for.
+    real(kind=dp), parameter :: SF_RESIDUAL_ROUNDING_FACTOR = 1.0e4_dp
 
 contains
 
@@ -30,6 +35,17 @@ contains
     end do
   end subroutine sfroesum
 
+!> @brief Davidson residuals q(:,k) = B*vec(:,k) - eigv(k)*A*vec(:,k) of the
+!>  SF/MRSF Ritz pairs, with a = subspace basis and b = its sigma vectors.
+!> @details rnorm(k) returns ||q(:,k)||^2.  A residual whose norm lies at the
+!>  rounding floor of its own evaluation carries no direction: it is the
+!>  cancellation remainder of two equal vectors and is set by the summation
+!>  order of the sigma build (OpenMP schedule, BLAS blocking).  Its correction
+!>  is returned as exactly zero, so rpanewb never normalizes rounding noise
+!>  into a subspace direction; rnorm keeps the computed value, so convergence
+!>  decisions are unchanged.  The floor is SF_RESIDUAL_ROUNDING_FACTOR*u*s(k)
+!>  with s(k) = sum_j |vec(j,k)|*(||b(:,j)|| + |eigv(k)|*||a(:,j)||), a bound
+!>  on the magnitude of the terms that cancel.
   subroutine sfresvec(q,a,b,vec,eigv,nvec,rnorm,ndsr)
     use precision, only: dp
 
@@ -43,9 +59,18 @@ contains
     real(kind=dp), intent(out), dimension(:) :: rnorm
     integer, intent(in) :: ndsr
 
-    integer :: ist, xvec_dim
+    integer :: ist, j, xvec_dim
+    real(kind=dp) :: anorm(nvec), bnorm(nvec), rscale(ndsr)
 
     xvec_dim = ubound(q, 1)
+
+    do j = 1, nvec
+      anorm(j) = norm2(a(1:xvec_dim,j))
+      bnorm(j) = norm2(b(1:xvec_dim,j))
+    end do
+    do ist = 1, ndsr
+      rscale(ist) = sum(abs(vec(1:nvec,ist))*(bnorm + abs(eigv(ist))*anorm))
+    end do
 
     call dgemm('n','n',xvec_dim,ndsr,nvec, &
                1.0_dp,b,xvec_dim, &
@@ -63,6 +88,8 @@ contains
 
     do ist = 1, ndsr
       rnorm(ist) = dot_product(q(:,ist),q(:,ist))
+      if (sqrt(rnorm(ist)) <= SF_RESIDUAL_ROUNDING_FACTOR*epsilon(1.0_dp)*rscale(ist)) &
+        q(:,ist) = 0.0_dp
     end do
 
   end subroutine sfresvec
@@ -740,6 +767,13 @@ contains
   ! R ini and R norm(error)
     r = d-a_pk
     error = dot_product(r, r)
+
+    ! An exact initial solution needs no normalized search direction.
+    ! In particular the zero-amplitude NAC polarization term has r = 0.
+    if (all(r == 0.0_dp)) then
+      pk = 0.0_dp
+      return
+    end if
 
   ! Beta ini
     beta = 1.0_dp/dot_product(r**2, xm_in)

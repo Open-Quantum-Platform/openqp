@@ -79,7 +79,7 @@ contains
                     &5X,"Basis Sets: ",A/&
                     &5X,"Number of Shells  =",I8,5X,"Number of Primitives  =",I8/&
                     &5X,"Number of Basis Set functions  =",I8/&
-                    &5X,"Maximum Angluar Momentum =",I8/)') &
+                    &5X,"Maximum Angular Momentum =",I8/)') &
                       trim(basis_file), &
                       infos%basis%nshell, infos%basis%nprim, &
                       infos%basis%nbf, infos%basis%mxam
@@ -89,7 +89,7 @@ contains
                     &5X,"Basis Sets: ",A/&
                     &5X,"Number of Shells  =",I8,5X,"Number of Primitives  =",I8/&
                     &5X,"Number of Basis Set functions  =",I8/&
-                    &5X,"Maximum Angluar Momentum =",I8/)') &
+                    &5X,"Maximum Angular Momentum =",I8/)') &
                       trim(basis_file), &
                       infos%alt_basis%nshell, infos%alt_basis%nprim, &
                       infos%alt_basis%nbf, infos%alt_basis%mxam
@@ -117,7 +117,9 @@ contains
 
     close (iw)
 
-    call print_basis(infos)
+    ! The primitive-by-primitive listing is repeated at every geometry of an
+    ! optimization or path search; the summary above is enough by default.
+    if (infos%control%verbose >= 2) call print_basis(infos)
 
 
   end subroutine oqp_apply_basis

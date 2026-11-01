@@ -94,10 +94,10 @@ contains
     nshell2 = nshell*(nshell+1)/2
     nprim = basis%g_offset(nshell) + basis%ncontr(nshell) - 1
 
-    if (.not.allocated(ppairs%ppid).or.ubound(ppairs%ppid,2) < nshell2) then
-      if (allocated(ppairs%ppid)) deallocate(ppairs%ppid)
-      allocate(ppairs%ppid(2,nshell2))
+    if (allocated(ppairs%ppid)) then
+      if (ubound(ppairs%ppid,2) < nshell2) deallocate(ppairs%ppid)
     end if
+    if (.not. allocated(ppairs%ppid)) allocate(ppairs%ppid(2,nshell2))
 
 !   Allocate storage for screening
     allocate(cclog(nprim))

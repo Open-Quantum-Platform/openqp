@@ -4,6 +4,7 @@ module dft_radial_grid_types
 
   private
   public :: get_radial_grid
+  public :: dft_radial_grid_none
   public :: dft_radial_grid_mhl
   public :: dft_radial_grid_mk3
   public :: dft_radial_grid_ta

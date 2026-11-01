@@ -14,6 +14,16 @@ descriptions of multiconfigurational ground and excited states, including
 diradicals, bond breaking, conical intersections, photochemical processes, and
 spin-orbit coupling.
 
+Prefer a graphical interface? **[OQP Studio](https://open-quantum-platform.github.io/openqp-docs/studio/)**
+is the desktop application for building molecular structures, preparing OpenQP
+inputs, running calculations, and analyzing results. **[Download OQP Studio](https://open-quantum-platform.github.io/openqp-docs/studio/download/)**
+for macOS, Windows, or Linux; choose a `with-engine` installer for the easiest
+setup, with OpenQP bundled and ready to run.
+See the [Studio release notes and version comparison](https://open-quantum-platform.github.io/openqp-docs/studio/whats-new/)
+for changes, known limitations, and upgrade guidance.
+
+![OQP Studio Analysis showing a selected molecular orbital and its positive and negative three-dimensional phases](assets/oqp-studio-analysis-orbital.png)
+
 Use the **[OpenQP tutorials](https://open-quantum-platform.github.io/openqp-tutorials/)**
 for guided calculations and the
 **[OpenQP manual](https://open-quantum-platform.github.io/openqp-docs/)**
@@ -21,7 +31,8 @@ for method, keyword, and build references.
 
 ### Functionality
 
-#### Electronic-Structure Methods
+<details>
+<summary><strong>Electronic-Structure Methods</strong></summary>
 
 | Method | References / variants | Available calculations | Learn |
 | --- | --- | --- | --- |
@@ -38,7 +49,10 @@ for method, keyword, and build references.
 | CASSCF | State-specific CASSCF and state-averaged SA-CASSCF | Energies and analytic nuclear gradients: state specific, the weighted SA-CASSCF objective, and an individual averaged root through the coupled orbital/CI Z-vector; the legacy `method=casscf` plus `[state_average]` spelling stays on central differences | [Guide](https://open-quantum-platform.github.io/openqp-docs/workflows/casscf-gradient/) |
 | Multireference PT2 | SS/MS/XMS-CASPT2, `nevpt2` / `sc-nevpt2`, and MRMP2/MCQDPT2/XMCQDPT2 | Correlated energies and central-difference nuclear gradients for supported geometry workflows | [Examples](examples/WF_methods) |
 
-#### Capabilities
+</details>
+
+<details>
+<summary><strong>Capabilities</strong></summary>
 
 | Capability | Scope | Available calculations | Learn |
 | --- | --- | --- | --- |
@@ -58,18 +72,22 @@ for method, keyword, and build references.
 | Nonadiabatic dynamics | MRSF-TDDFT fewest-switches surface hopping with state tracking and decoherence | Internal-conversion trajectories through `runtype=namd` | [Examples](examples/ODP) |
 | QM/MM and SOC-NAMD-QMMM | ESPF electrostatic embedding through OpenMM with MRSF-TDDFT | Embedded energies and forces, QM/MM dynamics, and spin-orbit-coupled surface hopping | [QM/MM tutorial](https://open-quantum-platform.github.io/openqp-tutorials/qmmm-embedding/) · [Dynamics tutorial](https://open-quantum-platform.github.io/openqp-tutorials/soc-namd-qmmm/) |
 
-#### Ecosystem & Integrations
+</details>
+
+<details>
+<summary><strong>Ecosystem &amp; Integrations</strong></summary>
 
 | Integration | Purpose |
 | --- | --- |
 | [LibXC](https://gitlab.com/libxc/libxc) | Wide library of exchange-correlation functionals |
 | [basis_set_exchange](https://github.com/MolSSI-BSE/basis_set_exchange) | Standard basis sets |
-| [libecpint](https://github.com/robashaw/libecpint) | Effective Core Potentials |
 | [DFT-D4](https://dftd4.readthedocs.io/en/latest/) | Dispersion correction |
 | [PyRAI2MD](https://github.com/mlcclab/PyRAI2MD-hiam) | Machine-learning-assisted nonadiabatic molecular dynamics |
 | [Molden](https://www.theochem.ru.nl/molden/) format | Standards-oriented geometry, basis, SCF/Dyson orbitals, and optional frequency sections for common graphics tools |
 | [OpenqpView](https://open-quantum-platform.github.io/OpenqpView/) | Browser-based inspection of log, JSON, Molden, cube, and XYZ outputs |
 | Optional [MOKIT](https://github.com/1234zou/MOKIT) | Broader external wavefunction conversion workflows |
+
+</details>
 
 ### Install
 

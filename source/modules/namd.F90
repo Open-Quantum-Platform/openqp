@@ -6,13 +6,13 @@
 !>   clean, argument-based modern Fortran so the kernels are unit-testable and
 !>   free of COMMON-block / dynamic-memory coupling.  The implementation covers:
 !>
-!>     - time-derivative couplings (TDC) from wavefunction overlaps
-!>       between consecutive nuclear steps
+!>     - time-derivative couplings (TDC) supplied from consecutive-step
+!>       wavefunction overlaps
 !>     - RK4 propagation of the electronic amplitudes
 !>       i*hbar*\dot{c} = (E - i*sigma) c
 !>     - cumulative Tully hopping probabilities
-!>     - fewest-switches hop decision + isotropic
-!>       velocity rescaling (energy conservation)
+!>     - fewest-switches hop decision with isotropic velocity rescaling
+!>       (energy conservation)
 !>     - kinetic energy
 !>
 !>   Internal-conversion accuracy upgrades, added per a verified literature
@@ -53,6 +53,8 @@ module namd_mod
   implicit none
 
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: namd_counter_random_C, namd_hop_C
 
   character(len=*), parameter :: module_name = "namd_mod"
 
@@ -844,8 +846,7 @@ contains
     vel = scale*vel
   end subroutine namd_rescale_velocities
 
-!> @brief Fewest-switches hop decision and (on accept) isotropic velocity
-!>        rescaling.
+!> @brief Fewest-switches hop decision and (on accept) isotropic velocity rescaling.
 !>
 !>   All energies in Hartree, velocities/masses in atomic units.
 !>
@@ -897,23 +898,23 @@ contains
       if (rand > lower .and. rand < upper) then
         de = eabs(ncrst) - eabs(i)       ! E_old - E_new
         ke = namd_kinetic_energy(vel, mass)
-        ! Frustrated hop: not enough kinetic energy to climb uphill.
-        if (de < 0.0_dp .and. ke < abs(de)) then
-          blocked = .true.
-          lower = upper
-          cycle
-        end if
         ! Energy-gap gate.
         if (abs(de) > thrshe) then
           blocked = .true.
           lower = upper
           cycle
         end if
-        ! Accept the hop.
+        ! Frustrated hop under isotropic rescaling: insufficient total KE.
+        if (de < 0.0_dp .and. ke < abs(de)) then
+          blocked = .true.
+          lower = upper
+          cycle
+        end if
+        call namd_rescale_velocities(vel, ke, de)
+        ! Accept the hop after a successful energy-conserving velocity update.
         active = i
         target = i
         hopped = .true.
-        call namd_rescale_velocities(vel, ke, de)
         return
       end if
       lower = upper
@@ -1026,18 +1027,18 @@ contains
     call namd_hop(inf)
   end subroutine namd_hop_C
 
-!> @brief One Tully FSSH step: TDC from the state overlap, RK4 amplitude
-!>        propagation over sub-steps, optional EDC decoherence, trivial-crossing
-!>        following, hop decision and isotropic velocity rescaling.
+!> @brief One Tully FSSH step: supplied TDC, RK4 amplitude propagation over
+!>        sub-steps, optional EDC decoherence, trivial-crossing following, hop
+!>        decision, and isotropic velocity rescaling.
 !>
 !>   Exchanges all NAMD state with the Python driver via flat tagarray records
 !>   (1-D, layout-unambiguous):
 !>     in : OQP_td_states_overlap (n x n), OQP_td_energies (n),
 !>          OQP_namd_coef (2n: re1,im1,re2,im2,...), OQP_namd_velocity (3*nat),
-!>          OQP_namd_params (>=14 packed scalars; slot 14 < 0 suppresses
+!>          OQP_namd_params (>=15 packed scalars; slot 14 < 0 suppresses
 !>          state changes while retaining coefficient propagation)
 !>     out: OQP_namd_coef, OQP_namd_velocity (rescaled), OQP_namd_params(active,
-!>          hopped, target), OQP_namd_results (n*n cumulative probs + flags)
+!>          hopped, target), OQP_namd_results (n*n cumulative probs + flags).
   subroutine namd_hop(infos)
     use io_constants, only: iw
     use oqp_tagarray_driver
@@ -1049,6 +1050,7 @@ contains
     type(information), target, intent(inout) :: infos
 
     integer :: n, nat, i, a, isub, nsub, active, target, decoherence, trivial_en
+    integer :: tdc_scheme
     real(kind=dp) :: dt_fs, dt_au, hsub, thrshe, rand, edc_c, triv_thr, ekin
     logical :: hopped, blocked, swapped, allow_hop
 
@@ -1108,7 +1110,8 @@ contains
     active      = nint(params(5))
     decoherence = nint(params(6))
     edc_c       = params(7)
-    ! params(8) = tdc scheme (0 finite-diff, 1 NPI), handled in the Python driver
+    ! params(8) = TDC scheme (0 finite-diff, 1 NPI, 2 analytic v.d)
+    tdc_scheme = nint(params(8))
     trivial_en  = nint(params(9))
     triv_thr    = params(10)
     allow_hop   = .true.
@@ -1143,15 +1146,17 @@ contains
     end if
 
     ! 2) time-derivative couplings: supplied by the Python driver as a flat
-    !    row-major (n x n) matrix (finite difference or norm-preserving
-    !    interpolation). tdc(i,j) = tdc_in((i-1)*n + j). Fall back to the
-    !    in-Fortran finite difference if a degenerate (all-zero) matrix is passed.
+    !    row-major (n x n) matrix (finite difference, norm-preserving
+    !    interpolation, or analytic v.d). tdc(i,j) = tdc_in((i-1)*n + j).
+    !    Preserve an exactly zero analytic/NPI matrix: zero can be the physical
+    !    answer. The legacy in-Fortran FD fallback applies only to FD mode.
     do i = 1, n
       do a = 1, n
         tdc(i,a) = tdc_in((i-1)*n + a)
       end do
     end do
-    if (all(abs(tdc) < 1.0e-30_dp)) call namd_state_tdc(stas2, dt_au, tdc)
+    if (tdc_scheme == 0 .and. all(abs(tdc) < 1.0e-30_dp)) &
+      call namd_state_tdc(stas2, dt_au, tdc)
 
     ! 3) propagate amplitudes over electronic sub-steps; accumulate hop flux
     do isub = 1, nsub
@@ -1165,7 +1170,7 @@ contains
     if (decoherence == 1) &
       call namd_decoherence_edc(cr, ci, eabs, active, ekin, dt_au, edc_c)
 
-    ! 5) fewest-switches hop + isotropic velocity rescaling
+    ! 5) fewest-switches hop + energy-conserving isotropic velocity rescaling
     hopped = .false.
     blocked = .false.
     target = active
@@ -1195,6 +1200,9 @@ contains
     results(n*n+3) = merge(1.0_dp, 0.0_dp, blocked)
     results(n*n+4) = ekin
     results(n*n+5) = merge(1.0_dp, 0.0_dp, swapped)
+    results(n*n+6) = 0.0_dp
+    results(n*n+7) = 0.0_dp
+    results(n*n+8) = -huge(1.0_dp)
 
     deallocate(tdc, cmhp, cr, ci, eabs, vel, mass_au, stas2)
     close(iw)

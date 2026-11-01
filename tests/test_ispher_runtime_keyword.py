@@ -68,8 +68,12 @@ def test_auto_spherical_basis_uses_all_supported_transforms():
     assert "integer, parameter :: BAS_MXANG = 6" in constants
     assert "integer, parameter :: NUM_SPH_BF(0:BAS_MXANG)  = [(2*i+1, i = 0, BAS_MXANG)]" in constants
     assert "c2s_build(l)" in cart2sph
-    assert "c2s_h = c2s_build(l)" in cart2sph
-    assert "c2s_i = c2s_build(l)" in cart2sph
+    # h and i are compile-time tables (a lazily built SAVE table raced on
+    # first use inside OpenMP integral loops; tests/test_cart2sph_thread_safety.py).
+    assert "real(dp), parameter :: C2S_H(21,11)" in cart2sph
+    assert "real(dp), parameter :: C2S_I(28,13)" in cart2sph
+    assert "b = C2S_H" in cart2sph
+    assert "b = C2S_I" in cart2sph
     assert "do l = 2, BAS_MXANG" in cart2sph
     assert "pure spherical transforms are implemented only through g shells" not in cart2sph
     assert "5: [(5, 0, 0)" in symmetry
@@ -126,10 +130,10 @@ def test_two_e_backends_reduce_pure_blocks_before_consumers():
     assert "subroutine int2_rys_reduce_pure" in rys
     assert "if (.not. HARMONIC_ACTIVE) return" in rys
     assert "type(int2_shell_projection_t), allocatable :: proj_cache(:,:)" in rys
-    assert "subroutine compute_ints_direct_pure" in rys
+    assert "call project_contracted_pure(gdat, ints)" in rys
     assert "call int2_init_shell_projection(l, 0, gdat%proj_cache(l,0))" in rys
-    assert "pr1 => gdat%proj_cache(gdat%am(1), gdat%pure_flags(1))" in rys
-    assert "* shells_pnrm2(i,gdat%am(1))" in rys
+    assert "gdat%proj_cache(gdat%am(s),gdat%pure_flags(s))" in rys
+    assert "gdat%proj_cache(l,pure)%coeff(:,c) * shells_pnrm2(c,l)" in rys
     assert "nbf_out = nbf_out_s([4,3,2,1])" in rys
     assert "call genr22_reduce_pure(basis, eri_data%ids, eri_data%flips" in int2
     assert "direct_pure=.true." in int2

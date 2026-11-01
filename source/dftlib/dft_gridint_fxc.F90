@@ -1,5 +1,6 @@
 module mod_dft_gridint_fxc
 
+  use mod_dft_gridint_response_cache, only: response_cache_t
   use precision, only: fp
   use mod_dft_gridint, only: xc_engine_t, xc_consumer_t
   use mod_dft_gridint, only: X__, Y__, Z__
@@ -13,6 +14,11 @@ module mod_dft_gridint_fxc
 
   type, extends(xc_consumer_t) :: xc_consumer_tde_t
     integer :: nMtx = 1
+!   Set when db = -da exactly (closed-shell triplet response).  Every
+!   spin-beta response quantity is linear in db, so it is the negated alpha
+!   one: the beta transformations and the beta Fock build are skipped and the
+!   beta Fock contribution is -alpha.
+    logical :: spin_antisym = .false.
     real(kind=fp), pointer :: da(:,:,:) => null()
     real(kind=fp), pointer :: db(:,:,:) => null()
     real(kind=fp), allocatable :: focks(:,:,:,:,:)
@@ -58,29 +64,79 @@ contains
     class(xc_engine_t), intent(in) :: xce
     integer, intent(in) :: nThreads
     integer :: nSpin
-    call self%clean()
+    logical :: reusable
 
     nSpin = 1
     if (xce%hasBeta) nSpin = 2
 
-    allocate( &
+    ! A response solver can apply the same XC kernel hundreds of times with
+    ! unchanged AO/grid/thread dimensions.  Retain the consumer storage in
+    ! that case; only its numerical contents are iteration dependent.  The
+    ! ordinary one-shot callers still clean their local consumer explicitly.
+    reusable = allocated(self%focks) .and. allocated(self%mo) .and. &
+      allocated(self%rRho) .and. allocated(self%drRho) .and. &
+      allocated(self%rTau) .and. allocated(self%focks_) .and. &
+      allocated(self%tmpMO_) .and. allocated(self%tmpDensity_) .and. &
+      allocated(self%tmp_)
+    if (reusable) then
+      reusable = size(self%focks,1) == xce%numAOs .and. &
+        size(self%focks,2) == xce%numAOs .and. &
+        size(self%focks,3) == self%nMtx .and. &
+        size(self%focks,4) == nSpin .and. &
+        size(self%focks,5) == nThreads .and. &
+        size(self%mo,2) == xce%maxPts .and. &
+        size(self%tmp_,1) == xce%numAOs*xce%maxPts*xce%numTmpVec
+      if (xce%funTyp == OQP_FUNTYP_MGGA) then
+        if (allocated(self%moG1_)) then
+          reusable = reusable .and. &
+            size(self%moG1_,1) == xce%numAOs*xce%maxPts*3*self%nMtx .and. &
+            size(self%moG1_,2) == nThreads
+        else
+          reusable = .false.
+        end if
+      else
+        reusable = reusable .and. .not. allocated(self%moG1_)
+      end if
+    end if
+
+    if (.not. reusable) then
+      call self%clean()
+
+      allocate( &
         self%focks(xce%numAOs, xce%numAOs, self%nMtx, nSpin, nThreads) &
       , self%mo(xce%numAOs, xce%maxPts, self%nMtx, nSpin, nThreads) &
       , self%rRho(nSpin, xce%maxPts, self%nMtx, nThreads) &
-      , self%drRho(4, nSpin, xce%maxPts, self%nMtx, nThreads) &
+      ! compRDRho supplies the Cartesian x/y/z density gradient.  Consumers
+      ! contract it with three-component XC gradients, so the leading extent
+      ! must be three (the stale fourth slot made DOT_PRODUCT nonconforming).
+      , self%drRho(3, nSpin, xce%maxPts, self%nMtx, nThreads) &
+      ! Several update kernels associate rTau unconditionally and inspect it
+      ! only in the meta-GGA branch.  A zero slab keeps that association valid
+      ! for LDA/GGA under runtime checking.
+      , self%rTau(nSpin, xce%maxPts, self%nMtx, nThreads) &
 !       Temporary storage
       , self%focks_(xce%numAOs * xce%numAOs * self%nMtx * nSpin, nThreads) &
       , self%tmpMO_(xce%numAOs * xce%maxPts * self%nMtx * nSpin, nThreads) &
       , self%tmpDensity_(xce%numAOs * xce%numAOs * self%nMtx, nSpin, nThreads) &
       , self%tmp_(xce%numAOs * xce%maxPts * xce%numTmpVec, nthreads) &
-      , source=0.0d0)
+        , source=0.0d0)
 
-    if (xce%funTyp == OQP_FUNTYP_MGGA) then
+      if (xce%funTyp == OQP_FUNTYP_MGGA) then
         allocate( &
-            self%rTau(nSpin, xce%maxPts, self%nMtx, nThreads) &
-!       Temporary storage
-          , self%moG1_(xce%numAOs*xce%maxPts*3*self%nMtx, nThreads) &
+            self%moG1_(xce%numAOs*xce%maxPts*3*self%nMtx, nThreads) &
           , source=0.0d0)
+      end if
+    else
+      self%focks = 0.0_fp
+      self%mo = 0.0_fp
+      self%rRho = 0.0_fp
+      self%drRho = 0.0_fp
+      self%rTau = 0.0_fp
+      self%focks_ = 0.0_fp
+      self%tmpMO_ = 0.0_fp
+      self%tmpDensity_ = 0.0_fp
+      self%tmp_ = 0.0_fp
+      if (allocated(self%moG1_)) self%moG1_ = 0.0_fp
     end if
   end subroutine
 
@@ -153,7 +209,7 @@ contains
       ! triangle upper.
       if (xce%skip_p) then
 
-         do s = 1, ubound(focks, 4)
+         do s = 1, merge(1, ubound(focks, 4), self%spin_antisym)
            do m = 1, ubound(focks, 3)
              do j = 1, numAOs
                self%focks(1:j, j, m, s, myThread) = &
@@ -164,7 +220,7 @@ contains
 
       else
 
-         do s = 1, ubound(focks, 4)
+         do s = 1, merge(1, ubound(focks, 4), self%spin_antisym)
            do m = 1, ubound(focks, 3)
              do j = 1, numAOs
                jj = indices(j)
@@ -191,8 +247,14 @@ contains
     class(xc_engine_t), intent(in) :: xce
     real(kind=fp), intent(out), pointer :: da(:,:,:)
     real(kind=fp), intent(out), pointer :: db(:,:,:)
-    real(kind=fp), intent(out), pointer :: mo(:,:,:,:)
-    real(kind=fp), intent(out), pointer :: moG1(:,:,:,:)
+    ! CONTIGUOUS: mo and moG1 always point at contiguous scratch (tmpMO_,
+    ! self%mo thread slices, moG1_): last-dimension slices of allocatable
+    ! arrays, or rank remappings of their leading section, both contiguous
+    ! by construction.  Without the attribute gfortran packs
+    ! them into temporaries on every call to the contiguous compRRho,
+    ! compRDRho and compRTau dummies, once per grid slice.
+    real(kind=fp), intent(out), pointer, contiguous :: mo(:,:,:,:)
+    real(kind=fp), intent(out), pointer, contiguous :: moG1(:,:,:,:)
     integer, intent(in) :: myThread
     integer :: nSpin, j, m
 
@@ -289,8 +351,8 @@ contains
     integer :: myThread
     real(kind=fp), pointer :: da(:,:,:)
     real(kind=fp), pointer :: db(:,:,:)
-    real(kind=fp), pointer :: mo(:,:,:,:)
-    real(kind=fp), pointer :: moG1(:,:,:,:)
+    real(kind=fp), pointer, contiguous :: mo(:,:,:,:)
+    real(kind=fp), pointer, contiguous :: moG1(:,:,:,:)
 
     call self%resetXCPointers( &
              xce, da, db, mo, moG1, myThread)
@@ -304,7 +366,9 @@ contains
       )
 
       call xce%compRMOs(da, mo(:,:,:,1))
-      if (hasBeta) then
+      if (hasBeta .and. self%spin_antisym) then
+        mo(:,:,:,2) = -mo(:,:,:,1)
+      else if (hasBeta) then
         call xce%compRMOs(db, mo(:,:,:,2))
       end if
 
@@ -316,7 +380,9 @@ contains
       if (xce%funTyp == OQP_FUNTYP_MGGA) then
         call xce%compRMOGs(da, moG1)
         call compRTau(xce, moG1, rTau, 1)
-        if (xce%hasBeta) then
+        if (xce%hasBeta .and. self%spin_antisym) then
+          rTau(2,:,:) = -rTau(1,:,:)
+        else if (xce%hasBeta) then
           call xce%compRMOGs(db, moG1)
           call compRTau(xce, moG1, rTau, 2)
         end if
@@ -396,6 +462,8 @@ contains
 
           Sigma = 0
           tauab = 0
+          ! LDA has no gradient contractions; the threshold test below reads them.
+          dsaa = 0; dsab = 0; dsba = 0; dsbb = 0
 
           if (xce%funTyp /= OQP_FUNTYP_LDA) then
             dsaa = dot_product(drRho(:,1,i,j), dRho(1:3,i))
@@ -452,12 +520,17 @@ contains
           end do
         end if
 
+        ! db = -da: the beta Fock contribution is -alpha (see utddft_fxc)
+        if (dat%spin_antisym) cycle
+
         do i = 1, numPts
 
           rhoab = rRho(1:2,i,j)
 
           Sigma = 0
           tauab = 0
+          ! LDA has no gradient contractions; the threshold test below reads them.
+          dsaa = 0; dsab = 0; dsba = 0; dsbb = 0
 
           if (xce%funTyp /= OQP_FUNTYP_LDA) then
             dsaa = dot_product(drRho(:,1,i,j), dRho(1:3,i))
@@ -622,7 +695,8 @@ contains
                   wfa, wfb, &
                   fxa, fxb, &
                   dxa, dxb, &
-                  nMtx, threshold, infos)
+                  nMtx, threshold, infos, consumer, cache, &
+                  spin_antisymmetric)
 !$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
     use basis_tools, only: basis_set
     use mod_dft_gridint, only: xc_options_t, run_xc
@@ -642,8 +716,14 @@ contains
     real(kind=fp), intent(inout), target :: dxa(:,:,:), dxb(:,:,:)
     real(kind=fp), intent(inout) :: fxa(:,:,:), fxb(:,:,:)
     real(kind=fp), intent(in) :: threshold
+    type(response_cache_t), target, intent(inout), optional :: cache
+    type(xc_consumer_tde_t), target, intent(inout), optional :: consumer
+    !> Caller guarantees dxb = -dxa (closed-shell triplet response); the beta
+    !> half is then not computed and fxb receives the negated alpha result
+    logical, intent(in), optional :: spin_antisymmetric
 
-    type(xc_consumer_tde_t) :: dat
+    type(xc_consumer_tde_t), target :: local_consumer
+    type(xc_consumer_tde_t), pointer :: dat
     type(xc_options_t) :: xc_opts
 
     integer :: i, j, nbf
@@ -651,6 +731,11 @@ contains
     real(kind=fp), allocatable, target :: d2a(:,:), d2b(:,:)
 
     nbf = ubound(wfa,1)
+    if (present(consumer)) then
+      dat => consumer
+    else
+      dat => local_consumer
+    end if
 
     ! Scale w.f. by B.F. norms
     allocate(d2a(nbf,nbf), d2b(nbf,nbf))
@@ -700,10 +785,17 @@ contains
     xc_opts%wfBeta  => d2b
     xc_opts%dft_threshold = threshold
     xc_opts%molGrid => molGrid
+    if (present(cache)) xc_opts%response_cache => cache
 
     dat%da => dxa
     dat%db => dxb
     dat%nMtx = nMtx
+    dat%spin_antisym = .false.
+    if (present(spin_antisymmetric)) dat%spin_antisym = spin_antisymmetric
+
+    ! run_xc splits the grid over dat%pe. Its communicator belongs to the
+    ! caller, which may run this on a rank subset: callers on all ranks
+    ! initialise a consumer on the world communicator and pass it in.
 
     call run_xc(xc_opts, dat, basis)
 
@@ -719,15 +811,27 @@ contains
       end do
     end do
 
-    do j = 1, nMtx
-      call triangular_to_full(dat%focks(:,:,j,2,1), nbf, 'u')
-      do i = 1, nbf
-        fxb(:,i,j) = fxb(:,i,j) &
-                    +   dat%focks(:,i,j,2,1) &
-                      * basis%bfnrm(i) &
-                      * basis%bfnrm(:)
+    if (dat%spin_antisym) then
+      ! The beta block was not built: it is the negated alpha one
+      do j = 1, nMtx
+        do i = 1, nbf
+          fxb(:,i,j) = fxb(:,i,j) &
+                      -   dat%focks(:,i,j,1,1) &
+                        * basis%bfnrm(i) &
+                        * basis%bfnrm(:)
+        end do
       end do
-    end do
+    else
+      do j = 1, nMtx
+        call triangular_to_full(dat%focks(:,:,j,2,1), nbf, 'u')
+        do i = 1, nbf
+          fxb(:,i,j) = fxb(:,i,j) &
+                      +   dat%focks(:,i,j,2,1) &
+                        * basis%bfnrm(i) &
+                        * basis%bfnrm(:)
+        end do
+      end do
+    end if
 
     ! Scale densities back
     do j = 1, nMtx
@@ -741,7 +845,7 @@ contains
       end do
     end do
 
-    call dat%clean()
+    if (.not. present(consumer)) call dat%clean()
 
   end subroutine
 
@@ -758,7 +862,7 @@ contains
 !> @param[in]    infos     OQP metadata
 !> @author Vladimir Mironov
   subroutine tddft_fxc(basis, molGrid, isVecs, wf, fx, dx, &
-                       nMtx, threshold, infos)
+                       nMtx, threshold, infos, cache, consumer)
 !$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
     use basis_tools, only: basis_set
     use mod_dft_gridint, only: xc_options_t, run_xc
@@ -779,13 +883,22 @@ contains
     real(kind=fp), intent(inout) :: fx(:,:,:)
     real(kind=fp), intent(in) :: threshold
 
-    type(xc_consumer_tde_t) :: dat
+    type(response_cache_t), target, intent(inout), optional :: cache
+    type(xc_consumer_tde_t), target, intent(inout), optional :: consumer
+    type(xc_consumer_tde_t), target :: local_consumer
+    type(xc_consumer_tde_t), pointer :: dat
     type(xc_options_t) :: xc_opts
 
     integer :: i, j, nbf
 
     real(kind=fp), allocatable, target :: d2(:,:)
 
+    if(present(consumer)) then
+      dat=>consumer
+    else
+      dat=>local_consumer
+    end if
+    if(present(cache)) xc_opts%response_cache=>cache
     nbf = ubound(wf,1)
 
     ! Scale w.f. by B.F. norms
@@ -857,7 +970,7 @@ contains
       end do
     end do
 
-    call dat%clean()
+    if(.not.present(consumer)) call dat%clean()
 
   end subroutine
 

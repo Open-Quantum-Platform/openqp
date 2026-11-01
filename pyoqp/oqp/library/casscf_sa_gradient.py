@@ -27,7 +27,7 @@ Two derivatives, not one, and neither is the state-specific formula of
   and the CI multipliers are rebuilt from the same ``amp`` amplitudes.
 
 The derivation, the redundancy analysis behind the Pulay term, and the list of
-refusals are in ``docs/sa_casscf_gradients.md``.  What follows implements it.
+refusals are in ``openqp-devkit docs/sa_casscf_gradients.md``.  What follows implements it.
 
 Where the work happens
 ----------------------

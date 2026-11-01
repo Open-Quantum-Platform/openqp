@@ -6,6 +6,8 @@ from pathlib import Path
 import numpy as np
 import unittest
 
+from oqp_module_isolation import isolate_modules
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -207,6 +209,9 @@ class TestRotatedFrameLabeling(unittest.TestCase):
 
 
 class TestMoleculeMoLabelWiring(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(isolate_modules())
+
     def _build_molecule(self, scf_type="rhf"):
         detect = load_module(
             "oqp_symmetry_detect_molabel_under_test",
@@ -324,6 +329,27 @@ class TestMoleculeMoLabelWiring(unittest.TestCase):
         somo = result["alpha"]["labels"][4]
         self.assertEqual(result["scf_state"]["irrep"], somo)
         self.assertEqual(result["scf_state"]["term"], f"2{somo.upper()}")
+
+    def test_scf_term_uses_reference_not_constructor_or_response_spin(self):
+        mol, labels = self._build_molecule("rohf")
+        mol.data["nelec_A"] = 6
+        mol.data["nelec_B"] = 4
+        mol.mult = 1  # Runner's constructor default, not the triplet reference.
+        mol.config["scf"]["multiplicity"] = 3
+        for target in (1, 3, 5):
+            mol.config["tdhf"] = {"type": "mrsf", "multiplicity": target}
+            state = mol._label_scf_state({"alpha": {"labels": labels},
+                                          "beta": {"labels": labels}})
+            self.assertEqual(state["multiplicity"], 3)
+            self.assertEqual(state["term"], f"3{state['irrep'].upper()}")
+        # If a live reference changes, native controls are authoritative even
+        # before the configuration and constructor metadata are refreshed.
+        mol.data["nelec_A"], mol.data["nelec_B"] = 7, 3
+        mol.data._data = types.SimpleNamespace(
+            mol_prop=types.SimpleNamespace(mult=5))
+        state = mol._label_scf_state({"alpha": {"labels": labels},
+                                      "beta": {"labels": labels}})
+        self.assertEqual(state["multiplicity"], 5)
 
     def test_state_label_in_log(self):
         import tempfile

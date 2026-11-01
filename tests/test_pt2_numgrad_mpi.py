@@ -9,11 +9,11 @@ a run on one rank, never enters the split at all.
 
 Most of this file is arithmetic and reassembly logic, which is exercised
 without any MPI at all.  The end-to-end multi-rank comparison needs both
-mpi4py and an mpirun, and skips when either is missing -- note that mpi4py
-must NOT be installed in the venv that runs this suite under
-``pytest --forked`` (a forked child with a live MPI_COMM_WORLD dies inside
-the native calls), so on a normal developer machine that test is expected to
-skip and the fan-out is validated by an explicit mpirun run instead.
+mpi4py and an mpirun, and skips when either is missing.  The suite runs
+under ``pytest --forked`` only without mpi4py (conftest.py refuses the
+combination: ``import oqp`` calls MPI_Init in the process that is then forked
+per test), so in a forked run that test is expected to skip and the fan-out is
+validated by an explicit mpirun run instead.
 
 The route is pinned with ``[pt2] gradient=numerical`` throughout: the default
 ``auto`` now sends these methods to the analytic CASPT2 derivative, which has no

@@ -78,6 +78,34 @@ module grd2_rys
         procedure :: set_ids => gdat_set_ids
     end type
 
+    ! Consumer for a derivative-ERI shell quartet.  The operator path evaluates
+    ! each derivative integral once and lets the consumer scatter its linear
+    ! coefficient into an AO operator, instead of rerunning the complete Rys
+    ! traversal for every AO matrix unit.
+    type, abstract :: grd2_operator_consumer_t
+    contains
+      procedure(grd2_operator_accumulate_if), deferred :: accumulate
+      !> Bytes of private accumulation buffer one OpenMP thread needs; 0 (the
+      !> default) means the consumer is not thread-safe and runs serially.
+      procedure :: thread_buffer_bytes => grd2_operator_thread_buffer_bytes
+      !> Redirect this (per-thread) copy to its own zeroed buffer.
+      procedure :: thread_begin => grd2_operator_thread_begin
+      !> Add a per-thread copy's buffer into this (shared) consumer.
+      procedure :: thread_merge => grd2_operator_thread_merge
+    end type grd2_operator_consumer_t
+
+    abstract interface
+      subroutine grd2_operator_accumulate_if(this, basis, shell_ids, atom_ids, &
+                                               local_ids, derivative)
+        import :: basis_set, dp, grd2_operator_consumer_t
+        implicit none
+        class(grd2_operator_consumer_t), intent(inout) :: this
+        type(basis_set), intent(in) :: basis
+        integer, intent(in) :: shell_ids(4), atom_ids(4), local_ids(4)
+        real(kind=dp), intent(in) :: derivative(3,4)
+      end subroutine grd2_operator_accumulate_if
+    end interface
+
 type soc2e_int_data_t
       integer :: id(4)
       integer :: at(4)
@@ -121,13 +149,30 @@ type soc2e_int_data_t
 
     private
     public :: grd2_int_data_t
+    public :: grd2_operator_consumer_t
     public :: grd2_rys_compute
+    public :: grd2_rys_compute_operator
     public :: soc2e_int_data_t
     public :: soc2e_rys_compute
     public :: soc2e_driver
     public :: grd2_rys_hess_compute
 
 contains
+
+  integer(8) function grd2_operator_thread_buffer_bytes(this) result(nbytes)
+    class(grd2_operator_consumer_t), intent(in) :: this
+    nbytes = 0_8
+  end function grd2_operator_thread_buffer_bytes
+
+  subroutine grd2_operator_thread_begin(this)
+    class(grd2_operator_consumer_t), target, intent(inout) :: this
+  end subroutine grd2_operator_thread_begin
+
+  subroutine grd2_operator_thread_merge(this, other)
+    class(grd2_operator_consumer_t), intent(inout) :: this
+    class(grd2_operator_consumer_t), intent(in) :: other
+  end subroutine grd2_operator_thread_merge
+
 
   subroutine gdat_init(gdat, maxang, nder, &
                         dtol, dabcut, &
@@ -418,6 +463,136 @@ contains
     call apply_translation_invariance(gdat)
 
   end subroutine grd2_rys_compute
+
+  !> Evaluate one derivative-ERI shell quartet and scatter all AO matrix
+  !> elements through an operator consumer.  Unlike grd2_rys_compute, this
+  !> path does not contract against one preselected four-index density.  The
+  !> expensive primitive/Rys recurrences are therefore performed once per
+  !> shell quartet, independent of the number of AO operator elements.
+  subroutine grd2_rys_compute_operator(gdat, ppairs, consumer, basis, mu2)
+
+    use int2_pairs, only: int2_pair_storage
+    implicit none
+
+    type(grd2_int_data_t), intent(inout) :: gdat
+    type(int2_pair_storage), intent(in) :: ppairs
+    class(grd2_operator_consumer_t), intent(inout) :: consumer
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(in), optional :: mu2
+
+    integer :: ijg, klg, maxgg, mmax, ng
+    integer :: nimax, njmax, nkmax, nlmax, nmax
+    real(kind=dp) :: aa, ab, aandb1, bb, da, db, test
+    real(kind=dp) :: pfac, rho
+    real(kind=dp) :: p(3), q(3)
+    logical :: last
+    integer :: id1, id2, ppid_p, ppid_q, npp_p, npp_q
+    real(kind=dp) :: mu2_1
+
+    mu2_1 = 0.0_dp
+    if (present(mu2)) mu2_1 = 1.0_dp/mu2
+
+    call set_shells(gdat)
+
+    id1 = maxval(gdat%id(1:2))
+    id2 = minval(gdat%id(1:2))
+    npp_p = ppairs%ppid(1,id1*(id1-1)/2+id2)
+    ppid_p = ppairs%ppid(2,id1*(id1-1)/2+id2)
+
+    id1 = maxval(gdat%id(3:4))
+    id2 = minval(gdat%id(3:4))
+    npp_q = ppairs%ppid(1,id1*(id1-1)/2+id2)
+    ppid_q = ppairs%ppid(2,id1*(id1-1)/2+id2)
+    if (npp_p*npp_q == 0) return
+
+    nimax = gdat%am(1) + gdat%der(1) + 1
+    njmax = gdat%am(2) + gdat%der(2) + 1
+    nkmax = gdat%am(3) + gdat%der(3) + 1
+    nlmax = gdat%am(4) + gdat%der(4) + 1
+    nmax = gdat%am(1)+gdat%am(2)+1 + min(gdat%der(1)+gdat%der(2),gdat%nder)
+    mmax = gdat%am(3)+gdat%am(4)+1 + min(gdat%der(3)+gdat%der(4),gdat%nder)
+    maxgg = MAXCONTR/gdat%nroots
+
+    ng = 0
+    do klg = 1, npp_q
+      db = ppairs%k(ppid_q-1+klg)*ppairs%ginv(ppid_q-1+klg)
+      bb = ppairs%g(ppid_q-1+klg)
+      q = ppairs%P(:,ppid_q-1+klg)
+      do ijg = 1, npp_p
+        da = ppairs%k(ppid_p-1+ijg)*ppairs%ginv(ppid_p-1+ijg)
+        aa = ppairs%g(ppid_p-1+ijg)
+        p = ppairs%P(:,ppid_p-1+ijg)
+        ab = (aa+bb) + aa*bb*mu2_1
+        pfac = da*db
+        test = pfac*pfac
+        if (test < gdat%dtol*ab) cycle
+
+        ! There is no single probe density on the operator path, so applying
+        ! the scalar path's density-dependent primitive cutoff could remove a
+        ! contribution needed by a different AO matrix unit.  Retain only the
+        ! density-independent primitive cutoff above.
+        aandb1 = 1.0_dp/ab
+        rho = aa*bb*aandb1
+        ng = ng+1
+        gdat%abv(1,ng) = ppairs%ginv(ppid_p-1+ijg)
+        gdat%abv(2,ng) = ppairs%ginv(ppid_q-1+klg)
+        gdat%abv(3,ng) = rho
+        gdat%abv(4,ng) = pfac*sqrt(aandb1)
+        gdat%abv(5,ng) = aandb1
+        gdat%abv(6,ng) = rho*sum((p-q)**2)
+        gdat%ai(ng) = 2*ppairs%alpha_a(ppid_p-1+ijg)
+        gdat%aj(ng) = 2*ppairs%alpha_b(ppid_p-1+ijg)
+        gdat%ak(ng) = 2*ppairs%alpha_a(ppid_q-1+klg)
+        gdat%al(ng) = 2*ppairs%alpha_b(ppid_q-1+klg)
+        gdat%PQ(:,ng) = p-q
+        if (nmax>1) gdat%pb(:,ng) = ppairs%PB(:,ppid_p-1+ijg)
+        if (mmax>1) gdat%qd(:,ng) = ppairs%PB(:,ppid_q-1+klg)
+        gdat%dij(:,ng) = ppairs%PA(:,ppid_p-1+ijg)-ppairs%PB(:,ppid_p-1+ijg)
+        gdat%dkl(:,ng) = ppairs%PA(:,ppid_q-1+klg)-ppairs%PB(:,ppid_q-1+klg)
+
+        last = klg==npp_q .and. ijg==npp_p
+        if (ng==maxgg .or. last) then
+          if (ng==0) return
+          call compute_grd_ints_operator(gdat, consumer, basis, ng, nmax, mmax, &
+                                         nimax, njmax, nkmax, nlmax)
+          ng = 0
+        end if
+      end do
+    end do
+
+    ! The last primitive pair can be screened after an earlier accepted pair,
+    ! so `last` is not guaranteed to reach the batching branch above.
+    if (ng > 0) then
+      call compute_grd_ints_operator(gdat, consumer, basis, ng, nmax, mmax, &
+                                     nimax, njmax, nkmax, nlmax)
+    end if
+
+  end subroutine grd2_rys_compute_operator
+
+  subroutine compute_grd_ints_operator(gdat, consumer, basis, ng, nmax, mmax, &
+                                       nimax, njmax, nkmax, nlmax)
+    implicit none
+    type(grd2_int_data_t), intent(inout) :: gdat
+    class(grd2_operator_consumer_t), intent(inout) :: consumer
+    type(basis_set), intent(in) :: basis
+    integer, intent(in) :: ng, nmax, mmax, nimax, njmax, nkmax, nlmax
+
+    call compute_rys_rw(gdat, gdat%rw, ng)
+    call compute_coefficients(gdat%b00, gdat%b01, gdat%b10, &
+                gdat%c00, gdat%d00, gdat%f00, &
+                gdat%abv, gdat%pq, gdat%pb, gdat%qd, gdat%rw, nmax, mmax, ng, gdat%nroots)
+    call compute_xyz_p0q0(gdat%gnm,ng*gdat%nroots,nmax,mmax, &
+                gdat%b00, gdat%b01, gdat%b10, gdat%c00, gdat%d00, gdat%f00)
+    call compute_xyz_ijkl(gdat%gijkl, gdat%gnkl, gdat%gnm, &
+                ng, gdat%nroots, nmax, mmax, nimax, njmax, nkmax,nlmax, &
+                gdat%dij,gdat%dkl)
+    call compute_der_xyz_ijkl(gdat, gdat%gijkl, &
+                ng, gdat%nroots*3, nimax, njmax, nkmax, nlmax, &
+                gdat%ai, gdat%aj, gdat%ak, gdat%al, gdat%fi, gdat%fj, gdat%fk, gdat%fl)
+    call compute_der_ijkl_operator(gdat, ng*gdat%nroots, gdat%ijklxyz, &
+                gdat%gijkl, gdat%fi, gdat%fj, gdat%fk, gdat%fl, &
+                consumer, basis)
+  end subroutine compute_grd_ints_operator
 
   subroutine compute_grd_ints(gdat, dab, ng, nmax, mmax, nimax, njmax, nkmax, nlmax)
 
@@ -936,6 +1111,64 @@ contains
 
   end subroutine compute_der_ijkl
 
+  subroutine compute_der_ijkl_operator(gdat, ngnr, ijklxyz, g0, fi, fj, fk, fl, &
+                                       consumer, basis)
+    implicit none
+
+    type(grd2_int_data_t), intent(in) :: gdat
+    integer, intent(in) :: ngnr
+    integer, intent(in) :: ijklxyz(:,:,:)
+    real(kind=dp), intent(in) :: g0(ngnr,3,*)
+    real(kind=dp), intent(in) :: fi(ngnr,3,*), fj(ngnr,3,*)
+    real(kind=dp), intent(in) :: fk(ngnr,3,*), fl(ngnr,3,*)
+    class(grd2_operator_consumer_t), intent(inout) :: consumer
+    type(basis_set), intent(in) :: basis
+
+    integer :: i, j, k, l, nx, ny, nz
+    integer :: local_ids(4)
+    real(kind=dp) :: derivative(3,4)
+    real(kind=dp) :: yz(ngnr), xz(ngnr), xy(ngnr)
+
+    do i = 1, gdat%nbf(1)
+      do j = 1, gdat%nbf(2)
+        do k = 1, gdat%nbf(3)
+          do l = 1, gdat%nbf(4)
+            nx = ijklxyz(1,i,1)+ijklxyz(1,j,2)+ijklxyz(1,k,3)+ijklxyz(1,l,4)
+            ny = ijklxyz(2,i,1)+ijklxyz(2,j,2)+ijklxyz(2,k,3)+ijklxyz(2,l,4)
+            nz = ijklxyz(3,i,1)+ijklxyz(3,j,2)+ijklxyz(3,k,3)+ijklxyz(3,l,4)
+            yz = g0(:,2,ny)*g0(:,3,nz)
+            xz = g0(:,1,nx)*g0(:,3,nz)
+            xy = g0(:,1,nx)*g0(:,2,ny)
+            derivative = 0.0_dp
+            if (.not.gdat%skip(1)) then
+              derivative(1,1) = sum(fi(:,1,nx)*yz)
+              derivative(2,1) = sum(fi(:,2,ny)*xz)
+              derivative(3,1) = sum(fi(:,3,nz)*xy)
+            end if
+            if (.not.gdat%skip(2)) then
+              derivative(1,2) = sum(fj(:,1,nx)*yz)
+              derivative(2,2) = sum(fj(:,2,ny)*xz)
+              derivative(3,2) = sum(fj(:,3,nz)*xy)
+            end if
+            if (.not.gdat%skip(3)) then
+              derivative(1,3) = sum(fk(:,1,nx)*yz)
+              derivative(2,3) = sum(fk(:,2,ny)*xz)
+              derivative(3,3) = sum(fk(:,3,nz)*xy)
+            end if
+            if (.not.gdat%skip(4)) then
+              derivative(1,4) = sum(fl(:,1,nx)*yz)
+              derivative(2,4) = sum(fl(:,2,ny)*xz)
+              derivative(3,4) = sum(fl(:,3,nz)*xy)
+            end if
+            call finalize_gradient_block(gdat, derivative)
+            local_ids = [i,j,k,l]
+            call consumer%accumulate(basis, gdat%id, gdat%at, local_ids, derivative)
+          end do
+        end do
+      end do
+    end do
+  end subroutine compute_der_ijkl_operator
+
 !###############################################################################
 !   Second-derivative (Hessian) skeleton: analytic 2e ERI second derivatives
 !###############################################################################
@@ -1239,6 +1472,12 @@ contains
                   f2_33, f2_34, f2_44, den, fd2)
 !   Contract the 1D first/second derivative arrays with the 2-body density to
 !   form the per-quartet second-derivative block fd2(a1,c1,a2,c2).
+!
+!   fd2 is symmetric under (a1,c1) <-> (a2,c2), so only its 78 unique
+!   elements are formed per AO quartet: 30 same-direction elements
+!   (second-derivative factor times the two other direction factors) and 48
+!   mixed-direction ones (two first-derivative factors times the third
+!   direction factor).  The 1D vectors of a quartet are gathered once.
     implicit none
     type(grd2_int_data_t) :: gdat
     integer :: ngnr
@@ -1252,43 +1491,85 @@ contains
     real(kind=dp) :: f2_44(ngnr,3,*)
     real(kind=dp) :: fd2(3,4,3,4)
 
-    integer :: i, j, k, l
+    integer :: i, j, k, l, n
     integer :: noff(3)
-    integer :: c1, c2, a1, a2, a3, o1, o2
+    integer :: c1, c2, a1, a2, a3, o1, o2, ip
     real(kind=dp) :: df, val
     real(kind=dp), pointer :: pd(:,:,:,:)
+    ! per-quartet gathered 1D factors
+    ! (heap, not automatic: OpenMP worker stacks are small on macOS)
+    real(kind=dp), allocatable :: w(:,:)     ! product of the two other direction factors
+    real(kind=dp), allocatable :: f1(:,:,:)  ! first-derivative factor of center c, direction a
+    real(kind=dp), allocatable :: f2(:,:,:)  ! second-derivative factor of center pair, direction a
+    real(kind=dp), allocatable :: t(:,:)
+    real(kind=dp) :: acc(3,4,3,4)
+    integer, parameter :: pair(4,4) = reshape([1,2,3,4, 2,5,6,7, 3,6,8,9, 4,7,9,10], [4,4])
 
     pd(1:gdat%nbf(4), 1:gdat%nbf(3), 1:gdat%nbf(2), 1:gdat%nbf(1)) => den(1:product(gdat%nbf))
 
+    allocate(w(ngnr,3), f1(ngnr,4,3), f2(ngnr,10,3), t(ngnr,4))
+    acc = 0.0_dp
     do i = 1, gdat%nbf(1)
       do j = 1, gdat%nbf(2)
         do k = 1, gdat%nbf(3)
           do l = 1, gdat%nbf(4)
+            df = pd(l,k,j,i)
+            if (df == 0.0_dp) cycle
             noff(1) = ijklxyz(1,i,1)+ijklxyz(1,j,2)+ijklxyz(1,k,3)+ijklxyz(1,l,4)
             noff(2) = ijklxyz(2,i,1)+ijklxyz(2,j,2)+ijklxyz(2,k,3)+ijklxyz(2,l,4)
             noff(3) = ijklxyz(3,i,1)+ijklxyz(3,j,2)+ijklxyz(3,k,3)+ijklxyz(3,l,4)
-            df = pd(l,k,j,i)
 
-            do c1 = 1, 4
-             do a1 = 1, 3
-              do c2 = 1, 4
-               do a2 = 1, 3
-                if (a1 == a2) then
-                  ! both derivatives act on the same 1D direction factor
-                  o1 = mod(a1,  3) + 1
-                  o2 = mod(a1+1,3) + 1
-                  val = df * sum( f2pick(c1,c2,a1,noff(a1)) &
-                                * g0(:,o1,noff(o1)) * g0(:,o2,noff(o2)) )
-                else
-                  ! different direction factors: product of first derivatives
-                  a3 = 6 - a1 - a2
-                  val = df * sum( f1pick(c1,a1,noff(a1)) &
-                                * f1pick(c2,a2,noff(a2)) * g0(:,a3,noff(a3)) )
-                end if
-                fd2(a1,c1,a2,c2) = fd2(a1,c1,a2,c2) + val
-               end do
+            do a1 = 1, 3
+              o1 = mod(a1,  3) + 1
+              o2 = mod(a1+1,3) + 1
+              w(:,a1) = g0(:,o1,noff(o1))*g0(:,o2,noff(o2))
+              f1(:,1,a1) = fi(:,a1,noff(a1))
+              f1(:,2,a1) = fj(:,a1,noff(a1))
+              f1(:,3,a1) = fk(:,a1,noff(a1))
+              f1(:,4,a1) = fl(:,a1,noff(a1))
+              f2(:, 1,a1) = f2_11(:,a1,noff(a1))
+              f2(:, 2,a1) = f2_12(:,a1,noff(a1))
+              f2(:, 3,a1) = f2_13(:,a1,noff(a1))
+              f2(:, 4,a1) = f2_14(:,a1,noff(a1))
+              f2(:, 5,a1) = f2_22(:,a1,noff(a1))
+              f2(:, 6,a1) = f2_23(:,a1,noff(a1))
+              f2(:, 7,a1) = f2_24(:,a1,noff(a1))
+              f2(:, 8,a1) = f2_33(:,a1,noff(a1))
+              f2(:, 9,a1) = f2_34(:,a1,noff(a1))
+              f2(:,10,a1) = f2_44(:,a1,noff(a1))
+            end do
+
+            ! same direction: 10 center pairs x 3 directions
+            do a1 = 1, 3
+              do c1 = 1, 4
+                do c2 = c1, 4
+                  ip = pair(c2,c1)
+                  val = 0.0_dp
+                  do n = 1, ngnr
+                    val = val + f2(n,ip,a1)*w(n,a1)
+                  end do
+                  acc(a1,c1,a1,c2) = acc(a1,c1,a1,c2) + df*val
+                end do
               end do
-             end do
+            end do
+
+            ! mixed directions a1 < a2 (a3 the third): 16 center pairs each
+            do a1 = 1, 2
+              do a2 = a1+1, 3
+                a3 = 6 - a1 - a2
+                do c1 = 1, 4
+                  t(:,c1) = f1(:,c1,a1)*g0(:,a3,noff(a3))
+                end do
+                do c2 = 1, 4
+                  do c1 = 1, 4
+                    val = 0.0_dp
+                    do n = 1, ngnr
+                      val = val + t(n,c1)*f1(n,c2,a2)
+                    end do
+                    acc(a1,c1,a2,c2) = acc(a1,c1,a2,c2) + df*val
+                  end do
+                end do
+              end do
             end do
 
           end do
@@ -1296,37 +1577,25 @@ contains
       end do
     end do
 
-  contains
-
-    function f1pick(c, d, o) result(v)
-      integer, intent(in) :: c, d, o
-      real(kind=dp) :: v(ngnr)
-      select case (c)
-      case (1); v = fi(:,d,o)
-      case (2); v = fj(:,d,o)
-      case (3); v = fk(:,d,o)
-      case (4); v = fl(:,d,o)
-      end select
-    end function f1pick
-
-    function f2pick(ca, cb, d, o) result(v)
-      integer, intent(in) :: ca, cb, d, o
-      real(kind=dp) :: v(ngnr)
-      integer :: lo, hi
-      lo = min(ca,cb); hi = max(ca,cb)
-      select case (lo*10+hi)
-      case (11); v = f2_11(:,d,o)
-      case (12); v = f2_12(:,d,o)
-      case (13); v = f2_13(:,d,o)
-      case (14); v = f2_14(:,d,o)
-      case (22); v = f2_22(:,d,o)
-      case (23); v = f2_23(:,d,o)
-      case (24); v = f2_24(:,d,o)
-      case (33); v = f2_33(:,d,o)
-      case (34); v = f2_34(:,d,o)
-      case (44); v = f2_44(:,d,o)
-      end select
-    end function f2pick
+    ! complete the symmetric block: fd2(a1,c1,a2,c2) = fd2(a2,c2,a1,c1)
+    do a1 = 1, 3
+      do c1 = 1, 4
+        do c2 = c1, 4
+          fd2(a1,c1,a1,c2) = fd2(a1,c1,a1,c2) + acc(a1,c1,a1,c2)
+          if (c2 /= c1) fd2(a1,c2,a1,c1) = fd2(a1,c2,a1,c1) + acc(a1,c1,a1,c2)
+        end do
+      end do
+    end do
+    do a1 = 1, 2
+      do a2 = a1+1, 3
+        do c2 = 1, 4
+          do c1 = 1, 4
+            fd2(a1,c1,a2,c2) = fd2(a1,c1,a2,c2) + acc(a1,c1,a2,c2)
+            fd2(a2,c2,a1,c1) = fd2(a2,c2,a1,c1) + acc(a1,c1,a2,c2)
+          end do
+        end do
+      end do
+    end do
 
   end subroutine compute_der2_ijkl
 
@@ -1339,28 +1608,32 @@ contains
     if (gdat%nder == 0) return
 
 !   Translational invariance for gradient elements
-    associate(fd => gdat%fd)
+    call finalize_gradient_block(gdat, gdat%fd)
 
-    if (gdat%iandj) fd = 0.5*fd
-    if (gdat%kandl) fd = 0.5*fd
-    if (gdat%same) fd = 0.5*fd
+  end subroutine apply_translation_invariance
+
+  pure subroutine finalize_gradient_block(gdat, fd)
+    type(grd2_int_data_t), intent(in) :: gdat
+    real(kind=dp), intent(inout) :: fd(3,4)
+
+    if (gdat%iandj) fd = 0.5_dp*fd
+    if (gdat%kandl) fd = 0.5_dp*fd
+    if (gdat%same) fd = 0.5_dp*fd
 
     select case (gdat%invtyp)
-    case (2)    ; fd(:,1) = - fd(:,4)
-    case (3)    ; fd(:,1) = - fd(:,3)
+    case (2)    ; fd(:,1) = -fd(:,4)
+    case (3)    ; fd(:,1) = -fd(:,3)
     case (4,5)  ; fd(:,1) = -(fd(:,3)+fd(:,4))
-    case (6)    ; fd(:,1) = - fd(:,2)
+    case (6)    ; fd(:,1) = -fd(:,2)
     case (7,8)  ; fd(:,1) = -(fd(:,2)+fd(:,4))
     case (9,10) ; fd(:,1) = -(fd(:,2)+fd(:,3))
-    case (11)   ; fd(:,2) = - fd(:,1)
+    case (11)   ; fd(:,2) = -fd(:,1)
     case (12)   ; fd(:,2) = -(fd(:,1)+fd(:,4))
     case (13)   ; fd(:,2) = -(fd(:,1)+fd(:,3))
     case (14)   ; fd(:,3) = -(fd(:,1)+fd(:,2))
     case (15)   ; fd(:,4) = -(fd(:,1)+fd(:,2)+fd(:,3))
     end select
-end associate
-
-  end subroutine apply_translation_invariance
+  end subroutine finalize_gradient_block
 
 !> @brief Allocate and initialise the 2e SOC integral data structure
 !> @details

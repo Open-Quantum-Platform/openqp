@@ -46,7 +46,7 @@ class Int2OpenMPWorkshareTests(unittest.TestCase):
         self.assertNotIn("!$omp barrier", flat_body)
         self.assertNotIn("call int2_decode_shell_pair", flat_body)
 
-    def test_precomputed_shell_pair_map_preserves_descending_i_then_ascending_j_order(self):
+    def test_precomputed_shell_pair_map_uses_stable_cost_classes(self):
         body = self._int2_twoei_source()
 
         build_map = re.search(
@@ -58,14 +58,20 @@ class Int2OpenMPWorkshareTests(unittest.TestCase):
             self.fail("int2_build_shell_pair_map subroutine not found")
         map_body = build_map.group("body")
 
-        self.assertIn("ij_pair = 0", map_body)
+        self.assertIn("cnt = 0", map_body)
+        self.assertIn("cost = sw * real(nbfi*nbfj,dp) * real(i,dp)", map_body)
+        self.assertIn("off(0) = 0", map_body)
         self.assertRegex(
             map_body,
-            r"do\s+i\s*=\s*nshell\s*,\s*1\s*,\s*-1\s*\n\s*do\s+j\s*=\s*1\s*,\s*i",
+            r"do\s+c\s*=\s*1\s*,\s*nclass\s*\n\s*off\(c\)\s*=\s*off\(c-1\)\s*\+\s*cnt\(c-1\)",
         )
         self.assertRegex(
             map_body,
-            r"ij_pair\s*=\s*ij_pair\s*\+\s*1\s*\n\s*shell_pair_i\(ij_pair\)\s*=\s*i\s*\n\s*shell_pair_j\(ij_pair\)\s*=\s*j",
+            r"do\s+i\s*=\s*nshell\s*,\s*1\s*,\s*-1\s*\n[\s\S]*?do\s+j\s*=\s*1\s*,\s*i",
+        )
+        self.assertRegex(
+            map_body,
+            r"off\(cls\)\s*=\s*off\(cls\)\s*\+\s*1\s*\n\s*ij_pair\s*=\s*off\(cls\)\s*\n\s*shell_pair_i\(ij_pair\)\s*=\s*i\s*\n\s*shell_pair_j\(ij_pair\)\s*=\s*j",
         )
 
 

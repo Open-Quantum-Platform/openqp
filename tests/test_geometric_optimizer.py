@@ -8,6 +8,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
 
+from oqp_module_isolation import isolate_modules, stub_module
+
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES_OPT = ROOT / "examples" / "OPT"
@@ -22,8 +24,8 @@ def load_module(name, relative_path):
 
 
 def install_minimal_oqp_stubs():
-    oqp = sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-    oqp_utils = sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+    oqp = stub_module("oqp")
+    oqp_utils = stub_module("oqp.utils")
     oqp_utils.__path__ = []
     mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
     tb_backends = types.ModuleType("oqp.utils.tb_backends")
@@ -41,7 +43,7 @@ def install_minimal_oqp_stubs():
 
 def install_runfunc_stubs():
     install_minimal_oqp_stubs()
-    oqp_library = sys.modules.setdefault("oqp.library", types.ModuleType("oqp.library"))
+    oqp_library = stub_module("oqp.library")
     oqp_library.__path__ = []
 
     single_point = types.ModuleType("oqp.library.single_point")
@@ -225,6 +227,7 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
         )
 
     def setUp(self):
+        self.addCleanup(isolate_modules())
         install_minimal_oqp_stubs()
 
     def test_constrained_optimization_is_now_a_native_example(self):
@@ -943,6 +946,54 @@ class TestOQPTesterCollection(unittest.TestCase):
                     tester._project_name_for_input(str(producer)), "job")
                 self.assertEqual(
                     tester._project_name_for_input(str(restart)), "job")
+                self.assertEqual(
+                    tester._case_output_dir(str(producer)),
+                    tester._case_output_dir(str(restart)),
+                )
+
+    def test_continuation_shares_directory_but_preserves_producer_outputs(self):
+        class NoopRunner:
+            pass
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            producer = root / "QMMM/job.oqp"
+            restart = root / "QMMM/job.continuation.oqp"
+            self._write(producer)
+            self._write(restart)
+            calls = []
+
+            with load_oqp_tester(
+                NoopRunner, "oqp_tester_restart_pair_under_test"
+            ) as tester_module:
+                tester = tester_module.OQPTester.__new__(tester_module.OQPTester)
+                tester.base_test_dir = str(root)
+                tester.output_dir = str(root / "output")
+                tester.omp_threads = 1
+                tester.max_workers = 2
+                tester.results = []
+                tester.mpi_manager = types.SimpleNamespace(rank=0, use_mpi=0)
+                tester._log_result_status = lambda _result: None
+
+                def fake_isolated(path):
+                    calls.append(path)
+                    return {
+                        "project": tester._project_name_for_input(path),
+                        "input_file": path,
+                        "log_file": "job.log",
+                        "status": "PASSED",
+                        "message": "matched",
+                        "execution_time": 0.0,
+                    }
+
+                tester._run_isolated = fake_isolated
+                tester.run_tests(str(root), input_format="oqp")
+
+                self.assertEqual(calls, [str(producer), str(restart)])
+                self.assertEqual(
+                    tester._project_name_for_input(str(producer)), "job")
+                self.assertEqual(
+                    tester._project_name_for_input(str(restart)), "job.continuation")
                 self.assertEqual(
                     tester._case_output_dir(str(producer)),
                     tester._case_output_dir(str(restart)),

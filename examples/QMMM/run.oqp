@@ -1,3 +1,9 @@
-rks/bhhlyp/6-31g md(S0) scf(maxit=100)
-qmmm(forcefield_files="tip3p.xml",qm_atoms="0-2",cutoff=PME,timestep=0.1)
+# Ground-state QM/MM molecular dynamics on a water dimer: QM = the first
+# water (atoms 0-2), MM = the second, TIP3P, in a periodic 30 A box
+# (cutoff=PME).  md(...) owns the nuclear controls, qmmm(...) the embedding.
+# qmmm(qm_atoms=...) is the one definition of the QM region (0-based PDB
+# order); the QM molecule is built from it.
+# velocity=zero keeps the two steps reproducible.  Requires OpenMM.
+rks/bhhlyp/6-31g md(nstep=2,dt=0.5,velocity=zero,ensemble=nve) scf(maxit=100)
+qmmm(forcefield_files="tip3p.xml",qm_atoms="0-2",cutoff=PME)
 geom="water_dimer.pdb"

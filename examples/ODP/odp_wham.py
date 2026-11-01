@@ -22,7 +22,7 @@ from oqp.library import odp_wham
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("trajectories", nargs="+", help="packed ODP *.namd.trj files")
+    parser.add_argument("trajectories", nargs="+", help="packed ODP *.namd.trj files or ground-state QM/MM MD total_energy.npz tables")
     parser.add_argument("--temperature", type=float, required=True, help="WHAM temperature in K")
     parser.add_argument("--bins", type=int, default=100, help="number of xi bins")
     parser.add_argument("--discard", type=int, default=0, help="records to discard per window")

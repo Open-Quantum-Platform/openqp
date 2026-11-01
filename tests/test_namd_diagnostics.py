@@ -60,13 +60,7 @@ def test_trace_sidecars_return_a_map_and_soc_fallback_uses_coef_dimension(
 
 
 def test_hop_tracer_records_the_row_before_preserving_an_nve_abort(tmp_path):
-    import sys
-
-    sys.path.insert(0, str(ROOT / "pyoqp"))
-    try:
-        from oqp.library import namd as namd_module
-    finally:
-        sys.path.pop(0)
+    from oqp.library import namd as namd_module
 
     path = ROOT / "tools" / "diagnostics" / "trace_namd_hop.py"
     spec = importlib.util.spec_from_file_location("trace_namd_hop_test", path)

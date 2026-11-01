@@ -32,9 +32,11 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_mrsf_density = OQP_prefix // "td_mrsf_density"
   character(len=*), parameter, public :: OQP_td_p = OQP_prefix // "td_p"
   character(len=*), parameter, public :: OQP_td_t = OQP_prefix // "td_t"
+  character(len=*), parameter, public :: OQP_td_z = OQP_prefix // "td_z"
   character(len=*), parameter, public :: OQP_td_xpy = OQP_prefix // "td_xpy"
   character(len=*), parameter, public :: OQP_td_xmy = OQP_prefix // "td_xmy"
   character(len=*), parameter, public :: OQP_td_energies = OQP_prefix // "td_energies"
+  character(len=*), parameter, public :: OQP_td_imaginary = OQP_prefix // "td_imaginary"
   character(len=*), parameter, public :: OQP_td_singlet_energies = OQP_prefix // "td_singlet_energies"    !new
   character(len=*), parameter, public :: OQP_td_triplet_energies = OQP_prefix // "td_triplet_energies"    !new
   character(len=*), parameter, public :: OQP_td_bvec_mo_s = OQP_prefix // "td_bvec_mo_s"                  !new
@@ -43,6 +45,29 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_nmr_shielding_comment = &
     "Isotropic NMR shielding per atom (ppm); shape (5, natom): rows = "// &
     "dia, para_uncoupled, para_coupled, total_uncoupled, total_coupled"
+  character(len=*), parameter, public :: OQP_nmr_pdens = OQP_prefix // "nmr_pdens"
+  character(len=*), parameter, public :: OQP_nmr_pdens_comment = &
+    "Imaginary antisymmetric AO density-matrix response to the external "// &
+    "magnetic field from the coupled GIAO CPHF/CPKS solution, spin-summed; "// &
+    "shape (3, nbf, nbf), D^(1)_c = i * P(c,:,:), gauge origin at the "// &
+    "coordinate origin.  Consumed by the ACID/current-density export."
+  character(len=*), parameter, public :: OQP_nmr_pdens_ref = OQP_prefix // "nmr_pdens_ref"
+  character(len=*), parameter, public :: OQP_nmr_pdens_ref_comment = &
+    "Provenance of OQP::nmr_pdens, shape "// &
+    "(8 + 4*natom + 3*nshell + 2*nprim): [1] = nbf, [2] = natom, "// &
+    "[3] = nshell, [4] = nprim, [5] = charge, [6] = nelec_a, "// &
+    "[7] = nelec_b, [8] = mult, then the atomic numbers, then the nuclear "// &
+    "coordinates (bohr, 3 per atom), then per shell in AO order (origin "// &
+    "zero-based, am, ncontr), then the exponents and the contraction "// &
+    "coefficients in full.  "// &
+    "[1] < 0 marks the response incomplete.  The stamp carries only what "// &
+    "it can represent exactly: sizes, geometry and basis.  The electronic "// &
+    "state the response was built from is not described here -- it is the "// &
+    "MOs, their energies, the spin occupations and the exchange scale, and "// &
+    "every scalar summary of those is non-unique -- so scf_driver erases "// &
+    "both records on entry instead.  Both records otherwise outlive the "// &
+    "call that wrote them, so the ACID export refuses a response whose "// &
+    "stamp does not match the molecule it is asked to plot."
   character(len=*), parameter, public :: OQP_mulliken_charges = OQP_prefix // "mulliken_charges"
   character(len=*), parameter, public :: OQP_mulliken_charges_comment = &
     "Mulliken atomic partial charges (e), one per atom"
@@ -61,6 +86,12 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_mrsf_ekt_eigenvalues = OQP_prefix // "mrsf_ekt_eigenvalues"
   character(len=*), parameter, public :: OQP_mrsf_ekt_strengths = OQP_prefix // "mrsf_ekt_strengths"
   character(len=*), parameter, public :: OQP_hf_hessian = OQP_prefix // "hf_hessian"
+  character(len=*), parameter, public :: OQP_tdhf_hessian = OQP_prefix // "tdhf_hessian"
+  character(len=*), parameter, public :: OQP_hf_dipole_derivatives = OQP_prefix // "hf_dipole_derivatives"
+  character(len=*), parameter, public :: OQP_hf_polarizability_derivatives = OQP_prefix // "hf_polarizability_derivatives"
+  !> int64 flag set by the Python Hessian driver: 0 = matrix only (TS/IRC
+  !> analysis=False), skip the IR/Raman property derivatives; absent or 1 = compute
+  character(len=*), parameter, public :: OQP_hess_properties = OQP_prefix // "hess_properties"
   character(len=*), parameter, public :: OQP_log_filename = OQP_prefix // "log_filename"
   character(len=*), parameter, public :: OQP_basis_filename = OQP_prefix // "basis_filename"
   character(len=*), parameter, public :: OQP_hbasis_filename = OQP_prefix // "hbasis_filename"
@@ -158,11 +189,17 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_abxc_comment = "??? td_abxc ???"
   character(len=*), parameter, public :: OQP_td_bvec_mo_comment = "??? td_bvec_mo ???"
   character(len=*), parameter, public :: OQP_td_mrsf_density_comment = "??? td_mrsf_density ???"
-  character(len=*), parameter, public :: OQP_td_p_comment = "??? td_p ???"
+  character(len=*), parameter, public :: OQP_td_p_comment = &
+    "relaxed difference density (packed L-triangle): 1 column (alpha part of a "// &
+    "closed-shell density) from restricted TDHF/TDDFT, 2 columns (alpha, beta) "// &
+    "from SF/MRSF; spin-sum it with td_p_spin_sum"
   character(len=*), parameter, public :: OQP_td_t_comment = "??? td_t ???"
+  character(len=*), parameter, public :: OQP_td_z_comment = &
+    "TDHF/TDDFT orbital-relaxation Z vector for the target state"
   character(len=*), parameter, public :: OQP_td_xpy_comment = OQP_prefix // "(X+Y) vector for target state in TD-DFT calculations"
   character(len=*), parameter, public :: OQP_td_xmy_comment = OQP_prefix // "(X-Y) vector for target state in TD-DFT calculations"
   character(len=*), parameter, public :: OQP_td_energies_comment = OQP_prefix // "Responce energies"
+  character(len=*), parameter, public :: OQP_td_imaginary_comment = OQP_prefix // "1 for RPA roots with omega^2 < 0 (imaginary, not converged; td_energies holds an unconverged |omega|), else 0"
   character(len=*), parameter, public :: OQP_mm_potential_comment = "MM potential"
   character(len=*), parameter, public :: OQP_partial_charges_comment = "QM partial charges"
   character(len=*), parameter, public :: OQP_mm_energy_comment = "MM energy"
@@ -197,9 +234,11 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: all_tags(*) = (/ character(len=80) :: &
     OQP_DM_A, OQP_DM_B, OQP_FOCK_A, OQP_FOCK_B, OQP_E_MO_A, OQP_E_MO_B, &
     OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_Hcore, OQP_SM, OQP_TM, OQP_WAO, OQP_AO_ERI, &
-    OQP_td_abxc, OQP_td_bvec_mo, OQP_td_mrsf_density, OQP_td_p, OQP_td_t, &
+    OQP_td_abxc, OQP_td_bvec_mo, OQP_td_mrsf_density, OQP_td_p, OQP_td_t, OQP_td_z, &
     OQP_mrsf_ekt_density_mo, OQP_mrsf_ekt_lagrangian_mo, OQP_mrsf_ekt_fock_mo, &
-    OQP_mrsf_ekt_orbitals_mo, OQP_mrsf_ekt_eigenvalues, OQP_mrsf_ekt_strengths, OQP_hf_hessian, &
+    OQP_mrsf_ekt_orbitals_mo, OQP_mrsf_ekt_eigenvalues, OQP_mrsf_ekt_strengths, &
+    OQP_hf_hessian, OQP_tdhf_hessian, OQP_hf_dipole_derivatives, &
+    OQP_hf_polarizability_derivatives, OQP_hess_properties, &
     OQP_log_filename, OQP_basis_filename, OQP_hbasis_filename, &
     OQP_xyz_old, OQP_overlap_mo, OQP_overlap_ao, OQP_E_MO_A_old, OQP_E_MO_B_old, &
     OQP_VEC_MO_A_old, OQP_VEC_MO_B_old, OQP_td_bvec_mo_old, OQP_td_energies_old, &
@@ -218,10 +257,39 @@ module oqp_tagarray_driver
     module procedure data_has_tags_location, data_has_tags_ms
   end interface
   public :: data_has_tags, check_status
+  public :: td_p_spin_sum
   public :: tagarray_get_data
+  public :: tagarray_reserve_data
   public :: TA_TYPE_INT64, TA_TYPE_REAL64, TA_TYPE_CHAR8
   public :: ta_ok
 contains
+
+  ! Compatibility adapter for resident NAC records written against the
+  ! pre-1.0 TagArray reserve_data interface.  TagArray 1.0 replaces that
+  ! interface with container%create/alloc; override=.true. preserves the old
+  ! replace-existing-record semantics without changing the stored shape.
+  subroutine tagarray_reserve_data(container, tag, type_id, data_size, shape, comment)
+    type(container_t), intent(inout) :: container
+    character(len=*), intent(in) :: tag
+    integer(c_int32_t), intent(in) :: type_id
+    integer, intent(in) :: data_size
+    integer, intent(in) :: shape(:)
+    character(len=*), optional, intent(in) :: comment
+    integer(c_int32_t) :: status
+    integer(c_int64_t) :: shape64(size(shape))
+
+    shape64 = int(shape, c_int64_t)
+    if (int(data_size, c_int64_t) /= product(shape64)) then
+      error stop "tagarray_reserve_data: data_size does not match shape"
+    end if
+    if (present(comment)) then
+      status = container%create(tag, type_id, shape64, description=comment, &
+                                override=.true.)
+    else
+      status = container%create(tag, type_id, shape64, override=.true.)
+    end if
+    call check_status(status, module_name, "tagarray_reserve_data", tag, .true.)
+  end subroutine tagarray_reserve_data
 
     function tagarray_get_cptr(container, tag, ptr, type_id, ndims, dims, data_size) result(res)
     type(container_t), intent(inout) :: container
@@ -397,4 +465,27 @@ contains
     TA_CONTAINER_GET_ARRAY(container, tag, TA_TYPE_CHAR8, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_char8_1d
+  !> Spin-summed relaxed difference density held in OQP::td_p.
+  !>
+  !> The Z-vector solvers store OQP::td_p in two layouts.  Restricted
+  !> TDHF/TDDFT (RPA, TDA; tdhf_z_vector) writes ONE column, the alpha part of
+  !> a closed-shell difference density, so its spin sum is 2*td_p(:,1) -- the
+  !> density tdhf_gradient itself uses (dmat_a + 2*p(:,1)).  SF and MRSF write
+  !> alpha and beta columns, whose spin sum is td_p(:,1) + td_p(:,2).  Adding
+  !> td_p(:,2) to a one-column array reads past its end.
+  function td_p_spin_sum(td_p) result(p)
+    use messages, only: show_message, WITH_ABORT
+    real(8), intent(in) :: td_p(:,:)
+    real(8) :: p(size(td_p, 1))
+    select case (size(td_p, 2))
+    case (1)
+      p = 2*td_p(:,1)
+    case (2)
+      p = td_p(:,1) + td_p(:,2)
+    case default
+      p = 0
+      call show_message(module_name // "::td_p_spin_sum: OQP::td_p must have "// &
+                        "1 (restricted) or 2 (alpha, beta) columns", WITH_ABORT)
+    end select
+  end function td_p_spin_sum
 end module oqp_tagarray_driver

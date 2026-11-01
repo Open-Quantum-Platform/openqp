@@ -109,7 +109,9 @@ CONTAINS
     CLASS(shpair_t), INTENT(INOUT) :: sp
     type(basis_set), INTENT(IN) :: basis
 
-    IF(allocated(sp%p).AND.ubound(sp%p,1)<basis%mxcontr**2) DEALLOCATE(sp%p)
+    IF (allocated(sp%p)) THEN
+      IF (ubound(sp%p,1)<basis%mxcontr**2) DEALLOCATE(sp%p)
+    END IF
 
     IF (.NOT.allocated(sp%p)) ALLOCATE(sp%p(basis%mxcontr**2))
 
@@ -131,7 +133,9 @@ CONTAINS
     CLASS(shpair_t), INTENT(INOUT) :: sp
     type(basis_set), INTENT(IN) :: basis1, basis2
 
-    IF(allocated(sp%p).AND.ubound(sp%p,1)<basis1%mxcontr*basis2%mxcontr) DEALLOCATE(sp%p)
+    IF (allocated(sp%p)) THEN
+      IF (ubound(sp%p,1)<basis1%mxcontr*basis2%mxcontr) DEALLOCATE(sp%p)
+    END IF
 
     IF (.NOT.allocated(sp%p)) ALLOCATE(sp%p(basis1%mxcontr*basis2%mxcontr))
 

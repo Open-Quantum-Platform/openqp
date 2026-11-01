@@ -1,0 +1,44 @@
+# SF-TDDFT/LANL2DZ/BHHLYP gradient of the lowest spin-flip state of HOBr
+# from a ROHF triplet reference, with a Br effective core potential.
+# The Hellmann-Feynman and Pulay terms must use the ECP-screened nuclear
+# charge (7 for Br, not 35); with the full charge this gradient was wrong by
+# 18 Ha/bohr. The reference agrees with five-point finite differences of the
+# state energy (step 1e-3 bohr) to 7e-6 Ha/bohr; that remainder is in the
+# spin-flip response gradient and appears for HOCl/6-31G* without an ECP.
+[input]
+system=
+    8   0.000000000   0.000000000   0.000000000
+    1   0.970000000   0.000000000   0.000000000
+   35  -0.411700000   1.783100000   0.000000000
+charge=0
+runtype=grad
+method=tdhf
+functional=bhhlyp
+basis=lanl2dz
+ispher=true
+
+[guess]
+type=sap
+
+[scf]
+type=rohf
+multiplicity=3
+conv=1e-10
+maxit=200
+
+[dftgrid]
+rad_npts=96
+ang_npts=302
+pruned=
+
+[symmetry]
+enabled=false
+
+[tdhf]
+type=sf
+nstate=3
+conv=1e-12
+zvconv=1e-14
+
+[properties]
+grad=1

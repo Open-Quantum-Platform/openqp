@@ -17,7 +17,7 @@ contains
 
   subroutine guess_hcore(infos)
     use precision, only: dp
-    use types, only: information
+    use types, only: information, GUESS_COLD
     use io_constants, only: IW
     use oqp_tagarray_driver
     use basis_tools, only: basis_set
@@ -56,6 +56,7 @@ contains
   ! 1. XYZ: Read : Geometric data, ATOMS
   ! 3. LOG: Read Write: Main output file
   !
+    infos%control%guess = GUESS_COLD
     open (unit=IW, file=infos%log_filename, position="append")
   !
   !

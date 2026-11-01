@@ -1,0 +1,33 @@
+# DFT/6-31G/PBE/RHF/ENERGY of H2O on the SG-1 pruned grid.
+#
+# SG-1 (Gill, Johnson, Pople, Chem. Phys. Lett. 209 (1993) 506) is DEFINED on
+# a 50-point Murray-Handy-Laming (Euler-Maclaurin) radial grid, so selecting
+# pruned=SG1 fixes both the radial size and the radial map for H-Ar.
+#
+# The deck sets only pruned=SG1. The dftgrid rad_npts / rad_type / ang_npts
+# settings are not used for the atoms SG-1 covers, and the input checker warns
+# when they are changed next to a preset. That the preset ignores them is
+# pinned by tests/test_sg1_grid_definition.py
+# (test_sg1_ignores_the_user_radial_size_and_map), as is the rule that the pin
+# does not write back into the user's settings.
+[input]
+system=
+   8   0.000000000   0.000000000  -0.041061554
+   1  -0.533194329   0.533194329  -0.614469223
+   1   0.533194329  -0.533194329  -0.614469223
+charge=0
+runtype=energy
+functional=pbe
+basis=6-31g
+method=hf
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=1
+type=rhf
+conv=1.0e-8
+
+[dftgrid]
+pruned=SG1

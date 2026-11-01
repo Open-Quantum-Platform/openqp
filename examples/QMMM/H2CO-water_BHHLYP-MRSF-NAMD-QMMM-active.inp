@@ -1,0 +1,88 @@
+# MRSF-TDDFT NAMD with ESPF QM/MM embedding and an ACTIVE-ATOM selection.
+#
+# Same formaldehyde-in-water system, QM region and MRSF settings as
+# H2CO-water_BHHLYP-MRSF-NAMD-QMMM.inp, but only part of the system is
+# propagated: [qmmm] active_from_pdb=true reads the selection from the B-factor
+# column of the PDB (1.00 = active), ORCA's Use_Active_InfoFromPDB.  In
+# formaldehyde_water_active.pdb the QM formaldehyde (0-3) and the nearest water
+# (4-6) are marked active; the four outer waters (7-18) are held fixed.
+#
+# Held does not mean absent: a frozen atom keeps its charge, its ESPF embedding
+# field and its force contribution on the atoms that do move.  It is simply not
+# integrated, so no work is done on it and the NVE audit still applies to the
+# atoms that move (the reported degrees of freedom drop accordingly).  This is
+# the paradigm that makes a large solvated or biomolecular QM/MM trajectory
+# affordable: only the chemically interesting region carries dynamics.
+#
+# The same selection can be written explicitly instead, in ORCA's spelling or
+# ours - any of
+#     active_atoms={0:6}          active_atoms=0-6          frozen_atoms=7-18
+# selects exactly the same set here, and active_radius=3.5 would reach it by
+# distance.  Indices are 0-based, as [qmmm] qm_atoms is, and the QM region is
+# always propagated.
+#
+# nstep=2 keeps this minimal, as in the deck above.  Requires the optional
+# OpenMM backend and the companion files formaldehyde_water_active.pdb,
+# formaldehyde.xml, tip3p.xml (read relative to this file); it is part of
+# `openqp --run_tests all` and is reported SKIPPED when OpenMM is not installed.
+[input]
+system=
+   6   0.000000   0.000000   0.000000
+   8   0.000000   0.000000   1.203000
+   1   0.000000   0.943000  -0.589000
+   1   0.000000  -0.943000  -0.589000
+charge=0
+runtype=namd
+basis=6-31g*
+functional=bhhlyp
+method=tdhf
+qmmm_flag=True
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=3
+type=rohf
+
+[tdhf]
+type=mrsf
+nstate=2
+multiplicity=3
+
+[properties]
+grad=1
+
+[md]
+nstep=2
+dt=0.5
+active=1
+substep=50
+init_temp=300
+velocity=maxwell
+seed=3
+rng_stream=1
+first_hop_step=1
+nacme_check=baeck_an
+ba_gap_max=0.0734986443513
+nacme_gate=warn
+nve_gate=warn
+nve_gate_abs_tol=4.0e-3
+nve_gate_step_tol=8.0e-4
+nve_gate_transition_tol=2.0e-6
+nve_gate_consecutive=2
+trajectory_interval=2
+restart_interval=2
+trajectory_file=H2CO-water-active.namd.trj
+restart_file=H2CO-water-active.namd.restart.npz
+decoherence=edc
+trivial=True
+soc=False
+
+[qmmm]
+pdb_file=formaldehyde_water_active.pdb
+forcefield_files=formaldehyde.xml tip3p.xml
+qm_atoms=0-3
+cutoff=NoCutoff
+embedding=electrostatic
+active_from_pdb=true

@@ -55,6 +55,8 @@ module caspt2_gradient_mod
 
   implicit none
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: caspt2_gradient_C
 
   integer, parameter :: i8 = c_int64_t
 

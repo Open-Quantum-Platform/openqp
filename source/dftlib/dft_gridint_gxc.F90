@@ -5,6 +5,8 @@ module mod_dft_gridint_gxc
   use mod_dft_gridint, only: X__, Y__, Z__
   use mod_dft_gridint, only: OQP_FUNTYP_LDA, OQP_FUNTYP_GGA, OQP_FUNTYP_MGGA
   use mod_dft_gridint_fxc, only: xc_consumer_tde_t
+  use mod_dft_gridint_tdxc_deriv, only: gga_tdxc_kernel_t, &
+    gga_x3_coefficients
   use oqp_linalg
 
   implicit none
@@ -21,6 +23,7 @@ module mod_dft_gridint_gxc
 
   private
   public tddft_gxc
+  public utddft_gxc
 
 !-------------------------------------------------------------------------------
 
@@ -77,7 +80,7 @@ contains
               dsab = dot_product(drrho(:,1,i,j), drrho(:,2,i,j))
               dsbb = dot_product(drrho(:,2,i,j), drrho(:,2,i,j))
               dsba = dot_product(drrho(:,2,i,j), drrho(:,1,i,j))
-              sigma = [2*dsaa, 2*dsbb, (dsab+dsba)]
+              ssigma = [2*dsaa, 2*dsbb, (dsab+dsba)]
             end if
             if (xce%funTyp == OQP_FUNTYP_MGGA) tauab = rtau(1:2,i,j)
 
@@ -138,7 +141,7 @@ contains
               dsab = dot_product(drrho(:,1,i,j), drrho(:,2,i,j))
               dsbb = dot_product(drrho(:,2,i,j), drrho(:,2,i,j))
               dsba = dot_product(drrho(:,2,i,j), drrho(:,1,i,j))
-              sigma = [2*dsaa, 2*dsbb, (dsab+dsba)]
+              ssigma = [2*dsaa, 2*dsbb, (dsab+dsba)]
             end if
             if (xce%funTyp == OQP_FUNTYP_MGGA) tauab = rtau(1:2,i,j)
 
@@ -203,10 +206,13 @@ contains
     integer :: mythread
 
     integer :: i, j, k
-    real(kind=fp) :: c3(3)
+    real(kind=fp) :: c3_old(3)
     real(kind=fp) :: f_s(3)
     real(kind=fp) :: g_r(2), g_s(3), g_t(2)
     real(kind=fp) :: rhoab(2), tauab(2), sigma(3), ssigma(3)
+    real(kind=fp) :: grad_r_total(3), grad_p_total(3)
+    real(kind=fp) :: a3, c2, c3, b3(3)
+    type(gga_tdxc_kernel_t) :: kernel
     real(kind=fp), pointer :: focks(:,:,:,:)
     real(kind=fp), pointer :: tmp(:,:,:)
 
@@ -241,17 +247,32 @@ contains
                     f_s, &
                     g_r, g_s, g_t)
 
-            ! LDA
-            tmp(:,i,1) = 0.5_fp*g_r(1)*aoV(:,i)
-            if (xce%funTyp /= OQP_FUNTYP_LDA) then
-              ! GGA
-              c3 =   (2*g_s(1)+g_s(3)) * drho(1:3,i) &
-                 + 2*(2*f_s(1)+f_s(3)) * drrho(1:3,1,i,j)
-
+            if (xce%funTyp == OQP_FUNTYP_LDA) then
+              ! Keep the validated LDA operation order bit-for-bit unchanged.
+              tmp(:,i,1) = 0.5_fp*g_r(1)*aoV(:,i)
+            else if (xce%funTyp == OQP_FUNTYP_GGA) then
+              ! GAMESS S130 / TDHXGPG KORD=3 in total-density notation.
+              ! A restricted input density is one-spin; the point algebra uses
+              ! rho_alpha+rho_beta and therefore carries a factor two here.
+              call restricted_gga_total_kernel(xce, i, kernel)
+              grad_r_total = 2.0_fp*drho(1:3,i)
+              grad_p_total = 2.0_fp*drrho(1:3,1,i,j)
+              call gga_x3_coefficients(kernel, grad_r_total, &
+                2.0_fp*rrho(1,i,j), grad_p_total, a3, c2, c3, b3)
+              tmp(:,i,1) = 0.5_fp*a3*aoV(:,i) &
+                   + b3(X__)*aoG1(:,i,X__) &
+                   + b3(Y__)*aoG1(:,i,Y__) &
+                   + b3(Z__)*aoG1(:,i,Z__)
+            else
+              ! Preserve the existing meta-GGA expression; analytic TDDFT
+              ! Hessians reject this family before reaching this routine.
+              tmp(:,i,1) = 0.5_fp*g_r(1)*aoV(:,i)
+              c3_old = (2*g_s(1)+g_s(3))*drho(1:3,i) &
+                     + 2*(2*f_s(1)+f_s(3))*drrho(1:3,1,i,j)
               tmp(:,i,1) = tmp(:,i,1) &
-                   +   c3(X__)*aoG1(:,i,X__) &
-                   +   c3(Y__)*aoG1(:,i,Y__) &
-                   +   c3(Z__)*aoG1(:,i,Z__)
+                   + c3_old(X__)*aoG1(:,i,X__) &
+                   + c3_old(Y__)*aoG1(:,i,Y__) &
+                   + c3_old(Z__)*aoG1(:,i,Z__)
             end if
 
             if (xce%funTyp == OQP_FUNTYP_MGGA) then
@@ -281,6 +302,44 @@ contains
     end associate
 
  end subroutine
+
+!-------------------------------------------------------------------------------
+
+! Build GAMESS TDHXKG total-density derivatives without depending on Libxc's
+! packed-index layout.  Unit total-rho and total-sigma directions correspond
+! to (1/2,1/2) and (1/4,1/4,1/4) in restricted spin variables.  The XC arrays
+! have already been multiplied by the quadrature weight; all coefficient
+! formulas are linear in a kernel derivative, so that common weight is retained.
+ subroutine restricted_gga_total_kernel(xce, ipt, kernel)
+    use mod_dft_gridint, only: xc_der1, xc_der2_contr, xc_der3_contr
+    class(xc_engine_t) :: xce
+    integer, intent(in) :: ipt
+    type(gga_tdxc_kernel_t), intent(out) :: kernel
+    real(kind=fp), parameter :: cr(2) = [0.5_fp, 0.5_fp]
+    real(kind=fp), parameter :: cs(3) = [0.25_fp, 0.25_fp, 0.25_fp]
+    real(kind=fp) :: zr(2), zs(3), zt(2), d_r(2), d_s(3), d_t(2)
+    real(kind=fp) :: f_r(2), f_s(3), f_t(2), ff_s(3)
+    real(kind=fp) :: g_r(2), g_s(3), g_t(2)
+
+    zr = 0.0_fp; zs = 0.0_fp; zt = 0.0_fp
+    kernel = gga_tdxc_kernel_t()
+    call xc_der1(xce, .true., ipt, d_r, d_s, d_t)
+    kernel%fr = dot_product(cr, d_r)
+    kernel%fs = dot_product(cs, d_s)
+
+    call xc_der2_contr(xce, .true., ipt, cr, zs, zt, f_r, f_s, f_t)
+    kernel%frr = dot_product(cr, f_r)
+    kernel%frs = dot_product(cs, f_s)
+    call xc_der2_contr(xce, .true., ipt, zr, cs, zt, f_r, f_s, f_t)
+    kernel%fss = dot_product(cs, f_s)
+
+    call xc_der3_contr(xce, ipt, cr, zs, zt, zs, ff_s, g_r, g_s, g_t)
+    kernel%frrr = dot_product(cr, g_r)
+    kernel%frrs = dot_product(cs, g_s)
+    call xc_der3_contr(xce, ipt, zr, cs, zt, zs, ff_s, g_r, g_s, g_t)
+    kernel%frss = dot_product(cr, g_r)
+    kernel%fsss = dot_product(cs, g_s)
+ end subroutine restricted_gga_total_kernel
 
 !-------------------------------------------------------------------------------
 
@@ -399,5 +458,113 @@ contains
   end subroutine
 
 !-------------------------------------------------------------------------------
+
+!-------------------------------------------------------------------------------
+
+!> @brief Spin-resolved XC third-derivative contraction for the TD-DFT gradient,
+!>  (G_xc)_{s,s',s''} (dx_s') (dx_s''), for separate alpha and beta densities
+!> @details Same contraction as tddft_gxc on the spin-polarized path (GxcUUpdate),
+!>  so a spin-antisymmetric transition density (dxb = -dxa, closed-shell triplet)
+!>  can be used.  With dxb = dxa it reproduces tddft_gxc.
+!> @param[inout] fxa, fxb  alpha / beta Fock-like matrices (accumulated)
+!> @param[inout] dxa, dxb  alpha / beta densities
+  subroutine utddft_gxc(basis, molGrid, isVecs, wfa, wfb, fxa, fxb, dxa, dxb, &
+                        nMtx, threshold, infos)
+    use basis_tools, only: basis_set
+    use mod_dft_gridint, only: xc_options_t, run_xc
+    use types, only: information
+    use mod_dft_molgrid, only: dft_grid_t
+    use mathlib, only: triangular_to_full
+
+    implicit none
+
+    type(information), target, intent(in) :: infos
+    type(dft_grid_t), target, intent(in) :: molGrid
+
+    type(basis_set) :: basis
+    logical, intent(in) :: isVecs
+    integer, intent(in) :: nMtx
+    real(kind=fp), intent(in) :: wfa(:,:), wfb(:,:)
+    real(kind=fp), intent(inout), target :: dxa(:,:,:), dxb(:,:,:)
+    real(kind=fp), intent(inout) :: fxa(:,:,:), fxb(:,:,:)
+    real(kind=fp), intent(in) :: threshold
+
+    type(xc_consumer_gxc_t) :: dat
+    type(xc_options_t) :: xc_opts
+
+    integer :: i, j, nbf
+
+    real(kind=fp), allocatable, target :: d2a(:,:), d2b(:,:)
+
+    nbf = ubound(wfa,1)
+
+    allocate(d2a(nbf,nbf), d2b(nbf,nbf))
+    if (isVecs) then
+      do i = 1, nbf
+        d2a(:,i) = wfa(:,i) * basis%bfnrm(:)
+        d2b(:,i) = wfb(:,i) * basis%bfnrm(:)
+      end do
+    else
+      do i = 1, nbf
+        d2a(:,i) = wfa(:,i) * basis%bfnrm(i) * basis%bfnrm(:)
+        d2b(:,i) = wfb(:,i) * basis%bfnrm(i) * basis%bfnrm(:)
+      end do
+    end if
+
+    do j = 1, nMtx
+      do i = 1, nbf
+        dxa(:,i,j) = dxa(:,i,j) * basis%bfnrm(i) * basis%bfnrm(:)
+        dxb(:,i,j) = dxb(:,i,j) * basis%bfnrm(i) * basis%bfnrm(:)
+      end do
+    end do
+
+    xc_opts%isGGA = infos%functional%needGrd
+    xc_opts%needTau = infos%functional%needTau
+    xc_opts%functional => infos%functional
+    xc_opts%hasBeta = .true.
+    xc_opts%isWFVecs = isVecs
+    xc_opts%numAOs = nbf
+    xc_opts%maxPts = molGrid%maxSlicePts
+    xc_opts%limPts = molGrid%maxNRadTimesNAng
+    xc_opts%numAtoms = infos%mol_prop%natom
+    xc_opts%maxAngMom = basis%mxam
+    xc_opts%nDer = 0
+    xc_opts%nXCDer = 3
+    xc_opts%numOccAlpha = infos%mol_prop%nelec_A
+    xc_opts%numOccBeta = infos%mol_prop%nelec_B
+    xc_opts%wfAlpha => d2a
+    xc_opts%wfBeta  => d2b
+    xc_opts%dft_threshold = threshold
+    xc_opts%molGrid => molGrid
+
+    dat%da => dxa
+    dat%db => dxb
+    dat%nMtx = nMtx
+
+    call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+
+    call run_xc(xc_opts, dat, basis)
+
+    deallocate (d2a, d2b)
+
+    do j = 1, nMtx
+      call triangular_to_full(dat%focks(:,:,j,1,1), nbf, 'u')
+      call triangular_to_full(dat%focks(:,:,j,2,1), nbf, 'u')
+      do i = 1, nbf
+        fxa(:,i,j) = fxa(:,i,j) + dat%focks(:,i,j,1,1) * basis%bfnrm(i) * basis%bfnrm(:)
+        fxb(:,i,j) = fxb(:,i,j) + dat%focks(:,i,j,2,1) * basis%bfnrm(i) * basis%bfnrm(:)
+      end do
+    end do
+
+    do j = 1, nMtx
+      do i = 1, nbf
+        dxa(:,i,j) = dxa(:,i,j) / basis%bfnrm(i) / basis%bfnrm(:)
+        dxb(:,i,j) = dxb(:,i,j) / basis%bfnrm(i) / basis%bfnrm(:)
+      end do
+    end do
+
+    call dat%clean()
+
+  end subroutine utddft_gxc
 
 end module mod_dft_gridint_gxc

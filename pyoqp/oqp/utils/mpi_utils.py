@@ -3,10 +3,26 @@ import os
 import sys
 from collections.abc import Iterator
 
+# No MPI means: mpi4py is not installed (ImportError), its extension cannot be
+# loaded (OSError), or -- mpi4py >= 4 -- the MPI shared library itself is
+# missing.  mpi4py 4.x resolves the MPI ABI in a meta-path finder
+# (mpi4py._mpiabi._Finder -> _dlopen_libmpi) that raises
+# RuntimeError("cannot load MPI library\n<dlopen errors>") during
+# ``from mpi4py import MPI``.  Only that message means "no MPI".  Every other
+# RuntimeError (MPI_Abi_get_version [ierr=...], an MPI.Exception from
+# MPI_Init, ...) comes after libmpi loaded and must propagate: treating it as
+# "no MPI" would make every rank under mpiexec run serially as rank 0.
+# tests/conftest.py mirrors this import.
+_NO_LIBMPI_MESSAGE = "cannot load MPI library"
+
 try:
     from mpi4py import MPI
     mpi4py_available = True
 except (ImportError, OSError) as e:
+    mpi4py_available = False
+except RuntimeError as e:
+    if not str(e).startswith(_NO_LIBMPI_MESSAGE):
+        raise
     mpi4py_available = False
 
 def plan_task_groups(nworld, ntask, ranks_per_group=0):
@@ -62,7 +78,9 @@ class MPIManager:
                 if cls._instance.rank != 0:
                     sys.stdout = open(os.devnull, 'w')
             else:
-                print(f"Failed to import mpi4py")
+                # Diagnostic, not output: stdout of an `import oqp` process
+                # is data (JSON, tables) that callers parse.
+                print("Failed to import mpi4py", file=sys.stderr)
                 cls._instance = super(MPIManager, cls).__new__(cls)
                 cls._instance.rank = 0
                 cls._instance.size = 1
@@ -87,7 +105,7 @@ class MPIManager:
                 self.comm.Barrier()
                 MPI.Finalize()
             except Exception as err:
-                print(f"Failed to finalize MPI: {str(err)}")
+                print(f"Failed to finalize MPI: {err}", file=sys.stderr)
 
     def set_mpi_comm(self, data):
         """Publish the CURRENT communicator to the native control struct.
@@ -305,6 +323,14 @@ class MPIPool:
         return MPIMap(func, inp, self.processes)
 
     def close(self):
+        pass
+
+    def terminate(self):
+        # Ranks are the workers and run every task they own in-line; there is
+        # no queue of not-yet-started work to drop.
+        pass
+
+    def join(self):
         pass
 
 class MPIMap(Iterator):

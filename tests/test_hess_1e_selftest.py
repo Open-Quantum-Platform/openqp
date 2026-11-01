@@ -11,11 +11,12 @@ a no-op in environments that only run the dependency-light unit tests.
 """
 
 import os
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-SELFTEST_OUT = Path("/tmp/hess1_selftest.out")
 
 INPUT = """[input]
 system=
@@ -38,7 +39,6 @@ def _runtime_available():
     if not (ROOT / "lib").glob("liboqp.*"):
         pass
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         import oqp  # noqa: F401
         from oqp.pyoqp import Runner  # noqa: F401
@@ -49,25 +49,32 @@ def _runtime_available():
 
 @unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime not available")
 class Hess1eSelfTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="oqp_hess1e_")
+        self.addCleanup(tmp.cleanup)
+        self.tmpdir = Path(tmp.name)
+        # The native self-test writes its report to $OQP_SELFTEST_DIR
+        # (source/io/selftest_output.F90); keep it private to this test.
+        env = mock.patch.dict(os.environ, {"OQP_SELFTEST_DIR": str(self.tmpdir)})
+        env.start()
+        self.addCleanup(env.stop)
+
     def test_overlap_and_kinetic_hessian_match_finite_difference(self):
         import oqp
         from oqp.pyoqp import Runner
 
-        workdir = Path("/tmp/oqp_hess1e_test")
-        workdir.mkdir(exist_ok=True)
+        workdir = self.tmpdir
         inp = workdir / "h2o.inp"
         inp.write_text(INPUT)
         log = workdir / "h2o.log"
 
-        if SELFTEST_OUT.exists():
-            SELFTEST_OUT.unlink()
-
         runner = Runner(project="h2o_hess1e", input_file=str(inp), log=str(log))
         runner.run()
         oqp.hess1_selftest(runner.mol)
+        report = self.tmpdir / "hess1_selftest.out"
 
-        self.assertTrue(SELFTEST_OUT.exists(), "self-test produced no output file")
-        result = SELFTEST_OUT.read_text()
+        self.assertTrue(report.exists(), "self-test produced no output file")
+        result = report.read_text()
         self.assertIn("HESS1E_SELFTEST PASS", result, msg=result)
 
 

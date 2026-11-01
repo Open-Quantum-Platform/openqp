@@ -8,16 +8,33 @@
 module functionals
   use xc_f03_lib_m
   use iso_c_binding, only: C_INT, C_SIZE_T
-  use precision, only: fp
+  use precision, only: fp, i8b
   implicit none
   private
+  !> LibXC ids whose description and literature references have already been
+  !> written.  The functional is set up again for every SCF, response and
+  !> gradient step of a run, and repeating the same text each time made it one
+  !> of the largest blocks of the log.
+  integer(C_INT), allocatable, save :: announced_ids(:)
+  real(kind=fp),  allocatable, save :: announced_coeffs(:)  !< coefficient each id was described with
+  integer,        allocatable, save :: announced_logs(:)    !< index into log_names of that description
+  !> Log files that have received a description, and the one the current set-up writes to.
+  !> Runners constructed before they run, interleaved runs and evaluations appended to one
+  !> log (QM/MM optimisation and dynamics) all get exactly one description per log file.
+  !> The records start afresh with every log a run creates (oqp_log_restarted) and are
+  !> capped at max_logs log files, so a long-lived process does not accumulate them.
+  character(len=1024), allocatable, save :: log_names(:)
+  integer, save :: current_log = 0
+  integer, parameter :: max_logs = 64
   ! Code of errors if LibXC can not perform calculation of some derivatives
   integer, parameter :: ENERGY_ERROR   = 1, & !< energy calculation error
                         FIRST_ERROR    = 2, & !< first derivatives calculation error
                         SECOND_ERROR   = 3, & !< second derivatives calculation error
                         THIRD_ERROR    = 4, & !< third derivatives calculation error
                         MGGA_3RD_ERROR = 5    !< TD-DFT gradient is not allowed for meta-GGA functionals
+  integer(i8b), save :: functional_revision = 0_i8b
   type functional_t
+    integer(i8b) :: cache_revision = 0_i8b
     type(xc_f03_func_t),      dimension(:), allocatable, private :: functionals_list
     type(xc_f03_func_info_t), dimension(:), allocatable, private :: functionals_info
     real(kind=fp),            dimension(:), allocatable, private :: coefficients
@@ -30,7 +47,37 @@ module functionals
     procedure :: calc_evxc, calc_evfxc, calc_xc
   end type functional_t
   public functional_t
+  public set_announcement_log
+  public forget_functional_announcements
 contains
+
+  !> @brief Select the log file that functional descriptions are recorded against.
+  subroutine set_announcement_log(name)
+    character(len=*), intent(in) :: name
+    integer :: i
+    if (.not. allocated(log_names)) allocate(log_names(0))
+    do i = 1, size(log_names)
+      if (log_names(i) == name) then
+        current_log = i
+        return
+      end if
+    end do
+    if (size(log_names) >= max_logs) then
+      call forget_functional_announcements()
+      allocate(log_names(0))
+    end if
+    log_names = [character(len=1024) :: log_names, name]
+    current_log = size(log_names)
+  end subroutine set_announcement_log
+
+  !> @brief Forget every functional description recorded so far (a run starts a new log).
+  subroutine forget_functional_announcements()
+    if (allocated(announced_ids)) deallocate(announced_ids)
+    if (allocated(announced_coeffs)) deallocate(announced_coeffs)
+    if (allocated(announced_logs)) deallocate(announced_logs)
+    if (allocated(log_names)) deallocate(log_names)
+    current_log = 0
+  end subroutine forget_functional_announcements
   !> @brief  Add functional into internal array of functionals
   !> @author Igor S. Gerasimov
   !> @date   July,  2019 --Initial release--
@@ -58,6 +105,7 @@ contains
     type(xc_f03_func_t)                                 :: xc_func
     integer(C_INT)                                      :: refnum
     integer                                             :: refnumt
+    logical                                             :: announce
     if(.not.allocated(this%functionals_list)) then
       allocate(this%functionals_list(0))
       allocate(this%functionals_info(0))
@@ -73,20 +121,30 @@ contains
     call move_alloc(tmp_functionals_info, this%functionals_info)
     call move_alloc(tmp_coefficients    , this%coefficients    )
     call xc_f03_func_init(xc_func, func_id, XC_POLARIZED)
-    select case(xc_f03_func_info_get_kind(xc_f03_func_get_info(xc_func)))
-      case(XC_EXCHANGE)
-        call show_message("(A,ES16.8E2,A)", "The " // trim(xc_f03_func_info_get_name(xc_f03_func_get_info(xc_func))) // &
-                   " exchange functional will be used with a coefficient ", coeff, ".")
-      case(XC_CORRELATION)
-        call show_message("(A,ES16.8E2,A)", "The " // trim(xc_f03_func_info_get_name(xc_f03_func_get_info(xc_func))) // &
-          " correlation functional will be used with a coefficient ", coeff, ".")
-      case(XC_EXCHANGE_CORRELATION)
-        call show_message("(A,ES16.8E2,A)", "The " // trim(xc_f03_func_info_get_name(xc_f03_func_get_info(xc_func))) // &
-          " exchange-correlation functional will be used with a coefficient ", coeff, ".")
-      case(XC_KINETIC)
-        call show_message("(A,ES16.8E2,A)", "The " // trim(xc_f03_func_info_get_name(xc_f03_func_get_info(xc_func))) // &
-          " kinetic functional will be used with a coefficient ", coeff, ".")
-    end select
+    if (.not. allocated(announced_ids)) allocate(announced_ids(0), announced_coeffs(0), announced_logs(0))
+    announce = .not. any(announced_ids == func_id .and. announced_coeffs == coeff &
+                         .and. announced_logs == current_log)
+    if (announce) then
+      announced_ids = [announced_ids, func_id]
+      announced_coeffs = [announced_coeffs, coeff]
+      announced_logs = [announced_logs, current_log]
+    end if
+    if (announce) then
+      select case(xc_f03_func_info_get_kind(xc_f03_func_get_info(xc_func)))
+        case(XC_EXCHANGE)
+          call show_message("(A,ES16.8E2,A)", "The " // trim(xc_f03_func_info_get_name(xc_f03_func_get_info(xc_func))) // &
+                     " exchange functional will be used with a coefficient ", coeff, ".")
+        case(XC_CORRELATION)
+          call show_message("(A,ES16.8E2,A)", "The " // trim(xc_f03_func_info_get_name(xc_f03_func_get_info(xc_func))) // &
+            " correlation functional will be used with a coefficient ", coeff, ".")
+        case(XC_EXCHANGE_CORRELATION)
+          call show_message("(A,ES16.8E2,A)", "The " // trim(xc_f03_func_info_get_name(xc_f03_func_get_info(xc_func))) // &
+            " exchange-correlation functional will be used with a coefficient ", coeff, ".")
+        case(XC_KINETIC)
+          call show_message("(A,ES16.8E2,A)", "The " // trim(xc_f03_func_info_get_name(xc_f03_func_get_info(xc_func))) // &
+            " kinetic functional will be used with a coefficient ", coeff, ".")
+      end select
+    end if
     select case (xc_f03_func_info_get_family(xc_f03_func_get_info(xc_func)))
       case(XC_FAMILY_GGA, XC_FAMILY_HYB_GGA)
         this%needgrd = .true.
@@ -96,8 +154,10 @@ contains
       case default
     end select
     ! checking, that functional can be used.
-    if(IAND(xc_f03_func_info_get_flags(xc_f03_func_get_info(xc_func)), XC_FLAGS_DEVELOPMENT) .ne. 0) then
-      call show_message("The behavior of this functional can be changed in the next versions of LibXC.")
+    if (announce) then
+      if(IAND(xc_f03_func_info_get_flags(xc_f03_func_get_info(xc_func)), XC_FLAGS_DEVELOPMENT) .ne. 0) then
+        call show_message("The behavior of this functional can be changed in the next versions of LibXC.")
+      end if
     end if
     if(IAND(xc_f03_func_info_get_flags(xc_f03_func_get_info(xc_func)), XC_FLAGS_NEEDS_LAPLACIAN) .ne. 0) then
       call show_message("This functional requires laplacian, but the calculation of laplacian is not implemented" // &
@@ -107,15 +167,17 @@ contains
       call show_message("This functional uses VV10 correlation, but the calculation of VV10 correlation is not" // &
           " implemented in the current version of OQP.", WITH_ABORT)
     end if
-    ! Then showing referencies
-    refnum = 0_C_INT
-    call show_message("The functional has been described in the following articles:")
-    do refnumt = 1, XC_MAX_REFERENCES
-      xc_ref = xc_f03_func_info_get_references(xc_f03_func_get_info(xc_func),refnum)
-      call show_message("(A,I1,A)", "[", refnumt, "] " // trim(xc_f03_func_reference_get_ref(xc_ref)) // "; DOI: " // &
-        trim(xc_f03_func_reference_get_doi(xc_ref)))
-      if(refnum .lt. 0) exit
-    end do
+    if (announce) then
+      ! Then showing referencies
+      refnum = 0_C_INT
+      call show_message("The functional has been described in the following articles:")
+      do refnumt = 1, XC_MAX_REFERENCES
+        xc_ref = xc_f03_func_info_get_references(xc_f03_func_get_info(xc_func),refnum)
+        call show_message("(A,I1,A)", "[", refnumt, "] " // trim(xc_f03_func_reference_get_ref(xc_ref)) // "; DOI: " // &
+          trim(xc_f03_func_reference_get_doi(xc_ref)))
+        if(refnum .lt. 0) exit
+      end do
+    end if
     if(present(external_parameters)) then
       call xc_f03_func_set_ext_params(xc_func, external_parameters)
     end if
@@ -135,13 +197,16 @@ contains
     this%functionals_list(size(this%functionals_list)) = xc_func
     this%functionals_info(size(this%functionals_info)) = xc_f03_func_get_info(xc_func)
     this%coefficients    (size(this%coefficients    )) = coeff
+    functional_revision = functional_revision + 1_i8b
+    this%cache_revision = functional_revision
   end subroutine add_functional
   !> @brief  Checking that at least one functional is selected
   !> @author Igor S. Gerasimov
   !> @date   Sep, 2019 --Initial release--
   logical function can_calculate(this) result(OK)
     class(functional_t), intent(inout) :: this
-    OK = (allocated(this%functionals_list) .and. size(this%functionals_list) .gt. 0)
+    OK = .false.
+    if (allocated(this%functionals_list)) OK = size(this%functionals_list) > 0
   end function can_calculate
   !> @brief  Destroy internal variables
   !> @author Igor S. Gerasimov
@@ -158,6 +223,8 @@ contains
     if(allocated(this%functionals_list)) deallocate(this%functionals_list)
     if(allocated(this%functionals_info)) deallocate(this%functionals_info)
     if(allocated(this%coefficients    )) deallocate(this%coefficients    )
+    functional_revision = functional_revision + 1_i8b
+    this%cache_revision = functional_revision
   end subroutine destroy
   !> @brief  Perform DFT energy and its first derivatives calculation
   !> @author Igor S. Gerasimov

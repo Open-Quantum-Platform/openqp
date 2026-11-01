@@ -12,11 +12,12 @@ importable (i.e. a built tree with OPENQP_ROOT set).
 """
 
 import os
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-SELFTEST_OUT = Path("/tmp/grd2_hess_selftest.out")
 
 INPUT = """[input]
 system=
@@ -49,25 +50,32 @@ def _runtime_available():
 
 @unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime not available")
 class Hess2eSelfTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="oqp_hess2e_")
+        self.addCleanup(tmp.cleanup)
+        self.tmpdir = Path(tmp.name)
+        # The native self-test writes its report to $OQP_SELFTEST_DIR
+        # (source/io/selftest_output.F90); keep it private to this test.
+        env = mock.patch.dict(os.environ, {"OQP_SELFTEST_DIR": str(self.tmpdir)})
+        env.start()
+        self.addCleanup(env.stop)
+
     def test_two_electron_hessian_matches_finite_difference(self):
         import oqp
         from oqp.pyoqp import Runner
 
-        workdir = Path("/tmp/oqp_hess2e_test")
-        workdir.mkdir(exist_ok=True)
+        workdir = self.tmpdir
         inp = workdir / "h2o.inp"
         inp.write_text(INPUT)
         log = workdir / "h2o.log"
 
-        if SELFTEST_OUT.exists():
-            SELFTEST_OUT.unlink()
-
         runner = Runner(project="h2o_hess2e", input_file=str(inp), log=str(log))
         runner.run()
         oqp.grd2_hess_selftest(runner.mol)
+        report = self.tmpdir / "grd2_hess_selftest.out"
 
-        self.assertTrue(SELFTEST_OUT.exists(), "self-test produced no output file")
-        result = SELFTEST_OUT.read_text()
+        self.assertTrue(report.exists(), "self-test produced no output file")
+        result = report.read_text()
         self.assertIn("GRD2_HESS_SELFTEST PASS", result,
                       "analytic 2e Hessian disagrees with finite difference:\n" + result)
 
@@ -75,21 +83,18 @@ class Hess2eSelfTest(unittest.TestCase):
         import oqp
         from oqp.pyoqp import Runner
 
-        workdir = Path("/tmp/oqp_hess2e_cam_test")
-        workdir.mkdir(exist_ok=True)
+        workdir = self.tmpdir
         inp = workdir / "h2o_cam.inp"
         inp.write_text(CAM_INPUT)
         log = workdir / "h2o_cam.log"
 
-        if SELFTEST_OUT.exists():
-            SELFTEST_OUT.unlink()
-
         runner = Runner(project="h2o_hess2e_cam", input_file=str(inp), log=str(log))
         runner.run()
         oqp.grd2_hess_selftest(runner.mol)
+        report = self.tmpdir / "grd2_hess_selftest.out"
 
-        self.assertTrue(SELFTEST_OUT.exists(), "CAM self-test produced no output file")
-        result = SELFTEST_OUT.read_text()
+        self.assertTrue(report.exists(), "CAM self-test produced no output file")
+        result = report.read_text()
         self.assertIn("GRD2_HESS_SELFTEST PASS", result,
                       "CAM analytic 2e Hessian disagrees with finite difference:\n" + result)
 

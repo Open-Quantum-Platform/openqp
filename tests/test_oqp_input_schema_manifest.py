@@ -86,9 +86,10 @@ def _value_text(value, converter):
 
 
 def _generic_input(section, key, value_text):
-    if section in {"droplet", "solute_com"}:
+    if section in {"droplet", "solute_com", "flexible"}:
         return (
-            'mrsf(nstate=2)/bhhlyp/6-31g* geom="h2o.xyz" namd(S1) '
+            'mrsf(nstate=2)/bhhlyp/6-31g* geom="h2o.xyz" '
+            'namd(S1,scheme=Overlap) '
             "%s(%s=%s)" % (section, key, value_text)
         )
     if section == "qmmm":
@@ -137,9 +138,10 @@ def test_namd_scientific_safety_defaults_are_minimal_input_defaults():
     assert defaults["seed"] == ("0", "int")
     assert defaults["rng_stream"] == ("1", "int")
     assert defaults["first_hop_step"] == ("1", "int")
-    assert defaults["thrshe"] == ("0.1", "float")
-    assert defaults["nacme_check"] == ("baeck_an", "str")
-    assert defaults["nve_gate"] == ("warn", "str")
+    assert defaults["thrshe"] == ("0.367493", "float")
+    assert defaults["nacme_check"] == ("off", "str")
+    assert defaults["nve_policy"] == ("warn", "str")
+    assert defaults["rescale"] == ("auto", "string")
 
 
 def test_every_schema_keyword_has_exactly_one_semantic_input_owner():
@@ -222,11 +224,41 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
     # This includes the native multiconfigurational sections plus the DFTB,
     # coupled-cluster, D4, and SCF controls now present on main, and [pt2]
     # gradient (the PT2 nuclear-gradient route selector: analytic derivative
-    # vs central differences).
-    assert len(checked) == 353
+    # vs central differences).  357 since correlated-state irrep selection added
+    # [fci] irrep, [fci] irrep_min_purity, [ci] irrep and [ci] irrep_min_purity;
+    # 361 with the periodic/embedding QM/MM controls [qmmm] ewald_tol,
+    # lj_switch, h_lj and mm_charge_width; 362 with the global log level
+    # [input] verbose; 366 with the ORCA-style active-atom selection
+    # [qmmm] active_atoms, frozen_atoms, active_radius and active_from_pdb;
+    # 368 with the ACID cube grid controls [properties] acid_spacing and
+    # acid_padding.
+    # The spin-orbit step of a properties/data run adds [properties] soc and
+    # the per-manifold gradient selectors grad_s and grad_t; each must be in
+    # the manifest, and without them the count is the one below.
+    soc_keys = {("properties", "soc"), ("properties", "grad_s"),
+                ("properties", "grad_t")}
+    for key in soc_keys:
+        assert key in checked
+    # 386 with the TRAH Hessian selector [scf] trh_arh (ARH model memory).
+    assert ("scf", "trh_arh") in checked
+    assert len(checked) == 386
+    checked = [key for key in checked if key not in soc_keys | {("scf", "trh_arh")}]
+    # 369 with the DKH decoupling-basis control [scf] scal_rel_decontract;
+    # 370 with the MP2 energy transformation selector [mp2] transform;
+    # 382 with the twelve [flexible] FlexiBLE boundary controls.
+    assert ("mp2", "transform") in checked
+    flexible = [key for key in checked if key[0] == "flexible"]
+    assert len(flexible) == 12
+    assert len(checked) == 382
+    checked = [key for key in checked if key[0] != "flexible"]
+    assert len(checked) == 370
+    # Keep the prior manifest count exact after removing the new selector.
+    # The original 369 controls must still be represented, in addition to it.
+    checked = [key for key in checked if key != ("mp2", "transform")]
+    assert len(checked) == 369
 
 
-def test_geometric_backend_is_canonical_only_through_opt_driver_options():
+def test_concise_geometry_drivers_reject_legacy_backend_selectors():
     oqp_input = _load_oqp_input()
 
     assert oqp_input.LEGACY_ONLY_SCHEMA_KEYS == {
@@ -237,10 +269,15 @@ def test_geometric_backend_is_canonical_only_through_opt_driver_options():
         }),
         "neb": frozenset({"k", "maxg", "avgg", "climb", "align", "optep"}),
     }
-    spec = oqp_input.parse_canonical_oqp(
-        'dft/pbe0/def2-svp opt(S0,lib=geometric,coordsys=dlc) geom="h2o.xyz"'
-    )
-    assert oqp_input.lower_to_legacy(spec)["optimize"]["lib"] == "geometric"
+    for selector in ("lib=oqp", "lib=geometric"):
+        try:
+            oqp_input.parse_canonical_oqp(
+                f'dft/pbe0/def2-svp opt(S0,{selector}) geom="h2o.xyz"'
+            )
+        except oqp_input.OQPInputError as exc:
+            assert "traditional sectioned .inp" in str(exc)
+        else:
+            raise AssertionError("concise .oqp must not expose optimizer backends")
     try:
         oqp_input.parse_canonical_oqp(
             'dft/pbe0/def2-svp opt(S0) geometric(coordsys=tric) geom="h2o.xyz"'
@@ -267,10 +304,14 @@ def test_route_driver_manifest_matches_public_driver_coverage():
     # gap_sigma and mecp_search are [optimize] schema keys emitted only by the
     # crossing drivers, so the manifest owns them while DRIVER_OPTIONS keeps
     # them out of the drivers that never read them.
+    # qmmm_radius / qmmm_output are [optimize] schema keys consumed by the
+    # QM/MM optimiser only; the manifest owns them and DRIVER_OPTIONS exposes
+    # them on the plain optimize driver alone.
     assert owners["optimize"] == (
         set(oqp_input._OPT_OPTIONS)
         | set(oqp_input._CROSSING_OPTIONS)
         | set(oqp_input._MECP_ONLY_OPTIONS)
+        | set(oqp_input._QMMM_OPT_OPTIONS)
         | {"lib", "istate", "jstate", "kstate", "states", "imult", "jmult"}
     )
     assert owners["neb"] == {"product", "nimage"}
@@ -283,7 +324,11 @@ def test_route_driver_manifest_matches_public_driver_coverage():
         | set(oqp_input.DRIVER_OPTIONS["nacme"])
         | {"bp", "states"}
     )
-    assert owners["md"] == set(oqp_input.DRIVER_OPTIONS["namd"])
+    assert owners["md"] == (
+        (set(oqp_input.DRIVER_OPTIONS["namd"])
+         - {"temperature", "friction"})
+        | {"energy_file", "common_controls", "common_control_keys"}
+    )
     assert owners["ekt"] == set(oqp_input.DRIVER_OPTIONS["ekt"])
 
     internally_lowered = {

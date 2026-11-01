@@ -2,8 +2,10 @@
 
 from oqp.utils.input_checker import (
     apply_dftb_model_default,
+    check_input_values,
     expand_dftb_method_alias,
 )
+from oqp.utils.state_labels import resolved_dftb_type
 
 
 def _config(dftb=None, tdhf_type="mrsf", runtype="energy"):
@@ -58,6 +60,69 @@ def test_closed_shell_routes_stay_preset_free():
         config = _config(dftb=dftb, tdhf_type=td)
         assert apply_dftb_model_default(config) == ""
         assert config["dftb"]["model"] == ""
+
+
+def test_auto_dftb_md_resolves_to_ground_state():
+    config = _config(tdhf_type="rpa", runtype="md")
+    assert resolved_dftb_type(config) == "ground"
+
+
+def test_checker_does_not_apply_tddftb_spin_restrictions_to_auto_md():
+    config = _config(tdhf_type="rpa", runtype="md")
+    config["input"].update({
+        "basis": "none",
+        "system": "\nH 0 0 0\nH 0 0 0.7",
+        "qmmm_flag": False,
+    })
+    config["dftb"].update({
+        "target_multiplicity": 3,
+        "reference_multiplicity": 3,
+    })
+    config["tdhf"]["multiplicity"] = 3
+    config["scf"] = {"type": "rohf", "multiplicity": 3}
+    config["md"] = {"thermostat": "off", "ensemble": "nve"}
+
+    report = check_input_values(config, raise_error=False, emit=False)
+
+    # The optional openqp-dftb parameter bundle is not installed in every CI
+    # lane.  That availability diagnostic is unrelated to this policy test;
+    # all other diagnostics, in particular the closed-shell TD-DFTB
+    # multiplicity restrictions, must remain absent for ground-state MD.
+    unexpected = [
+        diagnostic for diagnostic in report.diagnostics
+        if diagnostic.path != "dftb.parameter_path"
+    ]
+    assert not unexpected, report.to_text()
+
+
+def test_shared_checker_rejects_response_models_for_ground_state_md():
+    cases = (
+        ("tdhf", "auto", "mrsf"),
+        ("dftb", "mrsf", "mrsf"),
+        ("xtb", "tddftb", "rpa"),
+    )
+    for method, response_type, tdhf_type in cases:
+        config = _config(
+            dftb={"type": response_type},
+            tdhf_type=tdhf_type,
+            runtype="md",
+        )
+        config["input"].update({
+            "method": method,
+            "basis": "none" if method in {"dftb", "xtb"} else "sto-3g",
+            "system": "\nH 0 0 0\nH 0 0 0.7",
+            "qmmm_flag": False,
+        })
+        if method == "xtb":
+            config["xtb"] = dict(config["dftb"])
+
+        report = check_input_values(config, raise_error=False, emit=False)
+
+        assert any(
+            diagnostic.path == "input.method"
+            and "Ground-state MD" in diagnostic.message
+            for diagnostic in report.diagnostics
+        ), report.to_text()
 
 
 def test_open_shell_ground_defaults_to_ob2():

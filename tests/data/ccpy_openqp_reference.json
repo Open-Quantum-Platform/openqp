@@ -1,0 +1,279 @@
+{
+ "_comment": [
+  "Reference energies (Eh) for tests/test_ccpy_interop.py.",
+  "Produced by the independent PySCF -> CCpy route (Driver.from_pyscf):",
+  "PySCF SCF conv_tol=1e-12, Basis Set Exchange data; 6-31G* with Cartesian",
+  "d shells (OpenQP's convention), cc-pVDZ with spherical shells (ispher=true);",
+  "CCpy energy_convergence=1e-10,",
+  "amp_convergence=1e-8. omega_singlets are SF-EOMCCSD (Ms=+1 -> Ms=0)",
+  "excitation energies relative to the ROHF-CCSD triplet.",
+  "Generated on Ultra.local (arm64) with PySCF 2.14.0, CCpy 0+unknown commit cf72da4865e054f7a935e2df27e920cf5e335435, Python 3.11.13."
+ ],
+ "tolerance": 1e-08,
+ "cases": [
+  {
+   "name": "h2o_rhf_631gs",
+   "atoms": [
+    [
+     8,
+     0.0,
+     0.0,
+     -0.041061554
+    ],
+    [
+     1,
+     -0.533194329,
+     0.533194329,
+     -0.614469223
+    ],
+    [
+     1,
+     0.533194329,
+     -0.533194329,
+     -0.614469223
+    ]
+   ],
+   "scf_type": "rhf",
+   "multiplicity": 1,
+   "nfrozen": 0,
+   "tasks": [
+    "ccsd",
+    "crcc23"
+   ],
+   "threads": 1,
+   "basis": "6-31g*",
+   "reference": {
+    "e_scf_pyscf": -76.01074651512742,
+    "e_ref": -76.01074651512735,
+    "e_ccsd": -76.20713271849156,
+    "e_crcc23_d": -76.209225411555
+   }
+  },
+  {
+   "name": "h2o_rhf_631gs_4threads",
+   "atoms": [
+    [
+     8,
+     0.0,
+     0.0,
+     -0.041061554
+    ],
+    [
+     1,
+     -0.533194329,
+     0.533194329,
+     -0.614469223
+    ],
+    [
+     1,
+     0.533194329,
+     -0.533194329,
+     -0.614469223
+    ]
+   ],
+   "scf_type": "rhf",
+   "multiplicity": 1,
+   "nfrozen": 0,
+   "tasks": [
+    "ccsd",
+    "crcc23"
+   ],
+   "threads": 4,
+   "basis": "6-31g*",
+   "reference": {
+    "e_scf_pyscf": -76.01074651512742,
+    "e_ref": -76.01074651512735,
+    "e_ccsd": -76.20713271849156,
+    "e_crcc23_d": -76.209225411555
+   }
+  },
+  {
+   "name": "h2o_rhf_ccpvdz_spherical",
+   "atoms": [
+    [
+     8,
+     0.0,
+     0.0,
+     -0.041061554
+    ],
+    [
+     1,
+     -0.533194329,
+     0.533194329,
+     -0.614469223
+    ],
+    [
+     1,
+     0.533194329,
+     -0.533194329,
+     -0.614469223
+    ]
+   ],
+   "scf_type": "rhf",
+   "multiplicity": 1,
+   "nfrozen": 0,
+   "tasks": [
+    "ccsd"
+   ],
+   "threads": 2,
+   "basis": "cc-pvdz",
+   "ispher": true,
+   "reference": {
+    "e_scf_pyscf": -76.02702791174809,
+    "e_ref": -76.02702791174838,
+    "e_ccsd": -76.23954353664189
+   }
+  },
+  {
+   "name": "h2o_rhf_631gs_fc1",
+   "atoms": [
+    [
+     8,
+     0.0,
+     0.0,
+     -0.041061554
+    ],
+    [
+     1,
+     -0.533194329,
+     0.533194329,
+     -0.614469223
+    ],
+    [
+     1,
+     0.533194329,
+     -0.533194329,
+     -0.614469223
+    ]
+   ],
+   "scf_type": "rhf",
+   "multiplicity": 1,
+   "nfrozen": 1,
+   "tasks": [
+    "ccsd"
+   ],
+   "threads": 2,
+   "basis": "6-31g*",
+   "reference": {
+    "e_scf_pyscf": -76.01074651512742,
+    "e_ref": -76.01074651512735,
+    "e_ccsd": -76.2049697611026
+   }
+  },
+  {
+   "name": "ch2_uhf_631gs",
+   "atoms": [
+    [
+     6,
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     1,
+     0.0,
+     0.8701805931405259,
+     -0.6996410658511834
+    ],
+    [
+     1,
+     0.0,
+     -0.8701805931405259,
+     -0.6996410658511834
+    ]
+   ],
+   "scf_type": "uhf",
+   "multiplicity": 3,
+   "nfrozen": 0,
+   "tasks": [
+    "ccsd"
+   ],
+   "threads": 2,
+   "basis": "6-31g*",
+   "reference": {
+    "e_scf_pyscf": -38.90373669359113,
+    "e_ref": -38.90373669359113,
+    "e_ccsd": -39.008639869016534
+   }
+  },
+  {
+   "name": "ch2_uhf_631gs_fc1",
+   "atoms": [
+    [
+     6,
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     1,
+     0.0,
+     0.8701805931405259,
+     -0.6996410658511834
+    ],
+    [
+     1,
+     0.0,
+     -0.8701805931405259,
+     -0.6996410658511834
+    ]
+   ],
+   "scf_type": "uhf",
+   "multiplicity": 3,
+   "nfrozen": 1,
+   "tasks": [
+    "ccsd"
+   ],
+   "threads": 2,
+   "basis": "6-31g*",
+   "reference": {
+    "e_scf_pyscf": -38.90373669359113,
+    "e_ref": -38.90373669359113,
+    "e_ccsd": -39.004652656682865
+   }
+  },
+  {
+   "name": "ch2_rohf_631gs_sfeom",
+   "atoms": [
+    [
+     6,
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     1,
+     0.0,
+     0.8701805931405259,
+     -0.6996410658511834
+    ],
+    [
+     1,
+     0.0,
+     -0.8701805931405259,
+     -0.6996410658511834
+    ]
+   ],
+   "scf_type": "rohf",
+   "multiplicity": 3,
+   "nfrozen": 0,
+   "tasks": [
+    "ccsd",
+    "sfeomccsd"
+   ],
+   "nroot": 3,
+   "threads": 2,
+   "basis": "6-31g*",
+   "reference": {
+    "e_scf_pyscf": -38.89998108201752,
+    "e_ref": -38.89998108201756,
+    "e_ccsd": -39.008631286182165,
+    "omega_singlets": [
+     0.007869593329459029,
+     0.07406189346555474,
+     0.1824328900538735
+    ]
+   }
+  }
+ ]
+}

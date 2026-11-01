@@ -2,7 +2,7 @@ module tdhf_lib
 
     use, intrinsic :: ieee_arithmetic
     use precision, only : dp
-    use int2_compute, only: int2_fock_data_t, int2_storage_t
+    use int2_compute, only: int2_fock_data_t, int2_storage_t, int2_shell_block_t
     use basis_tools, only: basis_set
     use oqp_linalg
 
@@ -20,6 +20,7 @@ module tdhf_lib
         procedure :: parallel_start => int2_td_data_t_parallel_start
         procedure :: parallel_stop => int2_td_data_t_parallel_stop
         procedure :: init_screen => int2_td_data_t_init_screen
+        procedure :: consume_shell => int2_td_consume_shell
         procedure :: update => int2_td_data_t_update
         procedure :: clean => int2_td_data_t_clean
     end type
@@ -42,6 +43,9 @@ module tdhf_lib
       integer :: nspin = 0
       integer :: nbf = 0
       logical :: tamm_dancoff = .false. !< Tamm-Dancoff approximation
+      !> .false. for the closed-shell triplet: H+[X+Y] has no Coulomb term
+      !> (spin-antisymmetric transition density); H+[T] keeps it
+      logical :: xpy_coulomb = .true.
     contains
         procedure :: parallel_start => int2_rpagrd_data_t_parallel_start
         procedure :: parallel_stop  => int2_rpagrd_data_t_parallel_stop
@@ -63,6 +67,13 @@ contains
     integer, intent(in) :: nthreads
     integer :: nbf, nsh
 
+    this%shell_blocks=.false.
+    ! Keep batching ordinary TDHF/TDDFT until direct blocks show a net gain.
+    this%shell_block_min=huge(0)
+    select type(this)
+    type is(int2_td_data_t)
+      this%shell_blocks=.true.
+    end select
     nbf = basis%nbf
     this%fockdim = nbf*(nbf+1) / 2
     this%nfocks = ubound(this%d2,size(shape(this%d2)))
@@ -70,14 +81,17 @@ contains
     nsh = basis%nshell
 
     if (this%cur_pass == 1) then
-      if (allocated(this%apb)) deallocate(this%apb)
-      if (allocated(this%amb)) deallocate(this%amb)
-      if (allocated(this%dsh)) deallocate(this%dsh)
-
-      allocate(this%apb(nbf, nbf, this%nfocks, nthreads), &
-               this%amb(nbf, nbf, this%nfocks, nthreads), &
-               this%dsh(nsh,nsh), &
-               source=0.0d0)
+      ! Keep one zero image for inactive components: callers may still borrow
+      ! it, but it needs neither per-thread replication nor a reduction.
+      call resize_td_image(this%apb, nbf, this%nfocks, &
+                           merge(nthreads, 1, this%int_apb))
+      call resize_td_image(this%amb, nbf, this%nfocks, &
+                           merge(nthreads, 1, this%int_amb .or. this%tamm_dancoff))
+      if (allocated(this%dsh)) then
+        if (any(shape(this%dsh) /= [nsh,nsh])) deallocate(this%dsh)
+      end if
+      if (.not.allocated(this%dsh)) allocate(this%dsh(nsh,nsh))
+      this%dsh = 0.0_dp
     end if
 
     call this%init_screen(basis)
@@ -89,35 +103,49 @@ contains
   subroutine int2_td_data_t_parallel_stop(this)
     use mathlib, only: symmetrize_matrix
     implicit none
-    integer :: flast, amblast, nbf, i
+    integer :: nbf, i, it
     class(int2_td_data_t), intent(inout) :: this
     if (this%cur_pass /= this%num_passes) return
-    flast  = size(shape(this%apb))
-    amblast = size(shape(this%amb))
-    nbf = ubound(this%amb, 1)
-    if (this%nthreads /= 1) then
-      this%apb(:,:,:,lbound(this%apb, flast)) = sum(this%apb, dim=flast)
-      this%amb(:,:,:,lbound(this%amb, amblast)) = sum(this%amb, dim=amblast)
+    nbf = size(this%apb, 1)
+    if (this%int_apb) then
+      ! Stream contiguous slabs rather than reducing along a large stride.
+      do it = 2, size(this%apb,4)
+        this%apb(:,:,:,1) = this%apb(:,:,:,1) + this%apb(:,:,:,it)
+      end do
+      call this%pe%allreduce(this%apb(:,:,:,1), size(this%apb(:,:,:,1)))
+      do i = 1, this%nfocks
+        call symmetrize_matrix(this%apb(:,:,i,1), nbf)
+      end do
     end if
-    call this%pe%allreduce(this%apb(:,:,:,1), &
-                       size(this%apb(:,:,:,1)))
-    call this%pe%allreduce(this%amb(:,:,:,1), &
-                         size(this%amb(:,:,:,1)))
-
-    do i = lbound(this%apb,3), ubound(this%apb,3)
-      call symmetrize_matrix(this%apb(:,:,i,1), nbf)
-    end do
+    if (this%int_amb .or. this%tamm_dancoff) then
+      do it = 2, size(this%amb,4)
+        this%amb(:,:,:,1) = this%amb(:,:,:,1) + this%amb(:,:,:,it)
+      end do
+      call this%pe%allreduce(this%amb(:,:,:,1), size(this%amb(:,:,:,1)))
+    end if
     this%nthreads = 1
   end subroutine
 
 !###############################################################################
 
+  ! Reuse allocations within a response solve, including changes of batch or
+  ! thread count. Every first CAM pass clears the entire current image.
+  subroutine resize_td_image(image, nbf, nfocks, ncopy)
+    real(kind=dp), allocatable, intent(inout) :: image(:,:,:,:)
+    integer, intent(in) :: nbf, nfocks, ncopy
+    if (allocated(image)) then
+      if (any(shape(image) /= [nbf,nbf,nfocks,ncopy])) deallocate(image)
+    end if
+    if (.not.allocated(image)) allocate(image(nbf,nbf,nfocks,ncopy))
+    image = 0.0_dp
+  end subroutine resize_td_image
+
   subroutine int2_td_data_t_clean(this)
     implicit none
     class(int2_td_data_t), intent(inout) :: this
-    deallocate(this%apb)
-    deallocate(this%amb)
-    deallocate(this%dsh)
+    if (allocated(this%apb)) deallocate(this%apb)
+    if (allocated(this%amb)) deallocate(this%amb)
+    if (allocated(this%dsh)) deallocate(this%dsh)
     nullify(this%d)
     nullify(this%d2)
   end subroutine
@@ -144,7 +172,7 @@ contains
     integer :: i, j, k, l, n
     real(kind=dp) :: xval1, cval2, val2c, cval4, &
                      val, val1, val4c
-    integer :: ifock, mythread
+    integer :: ifock, mythread, iapb, iamb
 
     xval1 = this%scale_exchange
     cval2 = 2 * this%scale_coulomb
@@ -152,9 +180,15 @@ contains
 
     mythread = buf%thread_id
 
+    ! Image slots are taken into locals first: GCC 14/15 with -fcheck=bounds
+    ! miscompile the check for a this%apb(..., size(this%apb, 4)) section in
+    ! an associate and abort with a garbage index (GCC 12/13 are unaffected).
+    iapb = min(mythread, size(this%apb, 4))
+    iamb = min(mythread, size(this%amb, 4))
+
     associate (&
-                apb => this%apb(:,:,:,mythread), &
-                amb => this%amb(:,:,:,mythread), &
+                apb => this%apb(:,:,:,iapb), &
+                amb => this%amb(:,:,:,iamb), &
                 d2 => this%d2 &
                 )
 
@@ -232,15 +266,19 @@ contains
     integer :: i, j, k, l, n
     real(kind=dp) :: xval1, xval2, &
                      val, val1, val2
-    integer :: mythread
+    integer :: mythread, iapb, iamb
 
     xval1 = 1 * this%scale_exchange
     xval2 = 2 * this%scale_coulomb
     mythread = buf%thread_id
 
+    ! Slots in locals: see the GCC 14/15 note in int2_td_data_t_update.
+    iapb = min(mythread, size(this%apb, 4))
+    iamb = min(mythread, size(this%amb, 4))
+
     associate (&
-                apb => this%apb(:,:,:,mythread), &
-                amb => this%amb(:,:,:,mythread), &
+                apb => this%apb(:,:,:,iapb), &
+                amb => this%amb(:,:,:,iamb), &
                 d2 => this%d2 &
                 )
 
@@ -580,8 +618,10 @@ contains
     if (tamm_dancoff) then
 
   !   Diagonailze A: VR
+  !   A 1x1 reduced matrix is its own eigenvalue. The Ritz value is A(1,1),
+  !   held in apb; vr is only the output eigenvector.
       if (nvec==1) then
-        ee(1) = vr(1,1)
+        ee(1) = apb(1,1)
         vr(1,1) = 1.0_dp
       else
         call dtrttp('u', nvec, apb, nvec, scr, ierr)
@@ -797,7 +837,10 @@ contains
       end do
     end if
 
-!   Norms of W
+!   Norms of W.
+!   errors(ivec) is the true squared residual norm. A large residual keeps
+!   the root unconverged and still yields a preconditioned correction; it is
+!   never reset, because the caller decides convergence from these values.
     errors = 0.0_dp
 
     if (tamm_dancoff) then
@@ -813,7 +856,6 @@ contains
           write(*,'(4X,"Large error detected")')
           write(*,'(4X,"State#=",I4)') ivec
           write(*,'(4X,"Error right =",1X,1P,E10.3)') errors(ivec)
-          errors(ivec) = 0.0_dp
         end if
 
 !       Get new vectors Q
@@ -839,7 +881,6 @@ contains
           write(*,'(4X,"Large error detected")')
           write(*,'(4X,"State#=",I4)') ivec
           write(*,'(4X,"Error left/right =",1X,1P,E10.3,"/",1X,1P,E10.3)') er_l, er_r
-          errors(ivec) = 0.0_dp
         end if
 
 !       Get new vectors Q
@@ -855,6 +896,22 @@ contains
     end if
 
   end subroutine rparesvec
+
+!> @brief Largest squared residual norm among the roots Davidson converges
+!> @details Roots 1..imax have negative eigenvalues and are excluded, as in
+!>  rparesvec. Returns zero when no root remains.
+  pure function rpa_max_residual(errors, imax, ndsr) result(mxerr)
+    use precision, only: dp
+
+    implicit none
+
+    real(kind=dp), intent(in) :: errors(:)
+    integer, intent(in) :: imax, ndsr
+    real(kind=dp) :: mxerr
+
+    mxerr = 0.0_dp
+    if (imax < ndsr) mxerr = maxval(errors(imax+1:ndsr))
+  end function rpa_max_residual
 
   subroutine apply_davidson_preconditioner(qout, residual, energy, abd)
     use precision, only: dp
@@ -896,21 +953,27 @@ contains
   end function davidson_safe_denominator
 
 !> @brief Orthonormalize q(xvec_dim,ndsr*2) and append to bvec
-  subroutine rpanewb(ndsr,bvec,q,novec,nvec,ick,tamm_dancoff)
+!> @details Candidates flagged in `optional_candidate` (the corrections of
+!>  roots whose residual already meets the convergence threshold) are
+!>  orthonormalized after every required candidate and only while subspace
+!>  slots remain. They still refine the subspace when there is room, but can
+!>  never take a slot from an unconverged root or end the solver with ick=2.
+  subroutine rpanewb(ndsr,bvec,q,novec,nvec,ick,tamm_dancoff,optional_candidate)
     use precision, only: dp
 
     implicit none
 
     integer, intent(in) :: ndsr
-    real(kind=dp), intent(out), dimension(:,:) :: bvec
+    real(kind=dp), intent(inout), dimension(:,:) :: bvec
     real(kind=dp), intent(inout), dimension(:,:) :: q
     integer, intent(inout) :: novec, nvec
     integer, intent(out) :: ick
     logical, intent(in) :: tamm_dancoff
+    logical, intent(in), optional :: optional_candidate(:)
 
-    real(kind=dp) :: bq, fnorm, max_abs_overlap
-    integer :: istat, k, ms, ndsrt, mxvec
-    logical :: bad_vector
+    real(kind=dp) :: bq, fnorm, max_abs_overlap, candidate_scale
+    integer :: istat, k, ms, ndsrt, mxvec, pass, npass
+    logical :: bad_vector, is_optional
     real(kind=dp), parameter :: norm_threshold = 1.0D-09
     real(kind=dp), parameter :: reorth_threshold = 1.0D-08
 
@@ -924,8 +987,26 @@ contains
     ndsrt = ndsr*2
     if (tamm_dancoff) ndsrt = ndsr
 
+!   Pass 1 takes the required candidates, pass 2 the optional ones.
+    npass = 1
+    if (present(optional_candidate)) npass = 2
+
+    passes: do pass = 1, npass
     do k = 1, ndsrt
+      is_optional = .false.
+      if (present(optional_candidate)) is_optional = optional_candidate(k)
+      if (is_optional .neqv. (pass == 2)) cycle
+      if (is_optional .and. nvec == mxvec) exit passes
       if (any(.not. ieee_is_finite(q(:,k)))) cycle
+      ! Dependence is a property of the direction, not the residual amplitude.
+      ! Scale before taking the norm so finite very small/large updates cannot
+      ! underflow/overflow. The later cutoff then measures the remaining norm
+      ! relative to this unit candidate, including for tightly converged roots.
+      candidate_scale = maxval(abs(q(:,k)))
+      if (candidate_scale == 0.0_dp) cycle
+      q(:,k) = q(:,k)/candidate_scale
+      fnorm = norm2(q(:,k))
+      q(:,k) = q(:,k)/fnorm
       max_abs_overlap = 0.0_dp
       bad_vector = .false.
 !     MGS: orthonormalize next vector w.r.t. all
@@ -961,7 +1042,7 @@ contains
       if (fnorm<norm_threshold) cycle
 
       if (nvec==mxvec) then
-!       Error termination, no space left for new vectors
+!       Error termination, no space left for a required new vector
         ick = 2
         return
       end if
@@ -970,6 +1051,7 @@ contains
       nvec = nvec+1
       bvec(:,nvec) = q(:,k)/fnorm
     end do
+    end do passes
 
 !   Error termination, no vectors added
     ms = nvec-novec
@@ -1024,10 +1106,12 @@ contains
 
     if (tda) then
       ! vir->vib block
+      if (nvir > 0) then
       call dgemm('t', 'n', nvir, nvir, nocc, &
                   1.0d0, xpy, nocc, &
                          xpy, nocc, &
-                  0.0d0, t_mo(nocc+1:,nocc+1), nbf)
+                  0.0d0, t_mo(nocc+1,nocc+1), nbf)
+      end if
 
       ! occ->occ block
       call dgemm('n', 't', nocc, nocc, nvir,  &
@@ -1036,14 +1120,18 @@ contains
                   0.0d0, t_mo,  nbf)
     else
       ! vir->vib block
+      if (nvir > 0) then
       call dgemm('t', 'n', nvir, nvir, nocc, &
                  0.5d0, xpy, nocc, &
                         xpy, nocc,  &
-                 0.0d0, t_mo(nocc+1:, nocc+1), nbf)
+                 0.0d0, t_mo(nocc+1,nocc+1), nbf)
+      end if
+      if (nvir > 0) then
       call dgemm('t', 'n', nvir, nvir, nocc,  &
                  0.5d0, xmy, nocc, &
                         xmy, nocc,  &
-                 1.0d0, t_mo(nocc+1:, nocc+1), nbf)
+                 1.0d0, t_mo(nocc+1,nocc+1), nbf)
+      end if
 
       ! occ->occ block
       call dgemm('n', 't', nocc, nocc, nvir,  &
@@ -1185,7 +1273,8 @@ contains
 
     ! H+[X+Y]
     do i = 1, this%np
-      call this%hplus(buf, this%hpp(:,:,:,i, mythread), this%xpy(:,:,:,i))
+      call this%hplus(buf, this%hpp(:,:,:,i, mythread), this%xpy(:,:,:,i), &
+                      merge(1.0_dp, 0.0_dp, this%xpy_coulomb))
     end do
 
     ! H+[T]
@@ -1205,12 +1294,15 @@ contains
 !###############################################################################
 
 !> @brief Compute H^+[V] over a set of integrals
-  subroutine int2_rpagrd_data_t_update_hplus(this, buf, hp, v)
+  subroutine int2_rpagrd_data_t_update_hplus(this, buf, hp, v, coulomb_factor)
     implicit none
     class(int2_rpagrd_data_t), intent(inout) :: this
     type(int2_storage_t), intent(inout) :: buf
     real(kind=dp), intent(inout) :: hp(:,:,:)
     real(kind=dp), intent(in) :: v(:,:,:)
+    !> extra factor on the Coulomb term for this density (thread-safe; the
+    !> pass-level scale_coulomb is set by int2_run / int2_run_cam)
+    real(kind=dp), intent(in), optional :: coulomb_factor
     integer :: i, j, k, l, n
     real(kind=dp) :: xfact, cfact, &
                      val, xval, cval
@@ -1222,6 +1314,7 @@ contains
 
       xfact = 2 * this%scale_exchange
       cfact = 8 * this%scale_coulomb
+      if (present(coulomb_factor)) cfact = cfact*coulomb_factor
 
       do n = 1, buf%ncur
         i  = buf%ids(1,n)
@@ -1247,6 +1340,7 @@ contains
 
       xfact = 1 * this%scale_exchange
       cfact = 2 * this%scale_coulomb
+      if (present(coulomb_factor)) cfact = cfact*coulomb_factor
 
       do n = 1, buf%ncur
         i  = buf%ids(1,n)
@@ -1425,5 +1519,134 @@ contains
     end do
 
   end subroutine sym_response_project
+
+  subroutine int2_td_consume_shell(this, shell_block, thread_id)
+    implicit none
+    class(int2_td_data_t), intent(inout) :: this
+    type(int2_shell_block_t), intent(in) :: shell_block
+    integer, intent(in) :: thread_id
+    integer :: ba,bb,bc,bd,bmaxb,bmaxd,bnij,bnkl,swap_index
+    logical :: bab,bcd,bsame
+    integer :: i, j, k, l, n
+    real(kind=dp) :: xval1, cval2, val2c, cval4, &
+                     val, val1, val4c
+    integer :: ifock, mythread, iapb, iamb
+
+    xval1 = this%scale_exchange
+    cval2 = 2 * this%scale_coulomb
+    cval4 = 4 * this%scale_coulomb
+
+    bab=shell_block%shells(1)==shell_block%shells(2)
+    bcd=shell_block%shells(3)==shell_block%shells(4)
+    bsame=all(shell_block%shells(1:2)==shell_block%shells(3:4))
+    mythread = thread_id
+
+    ! Slots in locals: see the GCC 14/15 note in int2_td_data_t_update.
+    iapb = min(mythread, size(this%apb, 4))
+    iamb = min(mythread, size(this%amb, 4))
+
+    ! Inactive response images may have only one copy; the guarded branches
+    ! below never write those images. Keep their borrowed views in bounds.
+    associate (&
+                apb => this%apb(:,:,:,iapb), &
+                amb => this%amb(:,:,:,iamb), &
+                d2 => this%d2 &
+                )
+
+      do ifock = 1, this%nfocks
+        bnij=0
+        do ba=1,shell_block%dims(1)
+          bmaxb=shell_block%dims(2)
+          if (bab) bmaxb=ba
+          do bb=1,bmaxb
+            bnij=bnij+1
+            bnkl=bnij
+            do bc=1,shell_block%dims(3)
+              bmaxd=shell_block%dims(4)
+              if (bcd) bmaxd=bc
+              if (bsame) then
+                bmaxd=min(bmaxd,bnkl)
+                if (bmaxd==0) exit
+                bnkl=bnkl-bmaxd
+              end if
+              do bd=1,bmaxd
+                val=shell_block%values(bd,bc,bb,ba)
+                if (val==0.0_dp) cycle
+                i=shell_block%offsets(1)+ba
+                j=shell_block%offsets(2)+bb
+                k=shell_block%offsets(3)+bc
+                l=shell_block%offsets(4)+bd
+                if (i<j) then
+                  swap_index=i; i=j; j=swap_index
+                end if
+                if (k<l) then
+                  swap_index=k; k=l; l=swap_index
+                end if
+                if (i<k) then
+                  swap_index=i; i=k; k=swap_index
+                  swap_index=j; j=l; l=swap_index
+                else if (i==k .and. j<l) then
+                  swap_index=j; j=l; l=swap_index
+                end if
+
+          if (this%tamm_dancoff) then
+            val1 = val*xval1
+            val2c = val*cval2
+            !A
+            amb(i,k,ifock) = amb(i,k,ifock) - val1 * d2(j,l,ifock)
+            amb(k,i,ifock) = amb(k,i,ifock) - val1 * d2(l,j,ifock)
+            amb(i,l,ifock) = amb(i,l,ifock) - val1 * d2(j,k,ifock)
+            amb(l,i,ifock) = amb(l,i,ifock) - val1 * d2(k,j,ifock)
+            amb(j,k,ifock) = amb(j,k,ifock) - val1 * d2(i,l,ifock)
+            amb(k,j,ifock) = amb(k,j,ifock) - val1 * d2(l,i,ifock)
+            amb(j,l,ifock) = amb(j,l,ifock) - val1 * d2(i,k,ifock)
+            amb(l,j,ifock) = amb(l,j,ifock) - val1 * d2(k,i,ifock)
+            if (this%tamm_dancoff_coulomb) then
+              amb(i,j,ifock) = amb(i,j,ifock) + val2c * (d2(k,l,ifock)+d2(l,k,ifock))
+              amb(j,i,ifock) = amb(j,i,ifock) + val2c * (d2(k,l,ifock)+d2(l,k,ifock))
+              amb(k,l,ifock) = amb(k,l,ifock) + val2c * (d2(i,j,ifock)+d2(j,i,ifock))
+              amb(l,k,ifock) = amb(l,k,ifock) + val2c * (d2(i,j,ifock)+d2(j,i,ifock))
+            end if
+          else
+            val1 = val*xval1
+            val4c = val*cval4
+
+            if (this%int_apb) then
+              ! A+B
+              ! Coulomb
+              apb(i,j,ifock) = apb(i,j,ifock) + val4c * (d2(k,l,ifock)+d2(l,k,ifock))
+              apb(k,l,ifock) = apb(k,l,ifock) + val4c * (d2(i,j,ifock)+d2(j,i,ifock))
+
+              ! Exchange
+              apb(i,k,ifock) = apb(i,k,ifock) - val1 * (d2(j,l,ifock)+d2(l,j,ifock))
+              apb(i,l,ifock) = apb(i,l,ifock) - val1 * (d2(j,k,ifock)+d2(k,j,ifock))
+              apb(j,k,ifock) = apb(j,k,ifock) - val1 * (d2(i,l,ifock)+d2(l,i,ifock))
+              apb(j,l,ifock) = apb(j,l,ifock) - val1 * (d2(i,k,ifock)+d2(k,i,ifock))
+            end if
+
+            if (this%int_amb) then
+              ! A-B
+              amb(i,k,ifock) = amb(i,k,ifock) + val1 * (d2(l,j,ifock)-d2(j,l,ifock))
+              amb(i,l,ifock) = amb(i,l,ifock) + val1 * (d2(k,j,ifock)-d2(j,k,ifock))
+              amb(j,k,ifock) = amb(j,k,ifock) + val1 * (d2(l,i,ifock)-d2(i,l,ifock))
+              amb(j,l,ifock) = amb(j,l,ifock) + val1 * (d2(k,i,ifock)-d2(i,k,ifock))
+
+              amb(k,i,ifock) = amb(k,i,ifock) - val1 * (d2(l,j,ifock)-d2(j,l,ifock))
+              amb(l,i,ifock) = amb(l,i,ifock) - val1 * (d2(k,j,ifock)-d2(j,k,ifock))
+              amb(k,j,ifock) = amb(k,j,ifock) - val1 * (d2(l,i,ifock)-d2(i,l,ifock))
+              amb(l,j,ifock) = amb(l,j,ifock) - val1 * (d2(k,i,ifock)-d2(i,k,ifock))
+            end if
+          end if
+              end do
+            end do
+          end do
+        end do
+      end do
+
+    end associate
+
+
+
+  end subroutine
 
 end module tdhf_lib

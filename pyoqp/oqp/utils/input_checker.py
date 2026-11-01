@@ -10,14 +10,35 @@ import re
 from typing import Any
 
 from oqp.utils.mpi_utils import MPIManager
+from oqp.utils.oqp_input import PT2_METHOD_IMPLIED
+
+try:
+    import oqp.utils.spin_states as _spin_states
+except ModuleNotFoundError as exc:
+    # Many source-only tests load this file directly with oqp.utils stubbed as
+    # a plain module.  Load the pure config sibling in that narrow case, as
+    # oqp.utils.state_labels does for log_format; do not hide unrelated
+    # missing dependencies.
+    if exc.name not in {"oqp", "oqp.utils", "oqp.utils.spin_states"}:
+        raise
+    import importlib.util
+    from pathlib import Path
+
+    _spin_states_spec = importlib.util.spec_from_file_location(
+        "oqp_spin_states_for_input_checker",
+        Path(__file__).with_name("spin_states.py"))
+    if _spin_states_spec is None or _spin_states_spec.loader is None:
+        raise
+    _spin_states = importlib.util.module_from_spec(_spin_states_spec)
+    _spin_states_spec.loader.exec_module(_spin_states)
 
 
 SUPPORTED_RUNTYPES = {
     "energy", "grad", "hess", "nac", "nacme", "bp", "optimize",
     "meci", "mecp", "tci", "mep", "ts", "irc", "neb", "prop", "data", "ekt", "soc",
-    "namd",
+    "md", "namd",
 }
-NOT_AVAILABLE_RUNTYPES = {"md"}
+NOT_AVAILABLE_RUNTYPES = set()
 ALL_RUNTYPES = SUPPORTED_RUNTYPES | NOT_AVAILABLE_RUNTYPES
 METHODS = {
     "hf", "tdhf", "mp2", "ccsd", "ccsd(t)", "dftb", "xtb",
@@ -29,6 +50,8 @@ METHODS = {
 CC_METHODS = {"ccsd", "ccsd(t)"}
 SCF_TYPES = {"rhf", "rohf", "uhf"}
 TDHF_TYPES = {"rpa", "tda", "sf", "mrsf", "umrsf", "mrsf_ekt_ip", "mrsf_ekt_ea"}
+# runtypes of the closed-shell triplet RPA/TDA (tdhf_energy, tdhf_z_vector, tdhf_gradient)
+TRIPLET_RPA_RUNTYPES = {"energy", "grad", "optimize"}
 MP2_VARIANTS = {
     "mp2", "conventional",
     "scs", "scs-mp2",
@@ -44,7 +67,18 @@ DFTB_TYPES = {
     "tddftb", "tda", "td-dftb", "sf", "sftddftb", "sf-tddftb",
     "mrsf", "mrsftddftb", "mrsf-tddftb",
 }
+_DFTB_TYPE_CANON = {
+    "dftb": "ground", "dftb0": "ground_noscc", "noscc": "ground_noscc",
+    "td-dftb": "tddftb", "tda": "tddftb",
+    "sftddftb": "sf", "sf-tddftb": "sf",
+    "mrsftddftb": "mrsf", "mrsf-tddftb": "mrsf",
+}
 DFTB_SCC_MIXERS = {"linear", "anderson", "pulay", "broyden", "auto", "diis", "trust", "trah"}
+
+
+def _canonical_tb_type(value: Any) -> str:
+    route = _as_lower(value or "auto")
+    return _DFTB_TYPE_CANON.get(route, route)
 
 # Canonical model keywords are "dtcam", "dtcam2"/"dtcam-erf" and "ob2".  The
 # historical spellings stay ACCEPTED ALIASES so committed inputs keep working;
@@ -193,6 +227,9 @@ PT2_CONTRACTIONS = {"uncontracted", "none", "full", "strong", "sc", "sc-nevpt2",
                     "ic", "internally-contracted"}
 PT2_STRONG_CONTRACTIONS = {"strong", "sc", "sc-nevpt2", "ic", "internally-contracted"}
 
+PT2_H0_FOCK = {"fock", "caspt2"}
+PT2_H0_DYALL = {"dyall", "nevpt2", "nevpt"}
+
 #: [pt2] gradient -- the nuclear-gradient route.  Checked here rather than only
 #: at dispatch: a misspelling would otherwise be discovered after the PT2 energy
 #: (and, with reference=casscf, a whole CASSCF) had already been computed.
@@ -200,8 +237,8 @@ PT2_GRADIENT_ROUTES = {"auto", "analytic", "numerical"}
 PT2_MULTISTATE_MODES = {"auto", "none", "ms", "xms"}
 STATE_AVERAGE_SPIN_BLOCKS = {"diagnostic"}
 STATE_AVERAGE_ROOT_TRACKING = {"overlap"}
-GUESS_TYPES = {"huckel", "modhuckel", "hcore", "json", "auto", "sap", "minao"}
-SCF_CONVERGERS = {"diis", "soscf", "trah", "auto", "ml"}
+GUESS_TYPES = {"huckel", "modhuckel", "hcore", "json", "auto", "sap", "minao", "previous"}
+SCF_CONVERGERS = {"diis", "soscf", "trah", "arh", "auto", "ml"}
 OPTIONAL_SCF_CONVERGERS = SCF_CONVERGERS | {"none", ""}
 DIIS_TYPES = {"none", "cdiis", "ediis", "adiis", "vdiis"}
 PCM_BACKENDS = {"ddx", "pcmsolver"}
@@ -215,14 +252,15 @@ OPT_LIBS = {"scipy", "geometric", "oqp"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
 MECI_SEARCH = {"auto", "penalty", "ubp", "auglag", "hybrid", "baeka"}
 MECP_SEARCH = {"auto", "auglag", "sqp", "penalty", "quad"}
-SCF_PROPS = {"el_mom", "mulliken", "lowdin", "resp", "nmr"}
+SCF_PROPS = {"el_mom", "mulliken", "lowdin", "resp", "nmr", "acid"}
 NMR_GAUGES = {"cgo", "giao"}
 INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
 
 WIKI_HELP = {
-    "input.runtype": "Use energy, ekt, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, irc, neb, soc, prop, or data. md is recognized but not yet implemented.",
+    "input.runtype": "Use energy, ekt, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, irc, neb, md, namd, soc, prop, or data. md runs ground-state Born-Oppenheimer molecular dynamics; namd runs excited-state nonadiabatic dynamics.",
     "input.method": "Use method=hf for HF/DFT, method=tdhf for TDHF/TDDFT/SF/MRSF, method=mp2 for ground-state MP2, method=ccsd or ccsd(t) for closed-shell coupled cluster, method=dftb for the optional OpenQP-DFTB backend, method=xtb for the optional OpenQP-xTB (LC-GFN1-xTB) backend, method=fci for legacy FCI-style CI, method=casci for fixed-orbital active-space CI, method=casscf for native CASSCF macroiterations, method=sa-casscf with [state_average] enabled=true for native SA-CASSCF, method=caspt2 for native determinant-space state-specific PT2, method=ms-caspt2 for native determinant-space multistate PT2, method=xms-caspt2 for native determinant-space extended multistate PT2, or the GAMESS-convention QDPT family: method=mrmp2 (single-state), method=mcqdpt2 (multistate, single-set), method=xmcqdpt2 (Granovsky extended H0).",
     "mp2.variant": "Use mp2, scs-mp2, sos-mp2, os-mp2, ss-mp2, scs-mi-mp2, or custom with explicit OS/SS scales.",
+    "mp2.transform": "Use auto for the normal size/work guard, direct for guarded direct-J, or n5 for a required packed energy transform. n5 can use occupied-virtual storage but stops if neither packed route succeeds.",
     "input.system": "Set system to an XYZ file path or inline coordinates with one atom per indented line.",
     "input.basis": "Set basis to a basis name, a comma-separated per-atom list, or library with tagged atoms and [input] library mappings.",
     "scf.type": "RHF is for multiplicity 1 closed-shell references. SF/MRSF needs an open-shell reference, usually ROHF.",
@@ -243,6 +281,27 @@ WIKI_HELP = {
 
 _FALSE_BOOL = {"false", "0", "f", ".false.", "off", "no"}
 _TRUE_BOOL = {"true", "1", "t", ".true.", "on", "yes"}
+
+# LibXC aliases that the native analytic Hessian dispatch refuses.
+_UMRSF_META_GGA_FUNCTIONALS = frozenset("""
+pkzb tpss revtpss modtpss tpssloc tpss-loc rtpss regtpss mvs mvsb mvsb* mvsbs
+ms0 ms1 ms2 ms2b ms2b* ms2bs scan rscan regscan rppscan r++scan r2scan r2scan01
+r4scan revscan task tm revtm regtm rregtm mggac rmggac tauhcth thcth vsxc
+tpsslyp1w m06-l m06l revm06-l revm06l m11-l m11l mn12-l mn12l mn15-l mn15l
+hle17 hlta tpssh tpss0 revtpssh ms2h mvsh scan0 revscan0 hybtauhcth hybthcth
+hyb-thcth hyb-tauhcth thcthhyb tauhcthhyb bmk dldf m05 m05-2x m052x m06
+revm06 m06-2x m062x m06-hf m06hf m08-so m08-hx mn15 pw86bc95 pw86b95 bb1k
+mpw1bc95 mpw1b95 mpw1b1k pw6bc95 pw6b95 pwb6k mpw1kcis mpwkcis1k b0kcis
+pbe1kcis tpss1kcis x1bc95 x1b95 xb1k b88bc95 bbc95 b88b95 bb95 b86bc95
+b86b95 m06-sx m06sx m11 revm11 mn12-sx mn12sx tpss0-dh scan0-dh tpss-qidh
+scan-qidh tpss0-2 scan0-2
+""".split())
+
+_UMRSF_DOUBLE_HYBRID_FUNCTIONALS = frozenset("""
+pbe0-dh tpss0-dh scan0-dh pbe-qidh tpss-qidh scan-qidh pbe0-2 tpss0-2 scan0-2
+b2-plyp b2plyp b2gp-plyp b2gpplyp b2t-plyp b2tplyp b2k-plyp b2kplyp
+mpw2-plyp mpw2plyp mpwk-plyp mpwkplyp
+""".split())
 
 @dataclass
 class Diagnostic:
@@ -325,6 +384,13 @@ def _get(config: dict[str, Any], section: str, option: str, default: Any = None)
 
 def _as_lower(value: Any) -> Any:
     return value.lower() if isinstance(value, str) else value
+
+
+def _is_true(value: Any) -> bool:
+    """Truth of a schema boolean that may still arrive as a string."""
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "1", "on", "yes"}
+    return bool(value)
 
 
 def _check_choice_literal(
@@ -1050,8 +1116,7 @@ def _check_guess(config: dict[str, Any], report: CheckReport) -> None:
     swapmo = _get(config, "guess", "swapmo", "")
     restart_namd_mutable_guess = (
         _as_lower(_get(config, "input", "runtype", "")) == "namd"
-        and str(_get(config, "md", "restart", False)).strip().lower()
-        in _TRUE_BOOL
+        and str(_get(config, "md", "restart", False)).strip().lower() in _TRUE_BOOL
         and str(_get(config, "guess", "save_mol", False)).strip().lower()
         in _TRUE_BOOL
     )
@@ -1369,13 +1434,7 @@ def _check_tb(config: dict[str, Any], report: CheckReport, *, section: str) -> N
     dftb_type = _as_lower(_get(config, section, "type", "auto"))
     # Canonicalize response-type aliases so the runtype/NAMD/SOC gates below see
     # a single spelling per family (e.g. mrsftddftb/mrsf-tddftb -> mrsf).
-    _DFTB_TYPE_CANON = {
-        "dftb": "ground", "dftb0": "ground_noscc", "noscc": "ground_noscc",
-        "td-dftb": "tddftb", "tda": "tddftb",
-        "sftddftb": "sf", "sf-tddftb": "sf",
-        "mrsftddftb": "mrsf", "mrsf-tddftb": "mrsf",
-    }
-    dftb_type_canon = _DFTB_TYPE_CANON.get(dftb_type, dftb_type)
+    dftb_type_canon = _canonical_tb_type(dftb_type)
     parameter_path = _get(config, section, "parameter_path", "")
     executable = _get(config, section, "executable", "")
     runtype = _as_lower(_get(config, "input", "runtype", "energy"))
@@ -1647,7 +1706,11 @@ def _check_tb(config: dict[str, Any], report: CheckReport, *, section: str) -> N
     auto_ground = (
         dftb_type == "auto"
         and (
-            (runtype in {"energy", "grad"} and not any(int(state) > 0 for state in grad_states))
+            runtype == "md"
+            or (
+                runtype in {"energy", "grad"}
+                and not any(int(state) > 0 for state in grad_states)
+            )
             or (runtype in {"optimize", "mep"} and int(istate) == 0)
         )
     )
@@ -1889,7 +1952,7 @@ def _check_tb(config: dict[str, Any], report: CheckReport, *, section: str) -> N
                     action=f"Use [qmmm] embedding=electrostatic for {short} QM/MM NAMD.",
                 )
 
-    allowed_runtype = {"energy", "grad", "optimize", "meci", "mep", "data"}
+    allowed_runtype = {"energy", "grad", "optimize", "meci", "mep", "md", "data"}
     td_type_for_namd = _as_lower(_get(config, "tdhf", "type", "rpa"))
     if td_type_for_namd == "mrsf" and dftb_type_canon in {"auto", "mrsf"}:
         # MRSF-TDDFTB has a state-overlap (TLF) backend and one-center SOC:
@@ -1912,7 +1975,7 @@ def _check_tb(config: dict[str, Any], report: CheckReport, *, section: str) -> N
             f"{disp} is currently wired only through energy/gradient-driven workflows.",
             value=runtype,
             expected=", ".join(sorted(allowed_runtype)),
-            action=f"Use energy, grad, data, optimize, meci, or mep until Hessian/NAC/SOC {short} hooks are implemented.",
+            action=f"Use energy, grad, data, md, optimize, meci, or mep until Hessian/NAC/SOC {short} hooks are implemented.",
         )
 
     # [properties] nac also routes into the NAC state-overlap path (e.g. inside
@@ -1930,7 +1993,10 @@ def _check_tb(config: dict[str, Any], report: CheckReport, *, section: str) -> N
         )
 
     ground_like = dftb_type in {"ground", "dftb", "dftb0", "ground_noscc", "noscc"}
-    if dftb_type == "auto" and runtype in {"optimize", "mep"} and int(istate) == 0:
+    if dftb_type == "auto" and (
+        runtype == "md"
+        or (runtype in {"optimize", "mep"} and int(istate) == 0)
+    ):
         ground_like = True
 
     if not ground_like and td_type not in {"rpa", "tda", "sf", "mrsf"}:
@@ -2008,6 +2074,53 @@ def _check_tb(config: dict[str, Any], report: CheckReport, *, section: str) -> N
             value={"nstate": nstate, "requested_state": max_requested},
             expected=f"nstate >= {max_requested}",
             action="Increase [tdhf] nstate.",
+        )
+
+
+def _check_dftgrid(config: dict[str, Any], report: CheckReport) -> None:
+    """Reject a [dftgrid] grid request that the native grid builder would drop."""
+    from oqp.molecule.oqpdata import (
+        DFTGRID_PRESETS, DFTGRID_UNPRUNED_SPELLINGS, OQP_CONFIG_SCHEMA,
+    )
+    dftgrid = config.get("dftgrid", {})
+    raw = dftgrid.get("pruned", "auto")
+    value = "" if raw is None else str(raw).strip()
+    allowed = {"auto"} | set(DFTGRID_UNPRUNED_SPELLINGS) | {p.lower() for p in DFTGRID_PRESETS}
+    if value.lower() not in allowed:
+        report.add(
+            "ERROR",
+            "dftgrid.pruned",
+            "Unknown DFT grid pruning preset; the grid builder would ignore it.",
+            value=value,
+            expected="auto, none, " + ", ".join(DFTGRID_PRESETS),
+            action="Use pruned=auto (SG2 unless rad_npts/ang_npts are set), "
+                   "pruned=none for the unpruned rad_npts x ang_npts grid, "
+                   "or one of SG0, SG1, SG2, SG3.",
+        )
+        return
+    if value.lower() == "auto" or value.lower() in DFTGRID_UNPRUNED_SPELLINGS:
+        return
+    if not _get(config, "input", "functional", ""):
+        return
+    schema = OQP_CONFIG_SCHEMA["dftgrid"]
+    try:
+        changed = [
+            f"{key}={int(dftgrid[key])}"
+            for key in ("rad_npts", "ang_npts")
+            if key in dftgrid and int(dftgrid[key]) != int(schema[key]["default"])
+        ]
+    except (TypeError, ValueError):
+        return
+    if changed:
+        report.add(
+            "WARNING",
+            "dftgrid.pruned",
+            f"The {value.upper()} preset defines its own radial and angular grids; "
+            f"{', '.join(changed)} is not used for the atoms the preset covers.",
+            value=f"pruned={value}, " + ", ".join(changed),
+            action="Remove pruned= (or set pruned=none) to run the requested "
+                   "unpruned rad_npts x ang_npts grid, or remove rad_npts/ang_npts "
+                   "to run the preset.",
         )
 
 
@@ -2095,7 +2208,7 @@ def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
             "Unknown SCF converger.",
             value=converger,
             expected=", ".join(sorted(SCF_CONVERGERS)),
-            action="Choose diis, soscf, or trah.",
+            action="Choose diis, soscf, trah, or arh.",
         )
 
     if init_converger not in OPTIONAL_SCF_CONVERGERS:
@@ -2117,6 +2230,25 @@ def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
             expected=", ".join(sorted(DIIS_TYPES)),
             action="Choose one of the implemented DIIS types.",
         )
+
+    # TRAH minimises over orbital rotations without re-diagonalising, so it
+    # cannot keep the non-aufbau occupation MOM or rstctmo selects; from such
+    # a stationary point it descends to a lower state.  scf_driver refuses it.
+    occupation_rule = [key for key in ("mom", "rstctmo")
+                       if _is_true(_get(config, "scf", key, False))]
+    if occupation_rule:
+        for option, value in (("converger_type", converger),
+                              ("init_converger", init_converger)):
+            if value in ("trah", "arh"):
+                report.add(
+                    "ERROR",
+                    f"scf.{option}",
+                    f"{value.upper()} cannot keep the orbital occupation selected by "
+                    f"scf.{occupation_rule[0]}.",
+                    value=value,
+                    expected="diis or soscf",
+                    action=f"Use {option}=diis or soscf with scf.{occupation_rule[0]}.",
+                )
 
     # Match init_scf_converger() in source/scf.F90.  A nonzero vshift selects
     # the C-DIIS/E-DIIS/C-DIIS cascade for every DIIS subtype, while SOSCF and
@@ -2174,13 +2306,13 @@ def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
             "Unknown fallback SCF converger.",
             value=alternative_scf,
             expected=", ".join(sorted(SCF_CONVERGERS)),
-            action="Choose diis, soscf, or trah.",
+            action="Choose diis, soscf, trah, or arh.",
         )
 
     # scf.escalation: optional comma-separated ladder overriding the default
     # DIIS -> SOSCF -> TRAH chain. Each stage must be a concrete converger
     # (not the 'auto'/'ml' manager modes).
-    escalation_stages = {"diis", "soscf", "trah"}
+    escalation_stages = {"diis", "soscf", "trah", "arh"}
     for stage in (s.strip() for s in escalation.split(",") if s.strip()):
         if stage not in escalation_stages:
             report.add(
@@ -2248,14 +2380,66 @@ def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
             wiki=WIKI_HELP["tdhf.type"],
         )
 
-    if td_type in {"rpa", "tda"} and scf_mult != td_mult:
+    # The conventional RPA/TDA response builds the closed-shell singlet A and B
+    # matrices (Coulomb term, alpha-plus-beta kernel) or, with multiplicity=3,
+    # the closed-shell triplet ones (no Coulomb term, alpha-minus-beta kernel).
+    # tdhf_energy, tdhf_z_vector and tdhf_gradient handle the triplet, so
+    # triplet energies, gradients and geometry optimizations are available on
+    # the closed-shell RHF/RKS reference; Hessians, NACs and crossings are not.
+    if td_type in {"rpa", "tda"} and int(td_mult) not in (1, 3):
         report.add(
-            "INFO",
+            "ERROR",
             "tdhf.multiplicity",
-            "Response multiplicity differs from the SCF reference multiplicity.",
+            "Conventional RPA/TDA response computes singlet (1) or closed-shell triplet (3) excited states.",
             value=td_mult,
-            action="This is valid for state-specific singlet/triplet targets; keep it if intentional.",
+            expected="1 or 3",
+            action="Set [tdhf] multiplicity=1 or 3.",
+            wiki=WIKI_HELP["tdhf.type"],
         )
+    if td_type in {"rpa", "tda"} and int(td_mult) == 3 and (
+            runtype not in TRIPLET_RPA_RUNTYPES or scf_type != "rhf"):
+        report.add(
+            "ERROR",
+            "tdhf.multiplicity",
+            "Closed-shell triplet RPA/TDA is implemented for energies, gradients and geometry "
+            "optimizations on an RHF/RKS reference; Hessians, NACs, crossings and open-shell "
+            "references are not implemented.",
+            value=f"{runtype}/{scf_type}/{td_mult}",
+            expected="input.runtype=energy, grad or optimize, and scf.type=rhf",
+            action="Use runtype=energy, grad or optimize with scf.type=rhf, or [tdhf] type=mrsf "
+                   "with an ROHF triplet reference for other triplet workflows.",
+            wiki=WIKI_HELP["tdhf.type"],
+        )
+    # MECPOpt evaluates its two surfaces by switching [tdhf] multiplicity to
+    # optimize.imult and optimize.jmult, so tdhf.multiplicity=1 does not keep a
+    # conventional RPA/TDA MECP away from the missing triplet path: the
+    # "triplet" surface would be the singlet root manifold again.
+    if td_type in {"rpa", "tda"} and runtype == "mecp":
+        mecp_mults = {
+            key: _get(config, "optimize", key, 1) for key in ("imult", "jmult")
+        }
+        def _non_singlet(mult):
+            # A malformed value is reported by _check_optimize; only a
+            # readable multiplicity other than 1 is judged here.
+            try:
+                return int(mult) != 1
+            except (TypeError, ValueError):
+                return False
+
+        if any(_non_singlet(mult) for mult in mecp_mults.values()):
+            report.add(
+                "ERROR",
+                "input.runtype",
+                "Conventional RPA/TDA response computes singlet excited states only, "
+                "so MECP cannot evaluate a non-singlet surface with it; that surface "
+                "would be the singlet root manifold.",
+                value=f"{td_type} with imult={mecp_mults['imult']}, "
+                      f"jmult={mecp_mults['jmult']}",
+                expected="tdhf.type=mrsf for MECP",
+                action="Use [tdhf] type=mrsf with a triplet ROHF reference for "
+                       "singlet-triplet MECP searches.",
+                wiki=WIKI_HELP["tdhf.type"],
+            )
 
     if td_type in {"sf", "mrsf"} and scf_mult == td_mult:
         report.add(
@@ -2274,6 +2458,22 @@ def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
             value=scf_type,
             expected="rohf",
             action="Set [scf] type=rohf.",
+            wiki=WIKI_HELP["tdhf.type"],
+        )
+
+    # MECPOpt separates its two surfaces only by switching [tdhf] multiplicity.
+    # The SF-TDDFT energy, Z-vector and gradient read that value
+    # for state labels only, so both MECP surfaces would be the same SF root
+    # manifold and the crossing objective would be meaningless.
+    if td_type == "sf" and runtype == "mecp":
+        report.add(
+            "ERROR",
+            "input.runtype",
+            "SF-TDDFT does not resolve spin multiplicity, so MECP cannot evaluate two "
+            "different-multiplicity surfaces with it.",
+            value=runtype,
+            expected="energy, grad, optimize, meci, or tci",
+            action="Use [tdhf] type=mrsf for MECP.",
             wiki=WIKI_HELP["tdhf.type"],
         )
 
@@ -2316,11 +2516,20 @@ def _check_mp2(config: dict[str, Any], report: CheckReport) -> None:
 
     functional = _get(config, "input", "functional", "")
     variant = _as_lower(_get(config, "mp2", "variant", "mp2"))
+    transform = str(_get(config, "mp2", "transform", "auto")).strip().lower()
     ss_scale = _get(config, "mp2", "same_spin_scale", 1.0)
     os_scale = _get(config, "mp2", "opposite_spin_scale", 1.0)
     runtype = _as_lower(_get(config, "input", "runtype", "energy"))
     reference = _as_lower(_get(config, "scf", "type", "rhf"))
     derivative_runtypes = {"grad", "optimize", "ts", "mep", "irc"}
+
+    if transform not in {"auto", "direct", "n5"}:
+        report.add(
+            "ERROR", "mp2.transform", "Unknown MP2 transformation selector.",
+            value=transform, expected="auto, direct, or n5",
+            action="Set [mp2] transform=auto, direct, or n5.",
+            wiki=WIKI_HELP["mp2.transform"],
+        )
 
     if functional:
         report.add(
@@ -2604,6 +2813,7 @@ def _check_fci(config: dict[str, Any], report: CheckReport) -> None:
     )
     davidson_maxiter = _get(config, "fci", "davidson_maxiter", 100)
     davidson_subspace = _get(config, "fci", "davidson_subspace", 0)
+    _check_irrep_min_purity(config, "fci", report)
     _validate_bool_literal(
         _get(config, "fci", "print_ci_vectors", False),
         "fci.print_ci_vectors",
@@ -2853,6 +3063,57 @@ def _target_spin_is_valid(target_spin: Any) -> bool:
     return valid and parsed >= 1
 
 
+def _check_irrep_min_purity(config: dict[str, Any], section: str,
+                            report: CheckReport) -> None:
+    """Reject an irrep purity threshold the selector cannot act on.
+
+    The value is the fraction of a root's weight that must sit in its dominant
+    irrep.  Every out-of-range value fails silently rather than loudly:
+    ``<= 0`` is replaced by the 0.5 default inside ``fci_solve``, ``> 1`` makes
+    every valid root look absent, and ``NaN`` disables the test altogether
+    because ``purity < NaN`` is false.  Catch all three here, where there is a
+    keyword to name.
+    """
+    raw = _get(config, section, "irrep_min_purity", None)
+    if raw is None or isinstance(raw, bool):
+        if isinstance(raw, bool):
+            report.add(
+                "ERROR",
+                f"{section}.irrep_min_purity",
+                f"[{section}] irrep_min_purity must be a fraction, not a boolean.",
+                value=raw,
+                expected="0 < value <= 1",
+                action=f"Set [{section}] irrep_min_purity to a fraction above 0 "
+                       "and at most 1 (default 0.5).",
+            )
+        return
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        report.add(
+            "ERROR",
+            f"{section}.irrep_min_purity",
+            f"[{section}] irrep_min_purity must be a number.",
+            value=raw,
+            expected="0 < value <= 1",
+            action=f"Set [{section}] irrep_min_purity to a fraction above 0 "
+                   "and at most 1 (default 0.5).",
+        )
+        return
+    if not math.isfinite(value) or value <= 0.0 or value > 1.0:
+        report.add(
+            "ERROR",
+            f"{section}.irrep_min_purity",
+            f"[{section}] irrep_min_purity must be a finite fraction above 0 "
+            "and at most 1; outside that range the irrep filter either accepts "
+            "everything or nothing without reporting it.",
+            value=raw,
+            expected="0 < value <= 1",
+            action=f"Set [{section}] irrep_min_purity to a fraction above 0 "
+                   "and at most 1 (default 0.5).",
+        )
+
+
 def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     if method not in {
@@ -2904,6 +3165,49 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
     )
     max_det = _get(config, "cas", "max_det", 5000)
     max_memory = _get(config, "cas", "max_memory", 2048)
+
+    # Irrep selection is meaningful for a fixed-orbital CI. A CASSCF that
+    # optimizes orbitals would additionally have to FOLLOW the selected root
+    # across macroiterations; the orbital optimizer does not do that, so the
+    # request would be honoured for the final CI and ignored by everything
+    # that produced the orbitals. Refuse rather than half-apply it.
+    _irrep = str(_get(config, "ci", "irrep", "any")).strip().lower()
+    _check_irrep_min_purity(config, "ci", report)
+    if _irrep and _irrep != "any":
+        _method = _as_lower(_get(config, "input", "method", "hf"))
+        # Every CASSCF method is rejected, including the zero-update scaffold.
+        # An optimizing run would have to FOLLOW the selected root across
+        # macroiterations, which the orbital optimizer does not do.  A
+        # max_macro_iterations=0 run has no such problem in principle, but
+        # neither _pack_cas_wavefunction_arrays nor the Python
+        # _solve_active_rdms path stages resolve_irrep_selection, so it runs
+        # the ordinary unfiltered CI and returns the lowest root of any
+        # symmetry.  Accepting that deck -- and, worse, recommending it here --
+        # is the silent wrong answer this keyword exists to prevent.
+        if _method in {"sa-casscf", "sacasscf", "casscf"}:
+            report.add(
+                "ERROR",
+                "ci.irrep",
+                "Irrep selection is not implemented for CASSCF: the orbital "
+                "optimizer does not follow a symmetry-selected root across "
+                "macroiterations, and the fixed-orbital CASSCF path does not "
+                "stage the selection at all.",
+                value=_irrep,
+                expected="any",
+                action="Use method=casci for [ci] irrep, or drop [ci] irrep.",
+            )
+        _sym = _get(config, "symmetry", "enabled", False)
+        _sym_on = (_sym is True) or (str(_sym).lower() in ("true", "1", "on", "yes"))
+        if not _sym_on:
+            report.add(
+                "ERROR",
+                "ci.irrep",
+                "[ci] irrep needs MO irrep labels, which are only produced "
+                "when symmetry detection is enabled.",
+                value=_irrep,
+                expected="[symmetry] enabled=true",
+                action="Set [symmetry] enabled=true, or drop [ci] irrep.",
+            )
 
     nroot = _get(config, "ci", "nroot", 1)
     eig_tol = _get(config, "ci", "eig_tol", 1.0e-10)
@@ -4759,16 +5063,56 @@ def _check_pt2(config: dict[str, Any], report: CheckReport) -> None:
         action="Use reference=casci for fixed-orbital CI or reference=casscf after native CASSCF exists.",
         fallback="casscf",
     )
+    implied_h0, implied_contraction = PT2_METHOD_IMPLIED.get(
+        canonical_method, (None, None))
+    contraction_raw = str(_get(config, "pt2", "contraction", "") or "").strip().lower()
     contraction = _check_choice_literal(
-        _get(config, "pt2", "contraction", "uncontracted"),
+        _get(config, "pt2", "contraction", ""),
         "pt2.contraction",
         PT2_CONTRACTIONS,
         report,
         message="Unknown PT2 contraction mode.",
         action="Use contraction=uncontracted (determinant-space CASPT2/NEVPT2) or "
                "contraction=strong (RDM-based SC-NEVPT2; requires h0=dyall).",
-        fallback="uncontracted",
+        fallback=implied_contraction or "uncontracted",
+        default_if_none=True,
+        default_if_blank=True,
     )
+    # The h0 a blank value stands for; an unknown spelling is reported below.
+    h0_raw = str(_get(config, "pt2", "h0", "") or "").strip().lower()
+    if h0_raw in PT2_H0_FOCK:
+        h0_resolved = "fock"
+    elif h0_raw in PT2_H0_DYALL:
+        h0_resolved = "dyall"
+    elif not h0_raw:
+        h0_resolved = implied_h0 or "fock"
+    else:
+        h0_resolved = h0_raw
+    # A method that names its own H0/contraction contradicts an explicit,
+    # different one.  _caspt2_options refuses the same input, but only after
+    # the reference SCF/CASSCF has been computed.
+    if implied_h0 is not None and h0_raw and h0_resolved != implied_h0:
+        report.add(
+            "ERROR",
+            "pt2.h0",
+            f"method={canonical_method} is defined for Dyall's zeroth-order Hamiltonian.",
+            value=h0_raw,
+            expected=f"{implied_h0} (or leave unset)",
+            action=f"Drop [pt2] h0 for method={canonical_method}, or use method=caspt2 for h0=fock.",
+        )
+    if implied_contraction is not None and contraction_raw \
+            and contraction in PT2_CONTRACTIONS \
+            and (contraction in PT2_STRONG_CONTRACTIONS) != (implied_contraction == "strong"):
+        report.add(
+            "ERROR",
+            "pt2.contraction",
+            f"method={canonical_method} is the "
+            f"{'strongly contracted' if implied_contraction == 'strong' else 'uncontracted'} variant.",
+            value=contraction_raw,
+            expected=f"{implied_contraction} (or leave unset)",
+            action="Drop [pt2] contraction, or select the method that matches it "
+                   "(nevpt2 = uncontracted, sc-nevpt2 = strongly contracted).",
+        )
     multistate = _check_choice_literal(
         _get(config, "pt2", "multistate", "auto"),
         "pt2.multistate",
@@ -4948,14 +5292,29 @@ def _check_pt2(config: dict[str, Any], report: CheckReport) -> None:
         )
     elif engine_mode in {"direct", "python", "fortran"} \
             and canonical_method not in PT2_QDPT_METHODS:
-        report.add(
-            "ERROR",
-            "pt2.engine",
-            "The matrix-free direct engine requires a diagonal H0 (QDPT family).",
-            value={"method": canonical_method, "engine": engine_mode},
-            expected="method=mrmp2/mcqdpt2/xmcqdpt2 for engine=direct/fortran",
-            action="Use the QDPT-family methods, or engine=dense for CASPT2/NEVPT2.",
+        # This is an uncontracted, single-state energy contraction. In
+        # particular it must not intercept a strong-contraction request.
+        _h0_direct = _as_lower(_get(config, "pt2", "h0", "fock") or "fock")
+        _contr_direct = _as_lower(_get(config, "pt2", "contraction", "none") or "none")
+        _ipea_valid, _ipea_direct = _check_float_literal(
+            _get(config, "pt2", "ipea_shift", 0.0), "pt2.ipea_shift", report)
+        _caspt2_direct = (
+            canonical_method == "caspt2" and normalized_variant == "caspt2"
+            and _h0_direct in {"fock", "caspt2"}
+            and _contr_direct in {"none", "uncontracted", "full"}
+            and _ipea_valid and _ipea_direct == 0.0
+            and _as_lower(_get(config, "input", "runtype", "energy")) == "energy"
         )
+        if not _caspt2_direct:
+            report.add(
+                "ERROR",
+                "pt2.engine",
+                "The direct engine requires diagonal-Fock QDPT or uncontracted "
+                "single-state CASPT2 energy with zero IPEA shift.",
+                value={"method": canonical_method, "engine": engine_mode},
+                expected="CASPT2 energy: h0=fock, contraction=none, ipea_shift=0",
+                action="Use engine=dense for other CASPT2/NEVPT2 requests.",
+            )
     _check_int_literal(
         _get(config, "pt2", "max_terms", 30000000),
         "pt2.max_terms",
@@ -5005,13 +5364,12 @@ def _check_pt2(config: dict[str, Any], report: CheckReport) -> None:
         )
 
     if contraction in PT2_STRONG_CONTRACTIONS:
-        h0_mode = str(_get(config, "pt2", "h0", "fock") or "fock").strip().lower()
-        if h0_mode not in {"dyall", "nevpt2", "nevpt"}:
+        if h0_resolved != "dyall":
             report.add(
                 "ERROR",
                 "pt2.contraction",
                 "Strong contraction (SC-NEVPT2) is defined for Dyall's H0 only.",
-                value=f"contraction={contraction}, h0={h0_mode}",
+                value=f"contraction={contraction}, h0={h0_resolved}",
                 expected="h0=dyall",
                 action="Set [pt2] h0=dyall together with contraction=strong.",
             )
@@ -5131,6 +5489,15 @@ def _check_pt2(config: dict[str, Any], report: CheckReport) -> None:
             "PT2 target roots must be unique.",
             value=target_roots,
             action="Remove duplicate PT2 root slots.",
+        )
+    if normalized_variant in PT2_SINGLE_STATE_METHODS and len(parsed_target_roots) > 1:
+        report.add(
+            "ERROR",
+            "pt2.target_roots",
+            "Single-state PT2 corrects exactly one target root at a time.",
+            value=target_roots,
+            expected="one root slot (or leave unset for root 0)",
+            action="Select one target root, or use a multistate PT2 method.",
         )
     # A one-element explicit list passes the count/bounds checks below, and
     # _reference_roots then honours it -- so the runtime diagonalises a 1x1
@@ -5418,10 +5785,167 @@ def _check_planned_wavefunction_methods(config: dict[str, Any], report: CheckRep
         wiki=WIKI_HELP["input.method"],
     )
 
+def _all_grad_requests(config: dict[str, Any]) -> list[int]:
+    """Every response state this run asks a gradient for, across spin ladders.
+
+    A selector that does not parse counts as no request here; the per-ladder
+    check reports it.
+    """
+    try:
+        requests = _spin_states.grad_requests(config)
+    except ValueError:
+        return []
+    return sorted(set(requests['s']) | set(requests['t']))
+
+
+def _two_ladders(config: dict[str, Any]) -> bool:
+    """True when this run solves both spin ladders (oqp.utils.spin_states)."""
+    try:
+        return _spin_states.two_ladders(config)
+    except ValueError:
+        return False
+
+
+def _check_per_manifold_gradients(config: dict[str, Any], report: CheckReport,
+                                  requested: dict[str, list]) -> None:
+    """grad_s / grad_t: one gradient list per spin ladder of the response.
+
+    The drivers reach the second ladder by switching [tdhf] multiplicity
+    (oqp.library.single_point.response_manifold).  The MRSF and UMRSF
+    responses answer both ladders behind that switch; the tight-binding
+    adapters select theirs through [dftb] / [xtb] target_multiplicity, so the
+    "other" ladder would silently be the configured one again, and the
+    conventional RPA/TDA/SF responses are not wired for a second ladder.  Only
+    runtype=grad, prop and data read the keys.
+    """
+    method = _as_lower(_get(config, "input", "method", "hf"))
+    td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+    runtype = _as_lower(_get(config, "input", "runtype", "energy"))
+    nstate = int(_get(config, "tdhf", "nstate", 1) or 1)
+    valid = True
+    # The configured ladder is the singlet or the triplet one; any other target
+    # multiplicity is neither, and response_manifold would not size it.
+    multiplicity = str(_get(config, "tdhf", "multiplicity", 1)).strip()
+    if multiplicity not in ("1", "3"):
+        report.add(
+            "ERROR",
+            "tdhf.multiplicity",
+            "grad_s / grad_t select gradients on the singlet and triplet "
+            f"ladders, so the run cannot target multiplicity {multiplicity}.",
+            value=multiplicity,
+            expected="1 or 3",
+            action="Set [tdhf] multiplicity=1 or 3, or drop [properties] "
+                   "grad_s / grad_t.",
+        )
+        return
+    for key, raw in requested.items():
+        if runtype not in ("grad", "prop", "data"):
+            valid = False
+            report.add(
+                "ERROR",
+                f"properties.{key}",
+                f"properties.{key} is read by runtype=grad, prop and data only; "
+                f"runtype={runtype} would drop the request.",
+                value=raw,
+                expected="runtype=grad, prop or data",
+                action=f"Set [input] runtype=grad, prop or data, or drop "
+                       f"[properties] {key}.",
+            )
+            continue
+        if method != "tdhf" or td_type not in ("mrsf", "umrsf"):
+            valid = False
+            report.add(
+                "ERROR",
+                f"properties.{key}",
+                f"properties.{key} selects a gradient on one spin ladder of the "
+                "MRSF/UMRSF response, which the drivers reach by switching "
+                f"[tdhf] multiplicity; method={method} with tdhf.type={td_type} "
+                "has no second ladder behind that switch (the tight-binding "
+                "backends select theirs through their own target_multiplicity).",
+                value=raw,
+                expected="method=tdhf with tdhf.type=mrsf or umrsf",
+                action="Use [properties] grad for the configured ladder, or run "
+                       "the Gaussian-basis MRSF/UMRSF response for per-ladder "
+                       "gradients.",
+            )
+            continue
+        try:
+            states = _spin_states.parse_states(raw)
+        except (TypeError, ValueError):
+            valid = False
+            report.add(
+                "ERROR",
+                f"properties.{key}",
+                f"properties.{key} must list integer response roots.",
+                value=raw,
+                expected="e.g. 2 or 1,3",
+                action=f"Write [properties] {key} as comma-separated integers.",
+            )
+            continue
+        # Response roots count from 1: root 0 of an MRSF ladder is the internal
+        # reference, and the gradient driver hands each index to the native
+        # Z-vector as a target.
+        if min(states) < 1:
+            valid = False
+            report.add(
+                "ERROR",
+                f"properties.{key}",
+                f"properties.{key} names response roots, which count from 1; "
+                "root 0 is the internal MRSF reference, not a state.",
+                value=states,
+                expected="positive response roots (S0 is root 1, T0 is root 1)",
+                action=f"Renumber [properties] {key} from 1.",
+            )
+    if not valid:
+        return
+
+    # Judge each ladder's effective request -- including a [properties] grad it
+    # inherits -- against the roots that ladder converges.  A two-ladder run
+    # sizes each from nstate_s / nstate_t (falling back to nstate); a run that
+    # solves one ladder keeps [tdhf] nstate.
+    two = _two_ladders(config)
+    requests = _spin_states.grad_requests(config)
+    # A two-ladder run solves both ladders from one reference SCF
+    # (reference() + excitation() per ladder); the in-place ixcore shift that
+    # energy() applies is not part of that path.  A spin-orbit run reports
+    # this through _check_soc.
+    if two and not _spin_states.soc_requested(config) \
+            and str(_get(config, "tdhf", "ixcore", "-1")).strip() not in ("", "-1"):
+        report.add(
+            "ERROR",
+            "tdhf.ixcore",
+            "grad_s / grad_t ask for a second spin ladder, which is solved from "
+            "the same reference without the in-place [tdhf] ixcore core shift.",
+            value=_get(config, "tdhf", "ixcore", "-1"),
+            expected="-1 (unset)",
+            action="Leave [tdhf] ixcore at its default, or request gradients on "
+                   "one ladder only.",
+        )
+    for label, name in (("s", "singlet"), ("t", "triplet")):
+        states = requests[label]
+        if not states:
+            continue
+        count_key = f"nstate_{label}" if two else "nstate"
+        count = int(_get(config, "tdhf", count_key, 0) or nstate)
+        highest = max(states)
+        if highest > count:
+            report.add(
+                "ERROR",
+                f"tdhf.{count_key}",
+                f"The {name} ladder is asked for the gradient of state {highest}, "
+                f"but it converges only {count} response roots.",
+                value=states,
+                expected=f"at most {count} as the highest {name} gradient state",
+                action=f"Raise [tdhf] {count_key}"
+                       + (" (or nstate, which it falls back to)" if two else "")
+                       + f", or drop that state from the {name} gradient request.",
+            )
+
+
 def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     runtype = _as_lower(_get(config, "input", "runtype", "energy"))
-    grad_states = _as_list(_get(config, "properties", "grad", []))
+    grad_states = _all_grad_requests(config)
     td_prop = _get(config, "properties", "td_prop", False)
     scf_prop = [_as_lower(item) for item in _as_list(_get(config, "properties", "scf_prop", []))]
     nmr_gauge = _as_lower(_get(config, "properties", "nmr_gauge", "cgo"))
@@ -5491,6 +6015,72 @@ def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
                 value=functional,
                 action="Use HF, an LDA/GGA functional, or a global hybrid GGA (e.g. pbe0, b3lyp).",
             )
+    if "acid" in scf_prop:
+        # ACID is drawn from the GIAO magnetic density response, and it has to
+        # be requested after the shielding that produces it.
+        if "nmr" not in scf_prop:
+            report.add(
+                "ERROR",
+                "properties.scf_prop",
+                "ACID cubes require the GIAO NMR response that produces them.",
+                value=", ".join(scf_prop),
+                expected="nmr, acid",
+                action="Add 'nmr' to properties.scf_prop, before 'acid'.",
+            )
+        elif scf_prop.index("acid") < scf_prop.index("nmr"):
+            report.add(
+                "ERROR",
+                "properties.scf_prop",
+                "ACID cubes are requested before the NMR response they are built from.",
+                value=", ".join(scf_prop),
+                expected="nmr, acid",
+                action="List 'nmr' before 'acid' in properties.scf_prop.",
+            )
+        if nmr_gauge != "giao":
+            report.add(
+                "ERROR",
+                "properties.nmr_gauge",
+                "ACID cubes require GIAO; a common gauge origin leaves the map "
+                "gauge-contaminated (benzene NICS(0) is ~95 ppm off in 6-31G*).",
+                value=nmr_gauge,
+                expected="giao",
+                action="Set properties.nmr_gauge=giao.",
+            )
+        # The grid controls are read only after the SCF and the GIAO response,
+        # so a bad value otherwise costs the whole calculation before
+        # write_acid_cubes rejects it.  NaN slips past `<= 0.0` -- every
+        # comparison against it is false -- and make_box_grid would then build
+        # a box of non-finite coordinates and write cubes nothing can read.
+        for key, value, floor in (
+            ("acid_spacing", _get(config, "properties", "acid_spacing", 0.2), "> 0.0"),
+            ("acid_padding", _get(config, "properties", "acid_padding", 5.0), ">= 0.0"),
+        ):
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                report.add(
+                    "ERROR",
+                    f"properties.{key}",
+                    f"properties.{key} must be a number, in bohr.",
+                    value=value,
+                    expected=f"float {floor}",
+                    action=f"Set properties.{key} to a number, e.g. "
+                           f"{'0.2' if key == 'acid_spacing' else '5.0'}.",
+                )
+                continue
+            bad = (not math.isfinite(number)
+                   or (number <= 0.0 if key == "acid_spacing" else number < 0.0))
+            if bad:
+                report.add(
+                    "ERROR",
+                    f"properties.{key}",
+                    f"properties.{key} must be a finite number {floor}, in bohr.",
+                    value=number,
+                    expected=f"{floor} and finite",
+                    action=f"Set properties.{key} to a sensible grid value, e.g. "
+                           f"{'0.2' if key == 'acid_spacing' else '5.0'}.",
+                )
+
     if td_prop:
         report.add(
             "WARNING",
@@ -5499,6 +6089,65 @@ def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
             value=td_prop,
             action="Disable td_prop unless you have a confirmed downstream implementation.",
         )
+
+    # Checked before the grad-only early return below, so a request that no
+    # driver fulfils can never be silently dropped.
+    soc_requested = (_spin_states.soc_requested(config) or runtype == "soc")
+    per_manifold = {
+        key: _get(config, "properties", key, [])
+        for key in ("grad_s", "grad_t")
+        if [item for item in _as_list(_get(config, "properties", key, []))
+            if str(item).strip() != ""]
+    }
+    # runtype=soc refuses both selectors outright, below.
+    if per_manifold and runtype != "soc":
+        _check_per_manifold_gradients(config, report, per_manifold)
+    if soc_requested:
+        # runtype=soc computes energies and couplings only: its gradients belong
+        # to runtype=grad, prop and data.
+        for key in ("grad_s", "grad_t"):
+            named = [item for item in _as_list(_get(config, "properties", key, []))
+                     if str(item).strip() != "" and runtype == "soc"]
+            if named:
+                report.add(
+                    "ERROR",
+                    f"properties.{key}",
+                    f"properties.{key} selects a gradient, and runtype=soc computes "
+                    "none: it solves both spin manifolds and couples them.",
+                    value=named,
+                    expected="runtype=grad, prop or data for gradients",
+                    action="Move the request to a runtype that takes gradients, or "
+                           "drop it and keep runtype=soc for energies plus couplings.",
+                )
+        if runtype not in ("prop", "data", "soc"):
+            report.add(
+                "ERROR",
+                "properties.soc",
+                "Only runtype=prop and runtype=data run spin-orbit coupling as a "
+                "step of the calculation; this runtype never reaches that step.",
+                value=runtype,
+                expected="prop, data, or properties.soc omitted",
+                action="Set [input] runtype=prop (or data), or drop properties.soc "
+                       "and use runtype=soc for a standalone spin-orbit run.",
+            )
+        # The run solves two ladders, so 'grad' cannot say which one it indexes;
+        # grad_s and grad_t are the only selectors in this mode.  The
+        # tight-binding SOC driver takes no per-manifold gradient at all, so
+        # there 'grad' is simply unused, as it always was.
+        if method not in ("dftb", "xtb"):
+            legacy = [int(item) for item in _as_list(_get(config, "properties", "grad", []))
+                      if str(item).strip() != ""]
+            if legacy and legacy != [0]:
+                report.add(
+                    "ERROR",
+                    "properties.grad",
+                    "A spin-orbit run reads grad_s and grad_t, not grad: the two "
+                    "manifolds have separate ladders, so one index has no spin.",
+                    value=legacy,
+                    expected="properties.grad left at its default",
+                    action="Move the request to [properties] grad_s / grad_t, one "
+                           "list per spin manifold.",
+                )
 
     if runtype != "grad":
         return
@@ -5542,7 +6191,9 @@ def _check_requested_states(config: dict[str, Any], report: CheckReport) -> None
         return
 
     requested = []
-    if runtype == "grad":
+    # A two-ladder run judges each ladder against its own count
+    # (_check_per_manifold_gradients).
+    if runtype == "grad" and not _two_ladders(config):
         requested.extend(_as_list(_get(config, "properties", "grad", [])))
     if runtype in {"optimize", "mep", "ts", "irc", "neb"}:
         requested.append(_get(config, "optimize", "istate", 0))
@@ -5583,26 +6234,20 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
     runtype = _as_lower(_get(config, "input", "runtype", "energy"))
     method = _as_lower(_get(config, "input", "method", "hf"))
 
+    qmmm_md = runtype == "md" and _is_true(
+        _get(config, "input", "qmmm_flag", False))
     odp_enabled = _parse_bool_like(
         _get(config, "odp", "enabled", False), "odp.enabled", report)
-    if odp_enabled is True and runtype != "namd":
+    if odp_enabled is True and runtype != "namd" and not qmmm_md:
         report.add(
             "ERROR",
             "odp.enabled",
-            "ODP umbrella sampling currently requires the NVE NAMD workflow.",
+            "ODP umbrella sampling currently requires the NAMD workflow or "
+            "QM/MM molecular dynamics.",
             value=f"enabled=True/runtype={runtype}",
-            expected="odp.enabled=False, or input.runtype=namd",
-            action="Disable [odp] for this calculation or use runtype=namd.",
-        )
-    if (odp_enabled is True and runtype == "namd"
-            and _as_lower(_get(config, "md", "ensemble", "nve")) != "nve"):
-        report.add(
-            "ERROR",
-            "md.ensemble",
-            "ODP umbrella sampling currently supports NVE NAMD only.",
-            value=_get(config, "md", "ensemble", "nve"),
-            expected="nve",
-            action="Set [md] ensemble=nve when [odp] enabled=True.",
+            expected="odp.enabled=False, input.runtype=namd, or "
+                     "input.runtype=md with qmmm",
+            action="Disable [odp] or use runtype=namd or QM/MM md.",
         )
 
     if runtype not in ALL_RUNTYPES:
@@ -5628,9 +6273,10 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
         )
         return
 
-    for section in ("droplet", "solute_com"):
+    for section in ("droplet", "solute_com", "flexible"):
         enabled = str(_get(config, section, "enabled", False)).strip().lower()
-        if enabled in _TRUE_BOOL and runtype != "namd":
+        if enabled in _TRUE_BOOL and runtype != "namd" and not (
+                qmmm_md and section != "flexible"):
             report.add(
                 "ERROR",
                 f"{section}.enabled",
@@ -5665,6 +6311,32 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
             wiki=WIKI_HELP["input.method"],
         )
         return
+
+    if runtype == "md":
+        # The BOMD driver evaluates energy/gradient slot 0.  For a response
+        # method that slot is the electronic reference (the high-spin
+        # reference for MRSF), not the physical S0 surface.  Keep this check at
+        # the shared validation boundary so concise, sectioned, and Python API
+        # inputs all reject the same unsupported request before evaluation.
+        response_route = method == "tdhf"
+        route = _as_lower(_get(config, "tdhf", "type", "rpa"))
+        if method in {"dftb", "xtb"}:
+            route = _canonical_tb_type(_get(config, method, "type", "auto"))
+            response_route = route in {"tddftb", "sf", "mrsf"}
+        if response_route:
+            report.add(
+                "ERROR",
+                "input.method",
+                "Ground-state MD cannot propagate a response-model reference surface.",
+                value=f"{method}/{route}",
+                expected="a ground-state HF/DFT, DFTB, or xTB route",
+                action=(
+                    "Use a ground-state model with runtype=md, or use "
+                    "runtype=namd for MRSF excited-state dynamics."
+                ),
+                wiki=WIKI_HELP["input.runtype"],
+            )
+            return
 
     if runtype == "ekt":
         td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
@@ -5761,7 +6433,7 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
                     value=_get(config, "properties", "grad", []),
                     action="Use grad=0 or switch to method=tdhf.",
                 )
-        elif method == "tdhf" and 0 in [int(state) for state in _as_list(_get(config, "properties", "grad", [])) if state not in (None, "")]:
+        elif method == "tdhf" and 0 in _all_grad_requests(config):
             report.add(
                 "ERROR",
                 "properties.grad",
@@ -5772,6 +6444,8 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
 
     if runtype in {"optimize", "meci", "mecp", "mep", "ts", "irc", "neb"}:
         _check_optimize(config, report)
+    else:
+        _check_model_curvature(config, report)
 
     if method in ("dftb", "xtb") and runtype in {"nac", "bp"}:
         # numerical NAC vectors / branching-plane are not wired for DFTB; the
@@ -5809,14 +6483,59 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
     if runtype == "nacme":
         _check_nacme(config, report)
 
-    if runtype == "soc":
-        _check_soc(config, report)
+    if runtype == "soc" or _spin_states.soc_requested(config):
+        _check_soc(config, report, input_dir)
 
     if runtype == "hess":
-        _check_hess(config, report)
+        _check_hess(config, report, input_dir)
+
+
+def _check_model_curvature(config: dict[str, Any], report: CheckReport) -> None:
+    """Validate experimental curvature controls even for unsupported drivers."""
+    model = _as_lower(_get(config, "oqp", "model_hessian", "auto"))
+    update = _as_lower(_get(config, "oqp", "hessian_update", "auto"))
+    history = _get(config, "oqp", "gpr_history", 8)
+    scale = _get(config, "oqp", "gpr_length_scale", 0.5)
+    def error(key, message):
+        report.add("ERROR", "oqp." + key, message,
+                   action="Correct the native model-curvature controls.")
+    if model not in {"auto", "constant", "lindh"}:
+        error("model_hessian", "Choose auto, constant or lindh.")
+    if update not in {"auto", "gpr"}:
+        error("hessian_update", "Choose auto or gpr.")
+    try:
+        valid_history = (not isinstance(history, bool) and
+                         float(history) == int(history) and 3 <= int(history) <= 20)
+    except (TypeError, ValueError, OverflowError):
+        valid_history = False
+    if not valid_history:
+        error("gpr_history", "GPR history must be an integer from 3 to 20.")
+    try:
+        valid_scale = (not isinstance(scale, bool) and math.isfinite(float(scale))
+                       and 1.0e-3 <= float(scale) <= 10.0)
+    except (TypeError, ValueError, OverflowError):
+        valid_scale = False
+    if not valid_scale:
+        error("gpr_length_scale", "GPR length scale must be finite and within [0.001, 10] bohr.")
+    nondefault = (model not in {"auto", "constant"} or update != "auto" or
+                  not valid_history or int(history) != 8 or
+                  not valid_scale or float(scale) != 0.5)
+    if nondefault:
+        runtype = _as_lower(_get(config, "input", "runtype", "energy"))
+        if (runtype not in {"optimize", "ts"} or
+                _as_lower(_get(config, "optimize", "lib", "oqp")) != "oqp" or
+                bool(_get(config, "input", "qmmm_flag", False)) or
+                str(_get(config, "oqp", "freeze", "") or "").strip() or
+                _as_lower(_get(config, "oqp", "init_hessian", "model")) != "model"):
+            error("model_hessian", "Nondefault model/GPR controls require native optimize or ts, "
+                  "init_hessian=model, and no frozen distances or QM/MM.")
+        if update != "gpr" and (not valid_history or int(history) != 8 or
+                                not valid_scale or float(scale) != 0.5):
+            error("hessian_update", "Nondefault GPR controls require hessian_update=gpr.")
 
 
 def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
+    _check_model_curvature(config, report)
     runtype = _as_lower(_get(config, "input", "runtype", "optimize"))
     method = _as_lower(_get(config, "input", "method", "hf"))
     lib = _as_lower(_get(config, "optimize", "lib", "oqp"))
@@ -5829,15 +6548,152 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
     meci_search = _as_lower(_get(config, "optimize", "meci_search", "auto"))
     meci_states = _as_list(_get(config, "optimize", "states", []))
 
+    if not bool(_get(config, "input", "qmmm_flag", False)):
+        # [optimize] qmmm_radius / qmmm_output are read only by the QM/MM optimiser
+        _rad_v = _get(config, "optimize", "qmmm_radius", 0.0)
+        try:
+            _rad_set = float(_rad_v) != 0.0
+        except (TypeError, ValueError):
+            _rad_set = True
+        _out_v = _get(config, "optimize", "qmmm_output", "")
+        _act_v = _get(config, "optimize", "qmmm_active", "")
+        _frz_v = _get(config, "optimize", "qmmm_freeze", "")
+
+        def _supplied(value):
+            # '0' is atom zero, a real selection, so test the text not the truth
+            return ("" if value is None else str(value).strip()) != ""
+
+        for _key, _is_set, _val in (("qmmm_radius", _rad_set, _rad_v),
+                                    ("qmmm_output", _supplied(_out_v), _out_v),
+                                    ("qmmm_active", _supplied(_act_v), _act_v),
+                                    ("qmmm_freeze", _supplied(_frz_v), _frz_v)):
+            if _is_set:
+                report.add(
+                    "ERROR",
+                    f"optimize.{_key}",
+                    "This option is used only by a QM/MM optimisation (qmmm_flag=true); "
+                    "an all-QM optimisation would silently ignore it.",
+                    value=str(_val),
+                    expected="the default, or [input] qmmm_flag=true",
+                    action=f"Remove [optimize] {_key}, or run a QM/MM optimisation.",
+                )
     if bool(_get(config, "input", "qmmm_flag", False)):
-        report.add(
-            "ERROR",
-            "input.qmmm_flag",
-            "Geometry and reaction-path drivers are not connected to the active QM/MM force backend.",
-            value=f"qmmm_flag=true/runtype={runtype}",
-            expected="a supported QM/MM energy, md, or namd workflow",
-            action="Disable qmmm_flag for this geometry job; do not run a gas-phase optimizer on embedded coordinates.",
-        )
+        if runtype == "optimize":
+            # Plain minimisation goes to the QM/MM optimiser (qmmm_opt.py),
+            # which minimises the embedded QM/MM energy over the QM atoms plus
+            # the MM residues within [optimize] qmmm_radius; only the plain
+            # optimizer is connected, the reaction-path drivers are not.
+            try:
+                radius = float(_get(config, "optimize", "qmmm_radius", 0.0))
+            except (TypeError, ValueError):
+                radius = -1.0
+            if not math.isfinite(radius) or radius < 0.0:
+                report.add(
+                    "ERROR",
+                    "optimize.qmmm_radius",
+                    "The movable-shell radius of a QM/MM optimisation must be a finite number >= 0 angstrom.",
+                    value=str(_get(config, "optimize", "qmmm_radius", 0.0)),
+                    expected="0 (QM atoms only) or a positive distance in angstrom",
+                    action="Set [optimize] qmmm_radius to 0 or a positive number.",
+                )
+            for _key in ("qmmm_active", "qmmm_freeze"):
+                for _value, _msg in _atom_selection_errors(_get(config, "optimize", _key, "")):
+                    report.add(
+                        "ERROR", f"optimize.{_key}", _msg,
+                        value=_value, expected="1000-1450,1500 or name:P,OP1",
+                        action=f"Fix the [optimize] {_key} selection.",
+                    )
+            _cg = _get(config, "guess", "continue_geom", False)
+            if (_cg is True) or (not isinstance(_cg, bool) and str(_cg or "").strip().lower() in ("1", "true", "yes", "on", "t")):
+                report.add(
+                    "ERROR",
+                    "guess.continue_geom",
+                    "A QM/MM optimisation starts from [qmmm] pdb_file, not from a saved QM-fragment "
+                    "geometry, so continue_geom would silently rerun from the original structure.",
+                    value=str(_get(config, "guess", "continue_geom", False)),
+                    expected="false",
+                    action="Set [guess] continue_geom=false and use the optimised full-system PDB "
+                           "([optimize] qmmm_output) as the new [qmmm] pdb_file.",
+                )
+            _swapmo_q = _get(config, "guess", "swapmo", "")
+            if (len(_swapmo_q) > 0) if isinstance(_swapmo_q, (list, tuple)) else bool(str(_swapmo_q or "").strip()):
+                report.add(
+                    "ERROR",
+                    "guess.swapmo",
+                    "Orbital swaps are applied by the single-point reference, which the QM/MM optimisation's "
+                    "embedded SCF does not use; a requested non-Aufbau occupation would be silently lost.",
+                    value=str(_swapmo_q),
+                    expected="empty",
+                    action="Remove [guess] swapmo, or optimise without qmmm_flag.",
+                )
+            _istate_raw = _get(config, "optimize", "istate", 0)
+            try:
+                _istate_q = int(_istate_raw)
+            except (TypeError, ValueError):
+                _istate_q = -1
+            if _istate_q < 0 or (_as_lower(_get(config, "input", "method", "hf")) == "tdhf" and _istate_q < 1):
+                report.add(
+                    "ERROR",
+                    "optimize.istate",
+                    "A QM/MM optimisation needs a valid state: istate >= 0, and >= 1 for method=tdhf "
+                    "(an MRSF/TDHF root, 1 = the lowest).",
+                    value=str(_istate_raw),
+                    expected=">= 1 for tdhf, >= 0 otherwise",
+                    action="Set [optimize] istate to the root to optimise.",
+                )
+            _coordsys_q = str(_get(config, "oqp", "coordsys", "auto") or "auto").strip().lower()
+            if _coordsys_q not in ("auto", "cart", "cartesian", "tric"):
+                report.add(
+                    "ERROR",
+                    "oqp.coordsys",
+                    "DLC/RIC coordinates remove the collective translations and rotations of the movable "
+                    "atoms, which move against the fixed MM atoms in a QM/MM optimisation.",
+                    value=_coordsys_q,
+                    expected="auto, cartesian or tric",
+                    action="Set [oqp] coordsys=auto (Cartesian) or tric.",
+                )
+            if str(_get(config, "optimize", "lib", "oqp")).strip().lower() != "oqp":
+                report.add(
+                    "WARNING",
+                    "optimize.lib",
+                    "A QM/MM optimisation uses its own L-BFGS driver; [optimize] lib is ignored.",
+                    value=str(_get(config, "optimize", "lib", "oqp")),
+                    expected="oqp",
+                    action="Remove [optimize] lib for a QM/MM optimisation.",
+                )
+        else:
+            report.add(
+                "ERROR",
+                "input.qmmm_flag",
+                "Reaction-path and crossing drivers are not connected to the active QM/MM force backend "
+                "(only runtype=optimize, md and namd are).",
+                value=f"qmmm_flag=true/runtype={runtype}",
+                expected="runtype=optimize, md or namd with qmmm_flag, or qmmm_flag=false",
+                action="Disable qmmm_flag for this geometry job; do not run a gas-phase optimizer on embedded coordinates.",
+            )
+
+    search = _as_lower(_get(config, "oqp", "ts_search", "prfo"))
+    def transit_error(key, message):
+        report.add("ERROR", "oqp." + key, message, action="Correct the native TS search options.")
+    if search not in {"prfo", "qst2", "qst3"}:
+        transit_error("ts_search", "TS search must be prfo, qst2 or qst3.")
+    elif search != "prfo":
+        if runtype != "ts" or lib != "oqp":
+            transit_error("ts_search", "QST2/QST3 require runtype=ts and lib=oqp.")
+        if _as_lower(_get(config, "oqp", "init_hessian", "model")) != "model":
+            transit_error("init_hessian", "QST2/QST3 require a model Hessian; no molecular Hessian is evaluated.")
+        if str(_get(config, "oqp", "freeze", "")).strip():
+            transit_error("freeze", "QST2/QST3 currently do not support frozen distances.")
+        for key in (["ts_product", "ts_guess"] if search == "qst3" else ["ts_product"]):
+            if not str(_get(config, "oqp", key, "")).strip():
+                transit_error(key, "An endpoint XYZ file is required for this search.")
+        if search == "qst2" and str(_get(config, "oqp", "ts_guess", "")).strip():
+            transit_error("ts_guess", "A supplied TS guess requires qst3.")
+    elif any(str(_get(config, "oqp", k, "")).strip() for k in ("ts_product", "ts_guess")):
+        transit_error("ts_search", "Endpoint options require qst2 or qst3.")
+    interpolation = _as_lower(_get(config, "oqp", "neb_interpolation", "linear"))
+    if interpolation not in {"linear", "idpp"} or (interpolation == "idpp" and (runtype != "neb" or lib != "oqp")):
+        transit_error("neb_interpolation", "IDPP interpolation requires the native NEB workflow; choose linear or idpp.")
 
     if lib not in OPT_LIBS:
         report.add(
@@ -5861,7 +6717,10 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Use a supported SciPy optimizer.",
         )
 
-    if lib == "oqp":
+    # a QM/MM optimisation always runs the native engine, whatever [optimize] lib says
+    native_engine = lib == "oqp" or (bool(_get(config, "input", "qmmm_flag", False))
+                                     and runtype == "optimize")
+    if native_engine:
         auto_recovery = _get(config, "oqp", "auto_recovery", True)
         if not isinstance(auto_recovery, bool):
             report.add(
@@ -6524,11 +7383,62 @@ def _check_neb(config: dict[str, Any], report: CheckReport,
             )
 
 
-def _check_soc(config: dict[str, Any], report: CheckReport) -> None:
+def _soc_2e_harmonic_clash(config: dict[str, Any],
+                           input_dir: str | None) -> str | None:
+    """Predict the native guard, which aborts 2e SOC over any pure shell.
+
+    Returns ``'abort'``, ``'unknown'`` or None.  The verdict follows the same
+    per-shell metadata the basis builder uses
+    (pyoqp/oqp/library/set_basis.py: ``function_type`` ends with 'spherical', or
+    ispher=true forces it), not the basis-set name, so a Pople basis that
+    resolves to Cartesian under ispher=auto is not flagged.
+    """
+    from oqp.molecule.oqpdata import ispher_mode
+
+    soc_2e = str(_get(config, "input", "soc_2e", 1)).strip().lower()
+    if soc_2e in ("0", "false", "off", "no"):
+        return None
+
+    mode = ispher_mode(_get(config, "input", "ispher", "auto"))
+    if mode == "false":
+        return None
+    if mode == "true":
+        return "abort"
+
+    atoms, why = _atom_shells(config, input_dir)
+    if atoms is None:
+        return "unknown" if why == "basis" else None
+    for _, entry in atoms:
+        for shell in entry.get("electron_shells", []):
+            if str(shell.get("function_type", "gto")).endswith("spherical"):
+                return "abort"
+    return None
+
+
+def _check_soc(config: dict[str, Any], report: CheckReport,
+               input_dir: str | None = None) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
     scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
     scf_mult = _get(config, "scf", "multiplicity", 1)
+    runtype = _as_lower(_get(config, "input", "runtype", "energy"))
+    origin = "runtype=soc" if runtype == "soc" else "properties.soc"
+
+    # Only the singlet and triplet ladders are answered together, and they are
+    # selected by nstate_s / nstate_t, so no other multiplicity means anything
+    # to a spin-orbit run.
+    if str(_get(config, "tdhf", "multiplicity", 1)) not in ("1", "3"):
+        report.add(
+            "ERROR",
+            "tdhf.multiplicity",
+            f"SOC ({origin}) answers the singlet and triplet response ladders, so "
+            "it cannot start from a target multiplicity of "
+            f"{_get(config, 'tdhf', 'multiplicity', 1)}.",
+            value=_get(config, "tdhf", "multiplicity", 1),
+            expected="1 or 3",
+            action="Set [tdhf] multiplicity=1 or 3; the run answers both ladders "
+                   "from it regardless.",
+        )
 
     if method in ("dftb", "xtb"):
         # MRSF one-center SOC: the ROKS triplet reference is implied
@@ -6538,10 +7448,28 @@ def _check_soc(config: dict[str, Any], report: CheckReport) -> None:
             report.add(
                 "ERROR",
                 "tdhf.type",
-                "SOC requires tdhf.type=mrsf.",
+                f"SOC ({origin}) requires tdhf.type=mrsf.",
                 value=td_type,
                 expected="mrsf",
                 action="Set [tdhf] type=mrsf.",
+            )
+        # The properties/data flow reaches its second ladder by switching
+        # [tdhf] multiplicity, which the tight-binding adapters do not read
+        # (they select through their own target_multiplicity), and its coupling
+        # step is the native Gaussian-basis kernel.  The tight-binding SOC
+        # driver, which solves both ladders itself, is reached by runtype=soc.
+        if runtype != "soc":
+            report.add(
+                "ERROR",
+                "properties.soc",
+                f"properties.soc is not available with method={method}: the "
+                "properties/data flow switches spin ladders through [tdhf] "
+                "multiplicity, which the tight-binding backend does not read.",
+                value=f"{method} with runtype={runtype}",
+                expected="runtype=soc for tight-binding spin-orbit coupling",
+                action="Use [input] runtype=soc for a tight-binding spin-orbit "
+                       "run, or method=tdhf for spin-orbit coupling inside "
+                       "runtype=prop/data.",
             )
         return
 
@@ -6549,7 +7477,7 @@ def _check_soc(config: dict[str, Any], report: CheckReport) -> None:
         report.add(
             "ERROR",
             "input.method",
-            "SOC requires method=tdhf.",
+            f"SOC ({origin}) requires method=tdhf.",
             value=method,
             expected="tdhf",
             action="Set [input] method=tdhf.",
@@ -6559,7 +7487,7 @@ def _check_soc(config: dict[str, Any], report: CheckReport) -> None:
         report.add(
             "ERROR",
             "tdhf.type",
-            "SOC requires tdhf.type=mrsf.",
+            f"SOC ({origin}) requires tdhf.type=mrsf.",
             value=td_type,
             expected="mrsf",
             action="Set [tdhf] type=mrsf.",
@@ -6569,7 +7497,7 @@ def _check_soc(config: dict[str, Any], report: CheckReport) -> None:
         report.add(
             "ERROR",
             "scf.type",
-            "SOC requires an ROHF reference.",
+            f"SOC ({origin}) requires an ROHF reference.",
             value=scf_type,
             expected="rohf",
             action="Set [scf] type=rohf.",
@@ -6579,14 +7507,88 @@ def _check_soc(config: dict[str, Any], report: CheckReport) -> None:
         report.add(
             "ERROR",
             "scf.multiplicity",
-            "SOC requires a triplet ROHF reference (multiplicity=3).",
+            f"SOC ({origin}) requires a triplet ROHF reference (multiplicity=3).",
             value=scf_mult,
             expected="3",
             action="Set [scf] multiplicity=3.",
         )
 
+    # An in-place core shift is applied by the energy()/gradient() driver only,
+    # so a run that solves the second spin manifold afterwards would mix a
+    # shifted reference with an unshifted one.
+    if str(_get(config, "tdhf", "ixcore", "-1")).strip() != "-1":
+        report.add(
+            "ERROR",
+            "tdhf.ixcore",
+            f"SOC ({origin}) solves both spin manifolds from one reference, but "
+            "[tdhf] ixcore rewrites the occupied MO energies in place and is "
+            "applied only on part of that path.",
+            value=_get(config, "tdhf", "ixcore", "-1"),
+            expected="-1 (unset)",
+            action="Leave [tdhf] ixcore at its default for a spin-orbit run.",
+        )
 
-def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
+    # NAC vectors are not available per spin manifold.  The numerical route
+    # would run the 3N displacement sweep once per manifold into scratch named by
+    # displacement index alone, so the second manifold could be handed the first
+    # one's cached couplings.  nacme covers both manifolds per step.
+    if _as_lower(_get(config, "properties", "nac", "")) == "nac":
+        report.add(
+            "ERROR",
+            "properties.nac",
+            f"SOC ({origin}) cannot take nac vectors: the numerical route would "
+            "sweep 3N displacements once per spin manifold into scratch that has "
+            "no manifold slot.",
+            value=_get(config, "nac", "type", "numerical"),
+            expected="properties.nac=nacme",
+            action="Use nac=nacme (runtype=prop), which publishes the coupling "
+                   "matrix of each spin manifold, or drop properties.soc to take "
+                   "the singlet vectors alone.",
+        )
+    # runtype=data has no overlap-with-the-previous-step path at all
+    # (runfunc.compute_data computes nac vectors only), so a nacme request
+    # there would finish without the coupling matrices it asked for.
+    if (runtype == "data"
+            and _as_lower(_get(config, "properties", "nac", "")) == "nacme"):
+        report.add(
+            "ERROR",
+            "properties.nac",
+            "SOC (properties.soc) with runtype=data computes no nacme: that "
+            "runtype has no overlap with the previous step.",
+            value="nacme with runtype=data",
+            expected="runtype=prop for nacme, or properties.nac unset",
+            action="Use [input] runtype=prop for per-manifold coupling matrices, "
+                   "or drop [properties] nac.",
+        )
+
+    clash = _soc_2e_harmonic_clash(config, input_dir)
+    if clash == "abort":
+        report.add(
+            "ERROR",
+            "input.soc_2e",
+            f"SOC ({origin}) with the two-electron term is not available with "
+            "spherical-harmonic AOs; the native kernel aborts partway through.",
+            value=f"soc_2e with {runtype}",
+            expected="input.soc_2e=0, or input.ispher=false",
+            action="Set [input] soc_2e=0 for a one-electron spin-orbit coupling, "
+                   "or [input] ispher=false to build Cartesian AOs; the "
+                   "runtype=soc examples pin ispher=false for exactly this reason.",
+        )
+    elif clash == "unknown":
+        report.add(
+            "WARNING",
+            "input.soc_2e",
+            "The two-electron spin-orbit term aborts on spherical-harmonic AOs, "
+            "and the basis of this input could not be inspected to check that.",
+            value=_get(config, "input", "basis", ""),
+            expected="a basis whose shells can be listed",
+            action="Confirm the basis is Cartesian (or set soc_2e=0 / ispher=false) "
+                   "before running the calculation.",
+        )
+
+
+def analytic_hessian_capability(config: dict[str, Any],
+                                input_dir: str | None = None) -> tuple[str, str]:
     """Return analytic-Hessian capability status and a precise reason.
 
     This checker is intentionally conservative: enabling a dispatch scaffold must
@@ -6597,12 +7599,19 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
     method = _as_lower(_get(config, "input", "method", "hf"))
     scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+    td_multiplicity = _get(config, "tdhf", "multiplicity", 1)
+    td_nstate = int(_get(config, "tdhf", "nstate", 1))
     functional = _as_lower(_get(config, "input", "functional", ""))
     state = _get(config, "hess", "state", 0)
+    try:
+        # Raw (un-typed) configs from .inp/.oqp parsing carry "0" as a string.
+        state = int(str(state).strip() or 0)
+    except ValueError:
+        pass
 
     # The native analytic-Hessian derivative-integral machinery now covers the
     # features that were previously gated to the numerical Hessian:
-    #   * ECP second derivatives -- libecpint deriv order 2, contracted in
+    #   * ECP second derivatives -- ecp_raw_ints deriv order 2, contracted in
     #     hf_hessian via add_ecphess + the ECP core-derivative in the CPHF response;
     #   * range-separated (CAM/LC) functionals -- the erfc-attenuated two-pass split
     #     in grd2_hess_driver (skeleton), grd2_driver (fock_deriv_contract response)
@@ -6621,39 +7630,193 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
         if td_type == "mrsf":
             return "unsupported_tdhf_type", "MRSF-TDDFT analytic Hessian is not implemented; use type=numerical until the MRSF gradient/Z-vector finite-difference baseline is validated."
         if td_type == "umrsf":
-            return "unsupported_tdhf_type", "UMRSF-TDDFT analytic Hessian is not implemented; use type=numerical until UMRSF-TDDFT gradients/Z-vectors are implemented and finite-difference validated."
+            return "unsupported_tdhf_type", "UMRSF-TDDFT Hessians are not implemented; both analytical and numerical runtype=hess requests are currently unsupported."
         if td_type == "sf":
             return "unsupported_tdhf_type", "SF-TDDFT analytic Hessian is not implemented; use type=numerical until the SF gradient/Z-vector finite-difference baseline is validated."
-        if td_type in {"tda", "rpa"}:
-            return "unsupported_tdhf_type", f"TDDFT analytic Hessian is not implemented yet for tdhf.type={td_type}."
+        if (td_type == "rpa" and scf_type == "rhf"
+                and td_multiplicity == 1 and state == 1
+                and (td_nstate >= 2 or _is_one_pair_response(config, input_dir))):
+            # Keep this list synchronized with
+            # tdhf_hessian_functional_is_verified.  Pure TDHF is selected by
+            # an empty functional and remains valid.
+            functional_aliases = {
+                "svwn": "svwn5",
+                "svwn5": "svwn5",
+                "lda": "svwn5",
+                "blyp": "blyp",
+                "pbe": "pbe",
+                "pbepbe": "pbe",
+                "b3lyp5": "b3lyp5",
+                "b3lypv5": "b3lyp5",
+            }
+            canonical_functional = functional_aliases.get(functional, functional)
+            verified_semilocal = {"svwn5", "blyp", "pbe", "b3lyp5"}
+            if functional and canonical_functional not in verified_semilocal:
+                return (
+                    "unsupported_feature",
+                    "Analytic TDDFT Hessians currently support the restricted "
+                    "LDA/GGA and global-hybrid paths; meta-GGA, CAM, and other range-separated "
+                    "functionals require a numerical Hessian.",
+                )
+            # [dftgrid] cam_flag turns on range separation independently of the
+            # functional name, and tdhf_hessian_is_applicable is handed
+            # infos%dft%cam_flag and aborts on it. Checking only the name lets
+            # e.g. functional=pbe with cam_flag=true validate here and then die
+            # in Fortran. Scoped to this excited-state branch: the ground-state
+            # analytic Hessian supports CAM (tests/test_cam_hessian.py).
+            if functional and _is_true(_get(config, "dftgrid", "cam_flag", False)):
+                return (
+                    "unsupported_feature",
+                    "Analytic TDDFT Hessians do not support range-separated "
+                    "(CAM) mode; [dftgrid] cam_flag=true is rejected by the "
+                    "native gate. Use a numerical Hessian.",
+                )
+            return "supported", "OpenQP closed-shell singlet TDHF/LDA/GGA-TDDFT analytic Hessian dispatch is enabled."
+        if td_type == "rpa":
+            if scf_type != "rhf":
+                return "unsupported_tdhf_type", "Analytic RPA Hessians currently require an RHF reference."
+            if td_multiplicity != 1:
+                return "unsupported_tdhf_type", "Analytic RPA Hessians currently support singlet targets only (tdhf.multiplicity=1)."
+            if state != 1:
+                return (
+                    "unsupported_feature",
+                    "Analytic RPA Hessians currently support only the lowest "
+                    "excited root (hess.state=1); higher roots require an "
+                    "indefinite-safe projected amplitude-response solver.",
+                )
+            if td_nstate < 2 and not _is_one_pair_response(config, input_dir):
+                return (
+                    "unsupported_feature",
+                    "Analytic RPA Hessians require tdhf.nstate>=2 so the "
+                    "lowest excited root can be verified as isolated from "
+                    "the next computed root (nstate=1 is enough only when "
+                    "the response space holds a single occupied-virtual "
+                    "pair, e.g. H2 or HeH+ in a minimal basis).",
+                )
+            return "unsupported_feature", "The requested RPA Hessian functional is not in the verified analytic set."
+        if td_type == "tda":
+            return "unsupported_tdhf_type", "TDA analytic Hessians are not implemented; use full-response RPA or a numerical Hessian."
         return "unsupported_tdhf_type", f"Analytic Hessian does not support tdhf.type={td_type}."
 
     return "unsupported_method", f"Analytic Hessian does not support input.method={method}."
 
 
-def _basis_max_angular_momentum(config: dict[str, Any]) -> int | None:
+def resolve_hessian_type(config: dict[str, Any],
+                         input_dir: str | None = None) -> tuple[str, str]:
+    """Resolve ``[hess] type`` to ``analytical`` or ``numerical`` with a reason.
+
+    An explicit ``analytical`` or ``numerical`` is returned unchanged. ``auto``
+    (the default) selects the native analytic Hessian only for the ground-state
+    HF/DFT kernel and only when the run uses nothing that kernel does not
+    differentiate; anything else -- excited states, solvent, QM/MM, scalar
+    relativity, meta-GGA or double-hybrid functionals, fractional occupations,
+    g or higher functions, an uninspectable basis, or a numerical-only option --
+    stays on the finite-difference Hessian, which differentiates whatever the
+    gradient contains.
+    """
+
+    hess_type = _as_lower(_get(config, "hess", "type", "auto"))
+    if hess_type in {"analytical", "numerical"}:
+        return hess_type, f"[hess] type={hess_type} requested explicitly."
+
+    method = _as_lower(_get(config, "input", "method", "hf"))
+    if method != "hf":
+        return "numerical", f"auto: input.method={method} uses the numerical Hessian."
+    capability, reason = analytic_hessian_capability(config, input_dir)
+    if capability != "supported":
+        return "numerical", f"auto: {reason}"
+
+    functional = _as_lower(_get(config, "input", "functional", ""))
+    blockers = []
+    if functional in _UMRSF_META_GGA_FUNCTIONALS:
+        blockers.append(f"meta-GGA functional {functional}")
+    if functional in _UMRSF_DOUBLE_HYBRID_FUNCTIONALS:
+        blockers.append(f"double-hybrid functional {functional}")
+    if _is_true(_get(config, "pcm", "enabled", False)):
+        blockers.append("PCM solvent")
+    if _is_true(_get(config, "input", "qmmm_flag", False)):
+        blockers.append("QM/MM embedding")
+    if _is_true(_get(config, "odp", "enabled", False)):
+        blockers.append("ODP bias")
+    try:
+        if int(_get(config, "scf", "scal_rel", 0) or 0) != 0:
+            blockers.append("scalar-relativistic Hamiltonian")
+    except (TypeError, ValueError):
+        blockers.append("unparsed scf.scal_rel")
+    if _is_true(_get(config, "scf", "pfon", False)):
+        blockers.append("fractional occupations (pfon)")
+    if _is_true(_get(config, "hess", "symmetry_unique", False)):
+        blockers.append("hess.symmetry_unique (numerical-only option)")
+    # Only the finite-difference driver reads cached displacement gradients;
+    # the analytic kernel would silently ignore a restart request.
+    if _is_true(_get(config, "hess", "restart", False)):
+        blockers.append("hess.restart (numerical-only option)")
+    max_l = _basis_max_angular_momentum(config, input_dir)
+    if max_l is None:
+        blockers.append("basis angular momentum could not be inspected")
+    elif max_l >= 4:
+        blockers.append(f"basis max L={max_l} (analytic limit L<=3)")
+    if blockers:
+        return "numerical", "auto: numerical Hessian because of " + ", ".join(blockers) + "."
+    return "analytical", "auto: native ground-state analytic Hessian."
+
+
+def _basis_max_angular_momentum(config: dict[str, Any],
+                                input_dir: str | None = None) -> int | None:
     """Return max L in the configured basis, or None if it cannot be inspected."""
+    return _basis_max_l_detail(config, input_dir)[0]
+
+
+def _read_custom_basis(name: str, input_dir: str | None) -> dict | None:
+    """BSE-style data of a ``file:`` basis, resolved as set_basis does
+    (relative to the input directory), or None if it cannot be read."""
+    import json
+    path = name[len("file:"):]
+    if not os.path.isabs(path) and input_dir:
+        path = os.path.join(input_dir, path)
+    try:
+        if path.endswith(".json"):
+            with open(path, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        else:
+            import basis_set_exchange as bse
+            data = bse.read_formatted_basis_file(path)
+    except (OSError, ValueError, KeyError, RuntimeError):
+        # unreadable / unparsable custom basis: reported as "cannot inspect"
+        return None
+    return data if isinstance(data, dict) and "elements" in data else None
+
+
+def _atom_shells(config: dict[str, Any], input_dir: str | None = None
+                 ) -> tuple[list[tuple[int | None, dict]] | None, str | None]:
+    """([(Z or None, BSE element entry), ...], None) for every atom, or (None, why)
+    with why = 'basis' when the basis cannot be inspected and 'geometry' when
+    the atoms cannot be listed."""
     try:
         import basis_set_exchange as bse
-    except Exception:
-        return None
+    except ImportError:
+        return None, "basis"
 
     basis = _get(config, "input", "basis", "")
     system = _get(config, "input", "system", "")
     library = _get(config, "input", "library", "")
     inline_lines, xyz_path = _iter_coordinate_lines(system)
     lines = inline_lines
-    if xyz_path and os.path.exists(os.path.abspath(xyz_path)):
-        with open(os.path.abspath(xyz_path), "r", encoding="utf-8") as handle:
-            xyz_lines = handle.read().splitlines()
-        try:
-            num_atoms = int(xyz_lines[0])
-            lines = xyz_lines[2:2 + num_atoms]
-        except (IndexError, ValueError):
-            lines = xyz_lines
+    if xyz_path:
+        xyz_file, _ = _split_geometry_reference(xyz_path)
+        if not os.path.isabs(xyz_file) and input_dir:
+            xyz_file = os.path.join(input_dir, xyz_file)
+        if os.path.exists(os.path.abspath(xyz_file)):
+            with open(os.path.abspath(xyz_file), "r", encoding="utf-8") as handle:
+                xyz_lines = handle.read().splitlines()
+            try:
+                num_atoms = int(xyz_lines[0])
+                lines = xyz_lines[2:2 + num_atoms]
+            except (IndexError, ValueError):
+                lines = xyz_lines
 
     if not lines:
-        return None
+        return None, "geometry"
 
     per_atom_basis: list[str] = []
     if basis == "library":
@@ -6674,43 +7837,122 @@ def _basis_max_angular_momentum(config: dict[str, Any]) -> int | None:
             per_atom_basis = names
 
     if len(per_atom_basis) != len(lines):
-        return None
+        return None, "geometry"
 
-    max_l = 0
+    custom: dict[str, dict | None] = {}
+    atoms: list[tuple[int, dict]] = []
     for line, basis_name in zip(lines, per_atom_basis):
         parts = line.split()
         if not parts:
             continue
         element = parts[0]
-        data = bse.get_basis(basis_name, elements=[element])
-        for item in data.get("elements", {}).values():
-            for shell in item.get("electron_shells", []):
-                max_l = max(max_l, max(int(l) for l in shell.get("angular_momentum", [])))
-    return max_l
+        if basis_name.lower().startswith("file:"):
+            if basis_name not in custom:
+                custom[basis_name] = _read_custom_basis(basis_name, input_dir)
+            data = custom[basis_name]
+            if data is None:
+                return None, "basis"
+            try:
+                z = int(float(element))
+            except ValueError:
+                try:
+                    z = int(bse.lut.element_Z_from_sym(element))
+                except KeyError:   # unknown element symbol
+                    return None, "basis"
+            entry = data["elements"].get(str(z))
+            if entry is None:
+                return None, "basis"
+        else:
+            try:
+                data = bse.get_basis(basis_name, elements=[element])
+            except KeyError:   # basis or element not in the BSE library
+                return None, "basis"
+            elements = data.get("elements", {})
+            try:
+                z = int(float(element))
+            except ValueError:
+                try:
+                    z = int(bse.lut.element_Z_from_sym(element))
+                except (AttributeError, KeyError):   # unknown symbol
+                    z = None
+            if z is not None and str(z) in elements:
+                entry = elements[str(z)]
+            else:
+                # One element was requested; keep every shell returned.
+                entry = {"electron_shells": [shell for item in elements.values()
+                                             for shell in item.get("electron_shells", [])]}
+                if len(elements) != 1:
+                    z = None
+        atoms.append((z, entry))
+    return atoms, None
 
 
-def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
+def _basis_max_l_detail(config: dict[str, Any],
+                        input_dir: str | None = None) -> tuple[int | None, str | None]:
+    """(max L, None), or (None, why) with why = 'basis' when the basis itself
+    cannot be inspected and 'geometry' when the atoms cannot be listed."""
+    atoms, why = _atom_shells(config, input_dir)
+    if atoms is None:
+        return None, why
+    max_l = 0
+    for _, entry in atoms:
+        for shell in entry.get("electron_shells", []):
+            max_l = max(max_l, max(int(l) for l in shell.get("angular_momentum", [0])))
+    return max_l, None
+
+
+def _is_one_pair_response(config: dict[str, Any], input_dir: str | None = None) -> bool:
+    """True only when the closed-shell response space is one occupied-virtual
+    pair (nocc = 1 and two basis functions, e.g. H2 or HeH+ in STO-3G).
+
+    Any function beyond s already gives three or more basis functions, so the
+    count does not depend on spherical versus Cartesian functions.  Returns
+    False whenever the basis, the geometry or the electron count cannot be
+    read: the caller then keeps requiring two computed roots.
+    """
+    atoms, _ = _atom_shells(config, input_dir)
+    if not atoms or any(z is None for z, _ in atoms):
+        return False
+    try:
+        charge = int(_get(config, "input", "charge", 0))
+    except (TypeError, ValueError):
+        return False
+    nelec = sum(z - int(entry.get("ecp_electrons", 0) or 0) for z, entry in atoms) - charge
+    nbf = 0
+    for _, entry in atoms:
+        for shell in entry.get("electron_shells", []):
+            am = [int(l) for l in shell.get("angular_momentum", [0])]
+            ncontr = len(shell.get("coefficients", [])) if len(am) == 1 else 1
+            nbf += sum(ncontr * (2 * l + 1) for l in am)
+    return nelec == 2 and nbf == 2
+
+
+def _check_hess(config: dict[str, Any], report: CheckReport,
+                input_dir: str | None = None) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     state = _get(config, "hess", "state", 0)
-    hess_type = _as_lower(_get(config, "hess", "type", "numerical"))
+    requested_type = _as_lower(_get(config, "hess", "type", "auto"))
+    hess_type = requested_type
     read = _get(config, "hess", "read", False)
     restart = _get(config, "hess", "restart", False)
     nproc = _get(config, "hess", "nproc", 1)
     temperatures = _as_list(_get(config, "hess", "temperature", []))
 
-    if hess_type not in {"numerical", "analytical"}:
+    if hess_type not in {"auto", "numerical", "analytical"}:
         report.add(
             "ERROR",
             "hess.type",
             "Unknown Hessian type.",
             value=hess_type,
-            expected="numerical or analytical",
-            action="Set [hess] type=numerical or type=analytical.",
+            expected="auto, numerical or analytical",
+            action="Set [hess] type=auto, type=numerical or type=analytical.",
         )
         return
+    if hess_type == "auto":
+        hess_type, _ = resolve_hessian_type(config, input_dir)
 
     if hess_type == "analytical":
-        capability, reason = analytic_hessian_capability(config)
+        capability, reason = analytic_hessian_capability(config, input_dir)
         if capability != "supported":
             report.add(
                 "ERROR",
@@ -6720,7 +7962,16 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
                 expected="supported analytical Hessian capability",
                 action="Set [hess] type=numerical or use a supported analytic-Hessian method/state.",
             )
-        max_l = _basis_max_angular_momentum(config)
+        max_l, why = _basis_max_l_detail(config, input_dir)
+        if max_l is None and why == "basis":
+            report.add(
+                "ERROR",
+                "input.basis",
+                "The basis cannot be inspected, so the analytical Hessian's L<=3 limit cannot be checked.",
+                value=str(_get(config, "input", "basis", "")),
+                expected="a readable basis with no g or higher functions",
+                action="Fix the basis reference, or set [hess] type=numerical (or auto).",
+            )
         if max_l is not None and max_l >= 4:
             report.add(
                 "ERROR",
@@ -6730,6 +7981,82 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
                 expected="max L <= 3",
                 action="Use a basis without g/higher functions for analytical Hessian, or set [hess] type=numerical.",
             )
+
+        # The analytic TDDFT Hessian is far more grid-sensitive than the rest
+        # of the derivative stack, so the default grid is not enough for it.
+        # Measured on H2O/STO-3G SVWN S1 (this geometry is examples/HESS/
+        # H2O_SVWN_RPA_ANA_HESS.inp): the analytic frequencies move 6.03 cm-1
+        # between the default pruned SG2 96x302 grid and an unpruned 128x590
+        # grid, while the finite-difference Hessian is identical to 0.01 cm-1
+        # on both, i.e. already converged at the default grid. The gap is not
+        # finite-difference noise: it is unchanged (3.2698e-3 Hartree/bohr^2)
+        # for dx from 0.0005 to 0.004 bohr and survives Richardson
+        # extrapolation to dx->0. Warn rather than reject: the result is still
+        # usable and converges correctly, and the committed HESS examples are
+        # deliberately small runtime smoke cases.
+        # Scoped to the excited-state path, which is what was measured. The
+        # ground-state HF/DFT analytic Hessian is a separate, older kernel and
+        # is not characterised here, so it must not inherit this warning.
+        if (
+            capability == "supported"
+            and method == "tdhf"
+            and _as_lower(_get(config, "input", "functional", ""))
+        ):
+            from oqp.molecule.oqpdata import resolve_dftgrid_pruned
+            try:
+                rad_npts = int(_get(config, "dftgrid", "rad_npts", 96))
+                ang_npts = int(_get(config, "dftgrid", "ang_npts", 302))
+                pruned = resolve_dftgrid_pruned(config.get("dftgrid", {})).lower()
+            except (TypeError, ValueError):
+                rad_npts, ang_npts, pruned = 96, 302, "sg2"
+            # source/dftlib/dft.F90 selects a pruning scheme with
+            # `select case (trim(pruned_name))` over SG0/SG1/SG2/SG3 and has no
+            # `case default`, so every other spelling -- "", none, off, false --
+            # leaves the grid unpruned. Match that, rather than guessing at a
+            # list of "off" synonyms.
+            is_pruned = pruned in {"sg0", "sg1", "sg2", "sg3"}
+            if is_pruned or rad_npts < 128 or ang_npts < 590:
+                report.add(
+                    "WARNING",
+                    "dftgrid",
+                    "Analytic TDDFT Hessians need a finer, unpruned DFT grid than "
+                    "the default. Measured on H2O/STO-3G SVWN, the analytic S1 "
+                    "frequencies move 6.0 cm-1 between the default pruned SG2 "
+                    "96x302 grid and an unpruned 128x590 grid, while the "
+                    "finite-difference Hessian is converged to 0.01 cm-1 on both.",
+                    value=f"pruned={pruned or 'none'}, rad_npts={rad_npts}, ang_npts={ang_npts}",
+                    expected="pruned= (unpruned) with rad_npts>=128 and ang_npts>=590",
+                    action="For production frequencies set [dftgrid] pruned= , "
+                           "rad_npts=128, ang_npts=590 (or finer), or use "
+                           "[hess] type=numerical, which is converged at the "
+                           "default grid and was measured faster here.",
+                )
+
+        # tdhf_hessian_is_applicable requires mpi_size == 1 and aborts
+        # otherwise, so a multi-rank launch of an otherwise supported analytic
+        # TD Hessian dies in Fortran after the SCF and response have already
+        # run. Catch it here instead. Scoped to the excited-state path: the
+        # ground-state Hessian has no such restriction.
+        if capability == "supported" and method == "tdhf":
+            try:
+                mpi_size = int(MPIManager().size)
+            except Exception:
+                mpi_size = 1
+            if mpi_size > 1:
+                report.add(
+                    "ERROR",
+                    "hess.type",
+                    "Analytic TD Hessians run on one MPI rank only; the native "
+                    "kernel aborts with more.",
+                    value=f"{mpi_size} MPI ranks",
+                    expected="1 rank",
+                    # Deliberately not recommending OpenMP as the fallback:
+                    # tdhf_hessian does omp_set_num_threads(1) for the whole
+                    # kernel, so threads do not help this path either.
+                    action="Run the analytic TD Hessian on a single rank, or "
+                           "set [hess] type=numerical, which parallelises over "
+                           "displacements via [hess] nproc.",
+                )
 
     if method == "hf" and state > 0:
         report.add(
@@ -6786,7 +8113,7 @@ def _check_nac(config: dict[str, Any], report: CheckReport) -> None:
         report.add(
             "ERROR",
             "nac.type",
-            "Analytical NAC vectors are not available.",
+            "NAC workflows use numerical couplings; analytical NAC vectors are not available.",
             value=nac_type,
             expected="numerical",
             action="Set [nac] type=numerical.",
@@ -6962,6 +8289,272 @@ def _add_cpu_info(report: CheckReport, path: str, nproc: int, restart: bool) -> 
     )
 
 
+def _atom_selection_errors(spec: Any) -> list[tuple[str, str]]:
+    """Syntax errors in an active/frozen atom selection, as (value, message).
+
+    Accepts ORCA's ``%qmmm ActiveAtoms`` spelling (``{0:5 16 21:30}``) and our
+    own ``0-5,16,21-30``, plus ``name:P,OP1`` groups.  Only the syntax is
+    checked here; whether an index is in range or an atom name exists depends
+    on the PDB, and the driver reports that when it reads the topology.
+    """
+    text = str(spec or "").strip()
+    if not text:
+        return []
+    out: list[tuple[str, str]] = []
+    for group in text.replace("{", " ").replace("}", " ").replace(";", " ").split():
+        if group.lower().startswith("name:"):
+            if not [n for n in group[5:].split(",") if n.strip()]:
+                out.append((group, "A 'name:' group must list at least one PDB atom name."))
+            continue
+        for token in group.replace(",", " ").split():
+            parts = token.replace(":", "-").split("-")
+            ok = len(parts) in (1, 2) and all(p.strip().isdigit() for p in parts)
+            if ok and len(parts) == 2 and int(parts[0]) > int(parts[1]):
+                ok = False
+            if not ok:
+                out.append((token, "Atom selections take 0-based indices, ranges "
+                                   "(first-last, or ORCA's first:last), or 'name:...' groups."))
+    return out
+
+
+def _check_qmmm_active_selection(config: dict[str, Any], report: CheckReport) -> None:
+    """[qmmm] active_atoms / frozen_atoms / active_radius / active_from_pdb:
+    the ORCA-style selection of what a QM/MM run may move.  Read by the
+    optimiser, the QM/MM MD driver and the NAMD drivers alike."""
+    runtype = _as_lower(_get(config, "input", "runtype", "energy"))
+    if runtype not in ("optimize", "md", "namd"):
+        return
+    if not bool(_get(config, "input", "qmmm_flag", False)):
+        # Only the QM/MM drivers read this selection.  An all-QM optimiser or
+        # dynamics driver moves every atom, so accepting it here would run a
+        # different calculation from the one the deck asks for, in silence.
+        # Same treatment as the [optimize] qmmm_active / qmmm_freeze aliases.
+        def _supplied(value):
+            # '0' is atom zero, a real selection, so test the text not the truth
+            return ("" if value is None else str(value).strip()) != ""
+
+        raw_radius = _get(config, "qmmm", "active_radius", 0.0)
+        try:
+            radius_set = float(str(raw_radius).strip() or 0.0) != 0.0
+        except (TypeError, ValueError):
+            radius_set = True
+        raw_pdb = _get(config, "qmmm", "active_from_pdb", False)
+        pdb_set = (raw_pdb is True) or (str(raw_pdb or "").strip().lower()
+                                        in ("1", "true", "yes", "on", "t"))
+        raw_active = _get(config, "qmmm", "active_atoms", "")
+        raw_frozen = _get(config, "qmmm", "frozen_atoms", "")
+        for key, is_set, value in (("active_atoms", _supplied(raw_active), raw_active),
+                                   ("frozen_atoms", _supplied(raw_frozen), raw_frozen),
+                                   ("active_radius", radius_set, raw_radius),
+                                   ("active_from_pdb", pdb_set, raw_pdb)):
+            if is_set:
+                report.add(
+                    "ERROR",
+                    f"qmmm.{key}",
+                    "The active-atom selection is read only by a QM/MM run "
+                    f"(qmmm_flag=true); an all-QM {runtype} would ignore it and move "
+                    "every atom.",
+                    value=str(value),
+                    expected="the default, or [input] qmmm_flag=true",
+                    action=f"Remove [qmmm] {key}, or run with qmmm_flag=true.",
+                )
+        return
+    for key in ("active_atoms", "frozen_atoms"):
+        for value, message in _atom_selection_errors(_get(config, "qmmm", key, "")):
+            report.add(
+                "ERROR", f"qmmm.{key}", message,
+                value=value, expected="{0:5 16 21:30}, 0-5,16 or name:P,OP1",
+                action=f"Fix the [qmmm] {key} selection.",
+            )
+    raw = _get(config, "qmmm", "active_radius", 0.0)
+    try:
+        radius = float(str(raw).strip() or 0.0)
+    except (TypeError, ValueError):
+        radius = -1.0
+    if not math.isfinite(radius) or radius < 0.0:
+        report.add(
+            "ERROR",
+            "qmmm.active_radius",
+            "The active shell of a QM/MM run must be a finite distance >= 0 angstrom.",
+            value=str(raw),
+            expected="0 (no shell) or a positive distance in angstrom",
+            action="Set [qmmm] active_radius to 0 or a positive number.",
+        )
+    from_pdb = _get(config, "qmmm", "active_from_pdb", False)
+    if (from_pdb is True) or (str(from_pdb or "").strip().lower() in ("1", "true", "yes", "on", "t")):
+        if not str(_get(config, "qmmm", "pdb_file", "") or "").strip():
+            report.add(
+                "ERROR",
+                "qmmm.active_from_pdb",
+                "Reading the active atoms from the B-factor column needs the PDB that "
+                "carries it.",
+                value="true",
+                expected="[qmmm] pdb_file set to the PDB whose B-factors mark the active atoms",
+                action="Set [qmmm] pdb_file, or select the atoms with [qmmm] active_atoms.",
+            )
+
+
+def _check_qmmm_driver_options(config: dict[str, Any], report: CheckReport) -> None:
+    """The periodic/embedding controls of the OpenQpQMMM driver (runtype=md /
+    namd) are not consumed by the legacy single-point QM/MM path; reject them
+    there instead of silently running a NoCutoff point-charge job."""
+    runtype = _as_lower(_get(config, "input", "runtype", "energy"))
+    if not bool(_get(config, "input", "qmmm_flag", False)):
+        return
+    def _truthy(v):
+        return (v is True) or (str(v).strip().lower() in ("1", "true", "on", "yes", "t"))
+    def _set(v):
+        return str(v or "").strip().lower() not in ("", "none", "0", "0.0")
+    cutoff = str(_get(config, "qmmm", "cutoff", "NoCutoff") or "NoCutoff").strip().lower()
+    if runtype == "namd" and _truthy(_get(config, "md", "soc", False)) \
+            and cutoff not in ("nocutoff", "cutoffnonperiodic"):
+        # The spin-adiabatic SOC-NAMD state is a mixture of MCH states whose
+        # relaxed ESPF charges are not available per image-field iteration, so
+        # the periodic QM-image term cannot be made self-consistent with the
+        # propagated state (NAMD_SOC_QMMM raises NotImplementedError).
+        report.add(
+            "ERROR",
+            "qmmm.cutoff",
+            "Periodic QM/MM (PME/Ewald/CutoffPeriodic) is not available for SOC-NAMD; "
+            "the periodic QM-image field needs the relaxed charges of the propagated "
+            "state, which the spin-mixed SOC state does not provide.",
+            value=f"cutoff={cutoff} with [md] soc=true",
+            expected="cutoff=NoCutoff for SOC-NAMD, or [md] soc=false for a periodic box",
+            action="Run SOC-NAMD QM/MM as an isolated cluster (cutoff=NoCutoff), or use "
+                   "same-spin FSSH ([md] soc=false) for the periodic box.",
+        )
+        return
+    if runtype in ("md", "namd", "optimize"):
+        # optimize: the QM/MM optimiser builds the same OpenQpQMMM driver as
+        # runtype=md and passes every periodic/embedding control through.
+        embedding = str(_get(config, "qmmm", "embedding", "electrostatic") or "electrostatic").strip().lower()
+        method = _as_lower(_get(config, "input", "method", "hf"))
+        if runtype == "optimize" and method not in ("hf", "tdhf", "dftb", "xtb"):
+            report.add(
+                "ERROR",
+                "input.method",
+                "The QM/MM optimiser can differentiate HF/DFT, TDHF/MRSF and the tight-binding "
+                "methods only; other methods reach the driver without an embedded gradient.",
+                value=method,
+                expected="hf, tdhf, dftb or xtb",
+                action="Use one of those methods, or optimise without qmmm_flag.",
+            )
+        if runtype == "optimize":
+            for key in ("pdb_file", "qm_atoms", "forcefield_files"):
+                if not str(_get(config, "qmmm", key, "") or "").strip():
+                    report.add(
+                        "ERROR",
+                        f"qmmm.{key}",
+                        f"A QM/MM optimisation needs [qmmm] {key}.",
+                        value="(blank)",
+                        expected="a value",
+                        action=f"Set [qmmm] {key}.",
+                    )
+            try:
+                maxit = int(_get(config, "optimize", "maxit", 30))
+            except (TypeError, ValueError):
+                maxit = 0
+            if maxit < 1:
+                report.add(
+                    "ERROR",
+                    "optimize.maxit",
+                    "A QM/MM optimisation needs at least one evaluation.",
+                    value=str(_get(config, "optimize", "maxit", 30)),
+                    expected=">= 1",
+                    action="Set [optimize] maxit to a positive number.",
+                )
+            for key in ("qm_atoms_xyz", "qm_list"):
+                if str(_get(config, "qmmm", key, "") or "").strip():
+                    report.add(
+                        "ERROR",
+                        f"qmmm.{key}",
+                        "The QM-coordinate override of the MD driver is not applied by the QM/MM "
+                        "optimiser; the run would optimise the PDB geometry instead.",
+                        value=str(_get(config, "qmmm", key, "")),
+                        expected="no override (put the starting geometry in the PDB)",
+                        action="Remove [qmmm] qm_atoms_xyz / qm_list for a QM/MM optimisation.",
+                    )
+            if _truthy(_get(config, "input", "d4", False)):
+                report.add(
+                    "ERROR",
+                    "input.d4",
+                    "D4 dispersion is not part of the QM/MM force the optimiser minimises "
+                    "(compute_force has no LastStep dispersion pass), so the geometry would "
+                    "minimise the non-D4 surface.",
+                    value="d4=true",
+                    expected="d4=false for a QM/MM optimisation",
+                    action="Disable d4, or optimise without qmmm_flag.",
+                )
+            for key in ("freeze", "frozen_distances"):
+                if str(_get(config, "optimize", key, "") or "").strip() or str(_get(config, "oqp", key, "") or "").strip():
+                    report.add(
+                        "ERROR",
+                        f"optimize.{key}",
+                        "Frozen-distance constraints are not applied by the QM/MM optimiser yet; "
+                        "the run would silently move the constrained bond.",
+                        value=str(_get(config, "optimize", key, "") or _get(config, "oqp", key, "")),
+                        expected="no constraint, or optimise without qmmm_flag",
+                        action="Remove the constraint for a QM/MM optimisation.",
+                    )
+        if method == "tdhf" and runtype == "namd" and cutoff not in ("nocutoff", "cutoffnonperiodic"):
+            try:
+                zvconv = float(_get(config, "tdhf", "zvconv", 1.0e-6))
+            except (TypeError, ValueError):
+                zvconv = 1.0e-6
+            if zvconv > 1.0e-8:
+                # The periodic QM-image field is iterated with the RELAXED
+                # ESPF charges of the target state; their noise floor follows
+                # the Z-vector residual (about 1e-4 e at zvconv=1e-6 for an
+                # 18-atom indole, i.e. at the loop tolerance, which then needs
+                # 4-5 gradient evaluations per step; 2 at zvconv=1e-8).
+                report.add(
+                    "WARNING",
+                    "tdhf.zvconv",
+                    "Periodic (PME/Ewald) dynamics on a TDHF/MRSF state iterates the QM-image "
+                    "field with the relaxed ESPF charges, whose precision is set by the "
+                    "Z-vector convergence; the default leaves them at the loop tolerance.",
+                    value=f"{zvconv:g}",
+                    expected="zvconv <= 1e-8",
+                    action="Set [tdhf] zvconv=1e-8 (two image iterations per step instead of four or five).",
+                )
+        if embedding == "split" and cutoff not in ("nocutoff", "cutoffnonperiodic"):
+            # The legacy split scheme routes the QM charges through OpenMM
+            # point charges; under PBC its force is not the derivative of
+            # its energy (openqp-devkit docs/qmmm_ewald.md: residuals of 1e3-1e4 kJ/mol/nm),
+            # so a periodic trajectory must use the full-ESPF scheme.
+            report.add(
+                "ERROR",
+                "qmmm.embedding",
+                "embedding=split is not force-consistent in a periodic box; periodic "
+                "dynamics needs the full-ESPF scheme.",
+                value=f"embedding=split with cutoff={cutoff}",
+                expected="embedding=electrostatic (full ESPF) for PME/Ewald/CutoffPeriodic, "
+                         "or cutoff=NoCutoff for the split scheme",
+                action="Use embedding=electrostatic for the periodic box, or NoCutoff for split.",
+            )
+        return
+    ignored = []
+    if cutoff not in ("nocutoff", "cutoffnonperiodic"):
+        ignored.append(f"cutoff={cutoff}")
+    for key in ("ewald_tol", "mm_charge_width"):
+        if _set(_get(config, "qmmm", key, "")):
+            ignored.append(key)
+    for key in ("lj_switch", "h_lj"):
+        if _truthy(_get(config, "qmmm", key, False)):
+            ignored.append(key)
+    if ignored:
+        report.add(
+            "ERROR",
+            "qmmm.cutoff",
+            "Periodic/embedding QM/MM controls are only used by runtype=md and "
+            "runtype=namd; the single-point QM/MM path would silently ignore them.",
+            value=", ".join(ignored),
+            expected="runtype=md or namd, or a NoCutoff single point without these keys",
+            action="Use runtype=md/namd for periodic (PME/Ewald) or smeared-charge "
+                   "QM/MM, or remove these [qmmm] keys for a single-point energy.",
+        )
+
+
 def check_input_values(
     config: dict[str, Any],
     *,
@@ -7001,8 +8594,11 @@ def check_input_values(
     _check_guess(config, report)
     _check_pcm(config, report)
     _check_dftb(config, report)
+    _check_qmmm_driver_options(config, report)
+    _check_qmmm_active_selection(config, report)
     _check_xtb(config, report)
     _check_d4(config, report)
+    _check_dftgrid(config, report)
     _check_scf(config, report)
     _check_symmetry(config, report)
     _check_tdhf(config, report)

@@ -6,8 +6,9 @@ module grd2
   use constants, only: tol_int
   use io_constants, only: iw
   use basis_tools, only: basis_set
-  use grd2_rys, only: grd2_int_data_t, grd2_rys_compute, grd2_rys_hess_compute
-  use constants, only: BAS_MXANG
+  use grd2_rys, only: grd2_int_data_t, grd2_rys_compute, grd2_rys_hess_compute, &
+                      grd2_operator_consumer_t, grd2_rys_compute_operator
+  use constants, only: BAS_MXANG, NUM_CART_BF
   use int2_compute, only: int2_compute_data_t, ints_exchange
 
 !###############################################################################
@@ -66,6 +67,7 @@ module grd2
 
   private
   public :: grd2_driver
+  public :: grd2_operator_driver
   public :: grd2_hess_driver
   public :: grd2_compute_data_t
 
@@ -97,12 +99,24 @@ contains
     real(kind=dp), allocatable :: de_internal(:,:)
 
     logical :: do_cam = .false.
+!<  Saved pass state, so a CAM call leaves the caller's compute object exactly
+!<  as it found it (see the restore below).
+    logical :: sv_attenuated
+    integer :: sv_cur_pass
+    real(kind=dp) :: sv_mu, sv_hfscale, sv_hfscale2, sv_coulscale
 
     do_cam = infos%dft%cam_flag
     if (present(cam)) do_cam = cam
 
     if (do_cam) then
       allocate(de_internal, mold=de)
+
+      sv_attenuated = gcomp%attenuated
+      sv_cur_pass   = gcomp%cur_pass
+      sv_mu         = gcomp%mu
+      sv_hfscale    = gcomp%hfscale
+      sv_hfscale2   = gcomp%hfscale2
+      sv_coulscale  = gcomp%coulscale
 
       gcomp%cur_pass = 1
     ! Regular Coulomb and exchange
@@ -127,6 +141,21 @@ contains
       if (present(mu)) gcomp%mu = mu
       call grd2_driver_gen(infos, basis, de_internal, gcomp, petite=petite)
       de = de + de_internal
+
+      ! Put the object back the way it arrived. The two passes above rewrite
+      ! every pass-specific field, and pass 2 in particular leaves
+      ! attenuated=.true. and coulscale=0. Restoring here -- rather than
+      ! papering over it in the non-CAM branch -- keeps a compute object that
+      ! is reused across calls correct: otherwise a later full-range call
+      ! silently drops all Coulomb, keeps the CAM exchange scales, and (for the
+      ! MRSF digest, which skips its spin-pair-coupling terms when attenuated)
+      ! drops those too.
+      gcomp%attenuated = sv_attenuated
+      gcomp%cur_pass   = sv_cur_pass
+      gcomp%mu         = sv_mu
+      gcomp%hfscale    = sv_hfscale
+      gcomp%hfscale2   = sv_hfscale2
+      gcomp%coulscale  = sv_coulscale
     else
       ! Only adopt the DFT hybrid mixing here for actual DFT calculations
       ! (hamilton>=20).  For pure Hartree-Fock the caller already set the
@@ -172,7 +201,8 @@ contains
     real(kind=dp) :: cutoff, cutoff2, dabcut
     real(kind=dp) :: dabmax, gmax
     real(kind=dp) :: zbig
-    integer :: numint, i, ij, skip1, skip2, mpi_ij
+    integer :: numint, i, ij, skip1, skip2, mpi_ij, ipair, npair
+    integer, allocatable :: pair_i(:), pair_j(:)
     integer :: iok, j, k, l, kl
     integer :: maxnbf, maxl
     integer :: q4, sym_nops
@@ -286,30 +316,39 @@ contains
 !   Square dtol for use in grd2_rys_compute
     dtol = dtol*dtol
 
+! Build the rank-local bra-pair list once; one workshare covers all pairs.
+    allocate(pair_i(basis%nshell*(basis%nshell+1)/2), &
+             pair_j(basis%nshell*(basis%nshell+1)/2))
+    npair = 0
+    mpi_ij = 0
+    do i = 1, basis%nshell
+      do j = 1, i
+        ij = i*(i-1)/2+j
+        if (ppairs%ppid(1,ij)==0) cycle
+        mpi_ij = mpi_ij+1
+        if (infos%mpiinfo%usempi) then
+          if (mod(mpi_ij, pe%size) /= pe%rank) cycle
+        end if
+        npair = npair+1
+        pair_i(npair) = i
+        pair_j(npair) = j
+      end do
+    end do
+
 !$omp parallel &
 !$omp   private ( &
-!$omp   gdat, dab, i, j, k, l, ij, maxl, kl, gmax, dabmax, iok, mpi_ij, q4) &
+!$omp   gdat, dab, i, j, k, l, ij, maxl, kl, gmax, dabmax, iok, ipair, q4) &
 !$omp   reduction(+:skip1, skip2, numint, de)
 
      allocate(dab(maxnbf**4))
 
     call gdat%init(basis%mxam, 1, dtol, dabcut, iok)
 
-!$omp barrier
-    if (infos%mpiinfo%usempi) then
-       mpi_ij = 0
-    end if
-
-    do i = 1, basis%nshell
-      do j = 1, i
+!$omp do schedule(dynamic,1)
+    do ipair = 1, npair
+        i = pair_i(ipair)
+        j = pair_j(ipair)
         ij = i*(i-1)/2+j
-        if (ppairs%ppid(1,ij)==0) cycle
-        if (infos%mpiinfo%usempi) then
-           mpi_ij=mpi_ij+1
-           if (mod(mpi_ij, pe%size) /= pe%rank) cycle
-        end if
-
-!$omp do schedule(dynamic,4) collapse(2)
         do k = 1, i
           do l = 1, i
           maxl = k
@@ -364,10 +403,8 @@ contains
 
           end do
         end do
-!$omp end do
-
-      end do
     end do
+!$omp end do
 
     call gdat%clean()
 !$omp end parallel
@@ -389,6 +426,153 @@ contains
     end if
 
   end subroutine grd2_driver_gen
+
+!> @brief Traverse derivative ERI shell quartets once and assemble an AO
+!>        operator through a consumer callback.
+!>
+!> This path deliberately omits density-dependent fine screening: an operator
+!> represents every AO probe simultaneously, so no single probe-density bound
+!> can safely screen a shell quartet.  The ordinary Schwarz and primitive
+!> integral cutoffs remain active.  One MPI rank.  Shell pairs are distributed
+!> over OpenMP threads when the consumer supports thread-private buffers
+!> (thread_buffer_bytes > 0); each thread accumulates into its own copy and the
+!> copies are summed at the end.  The thread count is capped so the private
+!> buffers fit OQP_GRD2_OPERATOR_MEM_MB (default 4096 MiB).
+  subroutine grd2_operator_driver(infos, basis, consumer, attenuated, mu)
+    use messages, only: show_message, WITH_ABORT
+    use types, only: information
+    use int2_pairs, only: int2_pair_storage, int2_cutoffs_t
+    use parallel, only: par_env_t
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    class(grd2_operator_consumer_t), intent(inout) :: consumer
+    logical, optional, intent(in) :: attenuated
+    real(kind=dp), optional, intent(in) :: mu
+
+    type(grd2_int_data_t) :: gdat
+    type(int2_pair_storage) :: ppairs
+    type(int2_cutoffs_t) :: cutoffs
+    type(par_env_t) :: pe
+    real(kind=dp), allocatable :: schwarz_ints(:,:)
+    real(kind=dp) :: cutoff, dabcut, dtol, rtol, zbig, gmax, emu2
+    integer :: i, j, k, l, ij, kl, maxl, iok, ipair, npair, nthr, st
+    integer, allocatable :: pair_i(:), pair_j(:)
+    integer(8) :: bufbytes, budget
+    character(len=16) :: envs
+    logical :: do_attenuated
+!$  integer, external :: omp_get_max_threads
+
+    call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+    if (pe%size /= 1) call show_message( &
+      'Blocked derivative-operator assembly currently requires one MPI rank.', &
+      WITH_ABORT)
+
+    do_attenuated = .false.
+    if (present(attenuated)) do_attenuated = attenuated
+    if (do_attenuated .and. .not.present(mu)) call show_message( &
+      'Attenuated derivative-operator assembly requires a range parameter.', &
+      WITH_ABORT)
+    if (do_attenuated) emu2 = mu**2
+
+    cutoff = infos%control%grad_cutoff
+    if (cutoff <= 0.0_dp) cutoff = 1.0e-10_dp
+    zbig = maxval(basis%ex)
+    dabcut = 1.0e-11_dp
+    if (zbig > 1.0e6_dp) dabcut = dabcut/10.0_dp
+    if (zbig > 1.0e7_dp) dabcut = dabcut/10.0_dp
+    dtol = 10.0_dp**(-tol_int)
+    rtol = log(10.0_dp)*tol_int
+    call cutoffs%set(cutoff_integral_value=dabcut, cutoff_exp=rtol, &
+                     cutoff_prefactor_pq=dtol, cutoff_prefactor_p=dtol)
+    call ppairs%alloc(basis, cutoffs)
+    call ppairs%compute(basis, cutoffs)
+    allocate(schwarz_ints(basis%nshell,basis%nshell))
+    if (do_attenuated) then
+      call ints_exchange(basis, schwarz_ints, emu2)
+    else
+      call ints_exchange(basis, schwarz_ints)
+    end if
+
+    ! Thread count: private buffers must fit the memory budget.
+    nthr = 1
+!$  nthr = omp_get_max_threads()
+    bufbytes = consumer%thread_buffer_bytes()
+    if (bufbytes <= 0_8) then
+      nthr = 1
+    else
+      budget = 4096_8*1024_8*1024_8
+      call get_environment_variable('OQP_GRD2_OPERATOR_MEM_MB', envs, status=st)
+      if (st == 0) then
+        read(envs, *, iostat=st) budget
+        if (st == 0) then
+          budget = budget*1024_8*1024_8
+        else
+          budget = 4096_8*1024_8*1024_8
+        end if
+      end if
+      nthr = int(max(1_8, min(int(nthr,8), budget/bufbytes)))
+    end if
+
+    npair = basis%nshell*(basis%nshell+1)/2
+    allocate(pair_i(npair), pair_j(npair))
+    npair = 0
+    do i = 1, basis%nshell
+      do j = 1, i
+        npair = npair + 1
+        pair_i(npair) = i
+        pair_j(npair) = j
+      end do
+    end do
+
+!$omp parallel num_threads(nthr) default(shared) &
+!$omp   private(gdat, i, j, k, l, ij, kl, maxl, gmax, iok, ipair)
+    block
+    ! block-local, hence thread-private (a polymorphic PRIVATE item is not
+    ! portable)
+    class(grd2_operator_consumer_t), allocatable, target :: tcons
+    allocate(tcons, source=consumer)
+    if (nthr > 1) call tcons%thread_begin()
+    call gdat%init(basis%mxam, 1, dtol*dtol, dabcut, iok)
+    if (iok /= 0) call show_message( &
+      'Unable to allocate blocked derivative-operator integral workspace.', &
+      WITH_ABORT)
+!$omp do schedule(dynamic,1)
+    do ipair = 1, npair
+      i = pair_i(ipair)
+      j = pair_j(ipair)
+      ij = i*(i-1)/2+j
+      if (ppairs%ppid(1,ij) == 0) cycle
+      do k = 1, i
+        maxl = k
+        if (k == i) maxl = j
+        do l = 1, maxl
+          kl = k*(k-1)/2+l
+          if (ppairs%ppid(1,kl) == 0) cycle
+          gmax = schwarz_ints(i,j)*schwarz_ints(k,l)
+          if (gmax < cutoff) cycle
+          call gdat%set_ids(basis, i, j, k, l)
+          if (all(gdat%skip)) cycle
+          if (do_attenuated) then
+            call grd2_rys_compute_operator(gdat, ppairs, tcons, basis, emu2)
+          else
+            call grd2_rys_compute_operator(gdat, ppairs, tcons, basis)
+          end if
+        end do
+      end do
+    end do
+!$omp end do
+    if (nthr > 1) then
+!$omp critical (grd2_operator_merge)
+      call consumer%thread_merge(tcons)
+!$omp end critical (grd2_operator_merge)
+    end if
+    call gdat%clean()
+    deallocate(tcons)
+    end block
+!$omp end parallel
+    deallocate(pair_i, pair_j)
+  end subroutine grd2_operator_driver
 
 !###############################################################################
 
@@ -427,6 +611,8 @@ contains
     integer :: iok, j, k, l, kl
     integer :: maxnbf, maxl
     integer :: c1, c2, a1, a2, r0, c0
+    integer :: ipair, npair
+    integer, allocatable :: pair_i(:), pair_j(:)
     real(kind=dp) :: rtol, dtol
 
     type(grd2_int_data_t) :: gdat
@@ -436,12 +622,23 @@ contains
     type(par_env_t) :: pe
 
     logical :: do_cam = .false.
+!<  Saved pass state -- see the matching restore, and the note in grd2_driver.
+    logical :: sv_attenuated
+    integer :: sv_cur_pass
+    real(kind=dp) :: sv_mu, sv_hfscale, sv_hfscale2, sv_coulscale
 
     do_cam = infos%dft%cam_flag
     if (present(cam)) do_cam = cam
 
     if (do_cam) then
       allocate(hess_internal, mold=hess)
+
+      sv_attenuated = gcomp%attenuated
+      sv_cur_pass   = gcomp%cur_pass
+      sv_mu         = gcomp%mu
+      sv_hfscale    = gcomp%hfscale
+      sv_hfscale2   = gcomp%hfscale2
+      sv_coulscale  = gcomp%coulscale
 
       gcomp%cur_pass = 1
       ! Regular Coulomb and exchange.
@@ -466,6 +663,13 @@ contains
       if (present(mu)) gcomp%mu = mu
       call grd2_hess_driver(infos, basis, hess_internal, gcomp, cam=.false.)
       hess = hess + hess_internal
+
+      gcomp%attenuated = sv_attenuated
+      gcomp%cur_pass   = sv_cur_pass
+      gcomp%mu         = sv_mu
+      gcomp%hfscale    = sv_hfscale
+      gcomp%hfscale2   = sv_hfscale2
+      gcomp%coulscale  = sv_coulscale
 
       deallocate(hess_internal)
       return
@@ -518,21 +722,14 @@ contains
     maxnbf = (basis%mxam+1)*(basis%mxam+2)/2
     dtol = dtol*dtol
 
-!$omp parallel &
-!$omp   private ( &
-!$omp   gdat, dab, i, j, k, l, ij, maxl, kl, gmax, dabmax, iok, mpi_ij, &
-!$omp   c1, c2, a1, a2, r0, c0) &
-!$omp   reduction(+:skip1, skip2, numint, hess)
-
-    allocate(dab(maxnbf**4))
-
-    call gdat%init(basis%mxam, 2, dtol, dabcut, iok)
-
-!$omp barrier
-    if (infos%mpiinfo%usempi) then
-       mpi_ij = 0
-    end if
-
+    ! Shell pairs (i,j) of this MPI rank, distributed dynamically over OpenMP
+    ! threads with the (k,l) loop inside, as in grd2_driver_gen.  (A worksharing
+    ! loop over (k,l) per pair synchronized every thread once per shell pair
+    ! and left most threads idle on the small-i pairs.)
+    npair = basis%nshell*(basis%nshell+1)/2
+    allocate(pair_i(npair), pair_j(npair))
+    npair = 0
+    mpi_ij = 0
     do i = 1, basis%nshell
       do j = 1, i
         ij = i*(i-1)/2+j
@@ -541,13 +738,31 @@ contains
            mpi_ij=mpi_ij+1
            if (mod(mpi_ij, pe%size) /= pe%rank) cycle
         end if
+        npair = npair + 1
+        pair_i(npair) = i
+        pair_j(npair) = j
+      end do
+    end do
 
-!$omp do schedule(dynamic,4) collapse(2)
+!$omp parallel &
+!$omp   private ( &
+!$omp   gdat, dab, i, j, k, l, ij, maxl, kl, gmax, dabmax, iok, ipair, &
+!$omp   c1, c2, a1, a2, r0, c0) &
+!$omp   reduction(+:skip1, skip2, numint, hess)
+
+    allocate(dab(maxnbf**4))
+
+    call gdat%init(basis%mxam, 2, dtol, dabcut, iok)
+
+!$omp do schedule(dynamic,1)
+    do ipair = 1, npair
+      i = pair_i(ipair)
+      j = pair_j(ipair)
+      ij = i*(i-1)/2+j
         do k = 1, i
-          do l = 1, i
           maxl = k
           if (k == i) maxl = j
-          if (l > maxl) cycle
+          do l = 1, maxl
 
             kl = k*(k-1)/2+l
             if (ppairs%ppid(1,kl)==0) cycle
@@ -596,13 +811,12 @@ contains
 
           end do
         end do
-!$omp end do
-
-      end do
     end do
+!$omp end do
 
     call gdat%clean()
 !$omp end parallel
+    deallocate(pair_i, pair_j)
 
     call pe%allreduce(skip1, 1)
     call pe%allreduce(skip2, 1)

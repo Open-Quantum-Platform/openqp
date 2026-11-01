@@ -57,6 +57,9 @@ module nevpt2_koopmans_mod
   use, intrinsic :: iso_c_binding, only: c_int32_t, c_int64_t, c_double
   implicit none
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: nevpt2_a12, nevpt2_a13, nevpt2_a7, nevpt2_a9, &
+            nevpt2_hdm3
 
   integer, parameter :: i8 = c_int64_t
   integer, parameter :: dp = c_double

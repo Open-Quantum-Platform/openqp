@@ -218,15 +218,26 @@ class RuntimeRootResolutionTests(unittest.TestCase):
         windows_leg = windows_leg[:windows_leg.index("cache_path:")]
         self.assertNotIn("experimental", windows_leg)
 
-    def test_pull_requests_use_cached_smoke_wheel_not_full_matrix(self):
+    def test_wheels_build_only_on_demand(self):
+        # Plain pull requests and pushes to main build no wheels; a release,
+        # a manual run, or a `release`-labelled PR does.
         source = (ROOT / ".github" / "workflows" / "build_wheels.yml").read_text()
+        on_block = source[source.index('"on":'):source.index("\njobs:")]
 
         self.assertNotIn("tags:\n      - \"v*\"", source)
+        self.assertNotIn("\n  push:", on_block)
         self.assertIn("types: [opened, synchronize, reopened, labeled, unlabeled]", source)
         self.assertIn("build_wheel_smoke:", source)
         self.assertIn(
-            "!contains(github.event.pull_request.labels.*.name, 'release')",
+            "if: github.event_name == 'workflow_dispatch' && inputs.action == 'smoke'",
             source,
+        )
+        sdist_section = source[
+            source.index("  build_sdist:"):source.index("  build_wheel_smoke:")
+        ]
+        self.assertIn(
+            "contains(github.event.pull_request.labels.*.name, 'release')",
+            sdist_section,
         )
         # The point is that the PR smoke job reuses the standard cached
         # externals rather than redirecting them somewhere of its own.  Scope

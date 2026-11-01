@@ -216,7 +216,14 @@ option(ENABLE_LSAN       "Enable LeakSanitizer"              OFF)
 option(ENABLE_UBSAN      "Enable UndefinedBehaviorSanitizer" OFF)
 option(ENABLE_TSAN       "Enable ThreadSanitizer"            OFF)
 
-option(ENABLE_Formatter  "Enable source-code formatters"     ON)
+# Source-code formatter (fprettify) for the `format` target.  Default OFF: it is
+# a development-only tool, and with it ON every `pip install .` downloads the
+# formatter tarball and requires find_package(Python3).  Note the `format`
+# target still points at ${CMAKE_SOURCE_DIR}/modules, a directory this
+# repository no longer has (sources live under source/), so the target is stale
+# independently of this default; redirecting it at source/ would reformat
+# production Fortran and is left as a separate maintainer decision.
+option(ENABLE_Formatter  "Enable source-code formatters"     OFF)
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
@@ -280,8 +287,6 @@ endif()
 # ILP64 everywhere (unconditional): 8-byte BLAS integers and 8-byte default
 # Fortran integers. See the LINALG_LIB_INT64 tombstone above.
 set(BLA_SIZEOF_INTEGER 8)
-set(OTR_SUFFIX "_64")
-set(OTR_DEFS "-DUSE_ILP64")
 if(WIN32 AND ("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel"
               OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM"))
   # Intel Fortran on Windows links the STATIC Fortran runtime by default, so
@@ -316,11 +321,6 @@ elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPI
     add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-traceback>)
 endif()
 
-# Build and link the external OpenTrustRegion (OpenTRAH) SCF solver. When OFF the
-# external library is neither downloaded nor compiled, otr_interface.F90 is dropped
-# from the build, and the TRAH dispatch falls back to the native solver for every
-# trh_impl. Default ON preserves the validated gradient/MRSF reference paths.
-option(ENABLE_OPENTRAH "Build and link the external OpenTrustRegion (OpenTRAH) solver" ON)
 if(ENABLE_OPENMP)
   find_package(OpenMP 3.1 REQUIRED)
 endif()
@@ -365,13 +365,14 @@ endif()
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
 
 if(${LINALG_LIB} STREQUAL none)
-    message(FATAL_ERROR "LINALG_LIB=none is not supported: OpenQP (and the optional OpenTrustRegion) require BLAS/LAPACK. Use LINALG_LIB=auto, a concrete BLAS/LAPACK vendor, or netlib.")
+    message(FATAL_ERROR "LINALG_LIB=none is not supported: OpenQP and its bundled externals require BLAS/LAPACK. Use LINALG_LIB=auto, a concrete BLAS/LAPACK vendor, or netlib.")
 endif()
 
-# Resolve BLAS/LAPACK before configuring external projects. OpenTrustRegion
-# needs the same BLAS integer-size decision as OpenQP; early resolution also
-# lets a failed system BLAS search fall back to the bundled NetLib target before
-# the external project graph is generated. Linking to oqp happens when
+# Resolve BLAS/LAPACK before configuring external projects. The bundled
+# externals that link BLAS/LAPACK (multicharge through DFT-D4, ddX, the NetLib
+# fallback itself) need the same integer-size decision as OpenQP; early
+# resolution also lets a failed system BLAS search fall back to the bundled
+# NetLib target before the external project graph is generated. Linking to oqp happens when
 # findLinearAlgebra() is called again after the oqp target exists.
 findLinearAlgebra()
 
@@ -412,6 +413,63 @@ add_subdirectory(source)
 
 if(BUILD_TESTING)
   enable_testing()
+  add_executable(oqp_test_casscf_anhess tests/fortran/casscf_anhess_selftest.F90)
+  target_include_directories(oqp_test_casscf_anhess PRIVATE "${CMAKE_BINARY_DIR}/source")
+  target_link_libraries(oqp_test_casscf_anhess PRIVATE oqp)
+  add_dependencies(oqp_test_casscf_anhess oqp)
+  foreach(_threads 1 4)
+    add_test(NAME oqp_casscf_anhess_${_threads} COMMAND oqp_test_casscf_anhess ${_threads})
+    set_tests_properties(oqp_casscf_anhess_${_threads} PROPERTIES
+      LABELS oqp_casscf_anhess_context
+      ENVIRONMENT "OMP_NUM_THREADS=${_threads};VECLIB_MAXIMUM_THREADS=1;MKL_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1")
+    if(WIN32)
+      # Windows has no RPATH. The test starts from the build root, so put
+      # liboqp.dll and the DFT-D4 DLLs on its PATH; without them it exits
+      # with 0xC0000135 (DLL not found) before running. The DFT-D4 DLLs are
+      # not installed: each stays in its own ExternalProject build directory
+      # (DFTD4_*_RUNTIME_SOURCE, external/CMakeLists.txt).
+      set(_oqp_test_path "PATH=path_list_prepend:$<TARGET_FILE_DIR:oqp>")
+      foreach(_dll IN ITEMS "${DFTD4_MCTC_RUNTIME_SOURCE}"
+                            "${DFTD4_MULTICHARGE_RUNTIME_SOURCE}"
+                            "${DFTD4_DFTD4_RUNTIME_SOURCE}")
+        get_filename_component(_dll_dir "${_dll}" DIRECTORY)
+        list(APPEND _oqp_test_path "PATH=path_list_prepend:${_dll_dir}")
+      endforeach()
+      set_property(TEST oqp_casscf_anhess_${_threads} PROPERTY
+        ENVIRONMENT_MODIFICATION ${_oqp_test_path})
+    endif()
+  endforeach()
+  # Package builds discard their private CMake directory after installation.
+  # Run these context tests while the exact build and module files still exist.
+  # Select them by label: with Ninja on Windows this command runs inside a
+  # nested cmd.exe /C, where a regex's ^ and | are shell metacharacters.
+  add_custom_command(TARGET oqp_test_casscf_anhess POST_BUILD
+    COMMAND ${CMAKE_CTEST_COMMAND} --test-dir ${CMAKE_BINARY_DIR}
+      -C $<CONFIG> --output-on-failure --verbose --no-tests=error
+      -L oqp_casscf_anhess_context
+    VERBATIM)
+  add_executable(oqp_test_int2_rys_pure tests/fortran/int2_pure_driver.F90)
+  target_compile_definitions(oqp_test_int2_rys_pure PRIVATE OQP_ERI_SELFTEST=oqp_test_int2_rys_pure)
+  target_link_libraries(oqp_test_int2_rys_pure PRIVATE oqp)
+  add_dependencies(oqp_test_int2_rys_pure oqp)
+  add_test(NAME oqp_int2_rys_pure COMMAND oqp_test_int2_rys_pure)
+  add_executable(oqp_test_int2_rotaxis_pure tests/fortran/int2_pure_driver.F90)
+  target_compile_definitions(oqp_test_int2_rotaxis_pure PRIVATE OQP_ERI_SELFTEST=oqp_test_int2_rotaxis_pure)
+  target_link_libraries(oqp_test_int2_rotaxis_pure PRIVATE oqp)
+  add_dependencies(oqp_test_int2_rotaxis_pure oqp)
+  add_test(NAME oqp_int2_rotaxis_pure COMMAND oqp_test_int2_rotaxis_pure)
+  # liboqp gets BUILD_RPATH ${DFTD4_INSTALL}/lib (source/CMakeLists.txt), but
+  # BUILD_RPATH does not propagate to the executables that link it, and they
+  # load libdftd4/libmctc-lib directly.  CMake derives their run path from the
+  # full-path D4 libraries only when those files already exist at generate
+  # time, so with a cold externals cache (the D4 stack is built during this
+  # build) the self-tests started by POST_BUILD/ctest failed with
+  # "Library not loaded: @rpath/libdftd4.3.dylib".  Give them the same path.
+  if(ENABLE_DFTD4 AND BUILD_SHARED_LIBS AND NOT WIN32)
+    set_property(TARGET oqp_test_casscf_anhess oqp_test_int2_rys_pure
+                 oqp_test_int2_rotaxis_pure
+                 APPEND PROPERTY BUILD_RPATH "${DFTD4_INSTALL}/lib")
+  endif()
   # The dependency check inspects ELF/Mach-O load commands; it has no Windows
   # equivalent (the DLLs are found by search path, not by recorded SONAME).
   if(BUILD_SHARED_LIBS AND ENABLE_DFTD4 AND NOT WIN32)

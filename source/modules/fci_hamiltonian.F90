@@ -30,6 +30,8 @@ module fci_hamiltonian_mod
 !$ use omp_lib
   implicit none
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: fci_dense_hamiltonian, fci_hamiltonian_diag, fci_hamiltonian_matvec, oqp_dsyevd
 
   integer, parameter :: i8 = c_int64_t
   integer, parameter :: dp = c_double

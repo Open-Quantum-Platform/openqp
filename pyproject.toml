@@ -64,7 +64,6 @@ wheel.packages = ["pyoqp/oqp"]
 [tool.scikit-build.cmake.define]
 USE_LIBINT = "OFF"
 ENABLE_OPENMP = "ON"
-ENABLE_OPENTRAH = "OFF"
 CMAKE_INSTALL_LIBDIR = "lib"
 # LINALG_LIB is intentionally NOT pinned here: CMake's native-BLAS platform
 # policy resolves it per OS/arch -- macOS -> Accelerate ($NEWLAPACK$ILP64);

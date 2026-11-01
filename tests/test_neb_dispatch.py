@@ -6,6 +6,8 @@ import types
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import isolate_modules, stub_module
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -19,14 +21,14 @@ def load_module(name, relative_path):
 
 
 def install_geometric_stubs():
-    sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-    sys.modules.setdefault("oqp.library", types.ModuleType("oqp.library"))
+    stub_module("oqp")
+    stub_module("oqp.library")
     libscipy = types.ModuleType("oqp.library.libscipy")
     libscipy.MECIOpt = object
     libscipy.MECPOpt = object
     libscipy.StateSpecificOpt = object
     sys.modules["oqp.library.libscipy"] = libscipy
-    sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+    stub_module("oqp.utils")
     file_utils = types.ModuleType("oqp.utils.file_utils")
     file_utils.dump_log = lambda *args, **kwargs: None
     sys.modules["oqp.utils.file_utils"] = file_utils
@@ -103,6 +105,7 @@ class FakeMol:
 
 class TestNEBDispatchScaffold(unittest.TestCase):
     def setUp(self):
+        self.addCleanup(isolate_modules("geometric"))
         install_geometric_stubs()
 
     def test_geometric_neb_scaffold_plans_isolated_image_directories(self):

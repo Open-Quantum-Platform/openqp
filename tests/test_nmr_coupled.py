@@ -28,6 +28,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import child_env
+
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "fixtures" / "nmr" / "cgo_reference.json"
 
@@ -60,7 +62,7 @@ def _input(functional):
     grid = "[dftgrid]\nrad_type=becke\n\n" if functional else ""
     return (f"[input]\nsystem=\n{GEOM}\ncharge=0\nruntype=energy\n{fxc}"
             f"basis=sto-3g\nmethod=hf\n\n[guess]\ntype=huckel\n\n"
-            f"[scf]\nmultiplicity=1\ntype=rhf\n\n{grid}"
+            f"[scf]\nmultiplicity=1\ntype=rhf\nverbose=2\n\n{grid}"
             f"[properties]\nscf_prop=nmr\n")
 
 
@@ -76,7 +78,7 @@ class CoupledMagneticResponseTests(unittest.TestCase):
         cls.runs = {}
         env = dict(os.environ)
         env["OPENQP_ROOT"] = cls.root
-        env["PYTHONPATH"] = str(ROOT / "pyoqp") + os.pathsep + env.get("PYTHONPATH", "")
+        env = child_env(env)
         for label, functional, _ in CASES:
             with tempfile.TemporaryDirectory() as wd:
                 inp = Path(wd) / "h2o.inp"

@@ -5,10 +5,9 @@
 !> @author Mohsen Mazaherifar
 !> @date November 2025
 module basis_api
-    use iso_c_binding, only: c_f_pointer, c_ptr, c_double
+    use iso_c_binding, only: c_f_pointer, c_ptr, c_double, c_int
     use iso_fortran_env, only: real64
     use physical_constants, only: UNITS_ANGSTROM
-    use libecpint_wrapper
     implicit none
 
 !###############################################################################
@@ -56,6 +55,8 @@ module basis_api
     type(ecpdata) :: ecp_head
 
     private
+    ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+    public :: print_all_shells
     public append_shell
     public append_ecp
     public map_shell2basis_set

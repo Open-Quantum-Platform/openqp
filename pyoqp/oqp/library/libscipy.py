@@ -477,6 +477,10 @@ class MECIOpt(Optimizer):
         self.metrics['max_step'] = max_step
         self.metrics['rmsd_grad'] = rmsd_grad
         self.metrics['max_grad'] = max_grad
+        # seam-minimization residual (the P*mean-gradient part), consumed by
+        # the lib=oqp MECI-aware step control
+        self.metrics['seam_rmsd'] = rmsd_df_1
+        self.metrics['seam_max'] = max_df_1
 
         # store energy and coordinates
         self.pre_energy = f
@@ -851,6 +855,19 @@ class MECPOpt(Optimizer):
             # helpers with the native target actually being evaluated.
             td_config['multiplicity'] = mult
             self.mol.data.set_tdhf_multiplicity(mult)
+            # The previous solve may have clipped the native state count to
+            # its own response space; each multiplicity starts from the input.
+            self.mol.data.set_tdhf_nstate(self.nstate)
+
+        def check_root(energies, state, mult):
+            # excitation() returns the reference energy followed by the
+            # roots actually solved, which clipping can make fewer than nstate.
+            solved = len(energies) - 1
+            if not 1 <= state <= solved:
+                raise ValueError(
+                    f'MECP state {state} of multiplicity {mult} is not available: '
+                    f'only {solved} roots are solved in that response space '
+                    f'(nstate={self.nstate}). Request a lower state or a larger basis.')
 
         try:
             # set multiplicity for state i
@@ -860,6 +877,7 @@ class MECPOpt(Optimizer):
             dump_log(self.mol, title='PyOQP: PES 1 = %s' % pes1, section='input')
             select_multiplicity(self.imult)
             energies_1 = self.sp.excitation(ref_energy)
+            check_root(energies_1, self.istate, self.imult)
 
             # compute gradient for state i
             self.grad.grads = [self.istate]
@@ -872,6 +890,7 @@ class MECPOpt(Optimizer):
             dump_log(self.mol, title='PyOQP: PES 2 = %s' % pes2, section='input')
             select_multiplicity(self.jmult)
             energies_2 = self.sp.excitation(ref_energy)
+            check_root(energies_2, self.jstate, self.jmult)
 
             # compute gradient for state j
             self.grad.grads = [self.jstate]
@@ -880,9 +899,22 @@ class MECPOpt(Optimizer):
             select_multiplicity(saved_mult)
 
         # compute dftd4
+        # State j follows the roots actually solved for multiplicity i, which
+        # clipping can make fewer than the configured nstate.
+        self.jblock = len(energies_1) - 1
+        # Gradient arrays always carry nstate + 1 rows, so trim each block to
+        # its returned energies before joining; otherwise padded rows of the
+        # first block would sit where state j is read.
         self.mol.energies = np.concatenate((energies_1, energies_2[1:]))
-        self.mol.grads = np.concatenate((grads_1, grads_2[1:]))
-        energies, grads = self.ls.compute(self.mol, grad_list=[self.istate, self.jstate + self.nstate])
+        self.mol.grads = np.concatenate((np.asarray(grads_1)[:len(energies_1)],
+                                         np.asarray(grads_2)[1:len(energies_2)]))
+        # Label each block in its own multiplicity: the joined array would
+        # otherwise read as one ladder and print T0 as S{nstate}.
+        state_blocks = ((self.imult, self.jblock),
+                        (self.jmult, len(energies_2) - 1))
+        energies, grads = self.ls.compute(
+            self.mol, grad_list=[self.istate, self.jstate + self.jblock],
+            state_blocks=state_blocks)
         self.mol.energies = energies
         self.mol.grads = grads
 
@@ -894,13 +926,14 @@ class MECPOpt(Optimizer):
         """Return the two crossing states as (E_i, E_j, G_i, G_j).
 
         State j lives in the second multiplicity block, which one_step appends
-        after the nstate energies of the first.
+        after the roots solved for the first (nstate unless clipping reduced it).
         """
+        jblock = getattr(self, 'jblock', self.nstate)
         energy_i = energies[self.istate]
-        energy_j = energies[self.jstate + self.nstate]
+        energy_j = energies[self.jstate + jblock]
 
         grad_i = grads[self.istate].reshape(-1)
-        grad_j = grads[self.jstate + self.nstate].reshape(-1)
+        grad_j = grads[self.jstate + jblock].reshape(-1)
 
         return energy_i, energy_j, grad_i, grad_j
 
@@ -918,8 +951,17 @@ class MECPOpt(Optimizer):
 
         return energy_j, energy_i, grad_j, grad_i
 
-    def record(self, coordinates, f, df, gap_e, gap_term):
-        """Store metrics, append the status row, and return (f, df)."""
+    def record(self, coordinates, f, df, gap_e, gap_term, mean_e):
+        """Store metrics, append the status row, and return (f, df).
+
+        ``f`` and ``df`` are the search objective and its gradient, which is
+        what the convergence test reads: the augmented Lagrangian, the SQP
+        Lagrangian at the current multiplier, or a penalty function.  None of
+        them is an energy of the system away from the seam (the SQP multiplier
+        alone can move f by 0.1 Eh at a 2 mEh gap), so the physical
+        mean energy 0.5 * (E_i + E_j) is recorded beside it rather than
+        replaced by it.
+        """
         de = f - self.pre_energy
         rmsd_step = np.mean((coordinates - self.pre_coord) ** 2) ** 0.5
         max_step = np.amax(np.abs(coordinates - self.pre_coord))
@@ -934,13 +976,16 @@ class MECPOpt(Optimizer):
         self.metrics['max_step'] = max_step
         self.metrics['rmsd_grad'] = rmsd_grad
         self.metrics['max_grad'] = max_grad
+        self.metrics['energy'] = mean_e
+        self.metrics['objective'] = f
 
         # store energy and coordinates
         self.pre_energy = f
         self.pre_coord = coordinates.copy()
         dump_data(
             self.mol,
-            (self.itr, self.atoms, coordinates, f, de, gap_e, rmsd_step, max_step, rmsd_grad, max_grad, rmsd_gap, max_gap),
+            (self.itr, self.atoms, coordinates, mean_e, f, de, gap_e, rmsd_step, max_step,
+             rmsd_grad, max_grad, rmsd_gap, max_gap),
             title='MECP',
             fpath=self.mol.log_path,
         )
@@ -1004,7 +1049,8 @@ class MECPOpt(Optimizer):
         self.mu_scaled = 2.0 * self.mu / norm
         self.metrics['lagrange'] = lagrange
 
-        return self.record(coordinates, f, df, gap_e, gap_term)
+        return self.record(coordinates, f, df, gap_e, gap_term,
+                           mean_e=(energy_i + energy_j) * 0.5)
 
     def sqp(self, coordinates, energies, grads):
         """
@@ -1047,7 +1093,8 @@ class MECPOpt(Optimizer):
         df = mean_g + gap_term
         self.metrics['lagrange'] = self.lagrange
 
-        return self.record(coordinates, f, df, gap_e, gap_term)
+        return self.record(coordinates, f, df, gap_e, gap_term,
+                           mean_e=self.sqp_point['mean_e'])
 
     def penalty(self, coordinates, energies, grads):
         """
@@ -1087,7 +1134,8 @@ class MECPOpt(Optimizer):
 
         self.metrics['sigma'] = self.sigma
 
-        return self.record(coordinates, f, df, gap_e, gap_term)
+        return self.record(coordinates, f, df, gap_e, gap_term,
+                           mean_e=(energy_i + energy_j) * 0.5)
 
     def quad(self, coordinates, energies, grads):
         """
@@ -1113,7 +1161,8 @@ class MECPOpt(Optimizer):
         df2 = 2 * gap_e * gap_g
         df = df1 + self.weights * df2
 
-        return self.record(coordinates, f, df, gap_e, df2)
+        return self.record(coordinates, f, df, gap_e, df2,
+                           mean_e=(energy_i + energy_j) * 0.5)
 
     def check_convergence(self):
         # write convergence to log
@@ -1419,10 +1468,12 @@ class SQPMECPOpt(MECPOpt):
             counter, budget = self.itr, self.maxit
             self.maxit = counter + 1
 
-            def quiet_record(coords, value, gradient, gap, gap_term):
+            def quiet_record(coords, value, gradient, gap, gap_term, mean_e):
                 # Refresh the metrics without appending a status row: this is
                 # the geometry the search already visited, not a new step.
                 self.metrics['gap'] = gap
+                self.metrics['energy'] = mean_e
+                self.metrics['objective'] = value
                 self.metrics['rmsd_grad'] = np.mean(gradient ** 2) ** 0.5
                 self.metrics['max_grad'] = np.amax(np.abs(gradient))
                 return value, gradient

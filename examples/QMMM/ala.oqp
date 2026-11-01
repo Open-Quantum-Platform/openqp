@@ -1,2 +1,13 @@
-rks/bhhlyp/6-31gs qmmm_flag=true dftgrid(rad_type=becke)
-geom="ala.pdb 9 10 17 18 19"
+# Minimal QM/MM smoke deck: one step of ground-state QM/MM dynamics, i.e. the
+# embedded QM/MM energy and forces at the input geometry.
+# QM = the C-terminal amide of the alanine dipeptide, selected once with
+# qmmm(qm_atoms=...) (0-based PDB order); the QM molecule is built from that
+# list, with one link H appended per cut bond.  Requires OpenMM.
+#
+# This used to be a runtype=energy deck.  The plain single-point route never
+# builds the ESPF embedding records (OQP::ESPF_CORR / OQP::POTQM) -- only the
+# force-based QM/MM driver behind md(...), optimize(...) and namd(...) does --
+# so it aborted inside the SCF.  One md step is the supported spelling.
+rks/bhhlyp/6-31g* md(nstep=1,dt=0.5,velocity=zero,ensemble=nve) dftgrid(rad_type=becke)
+qmmm(forcefield_files="amber14-all.xml",qm_atoms="8,9,16,17,18",cutoff=NoCutoff)
+geom="ala.pdb"

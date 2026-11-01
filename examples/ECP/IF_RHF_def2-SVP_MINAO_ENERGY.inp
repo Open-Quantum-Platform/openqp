@@ -1,0 +1,23 @@
+# IF RHF/def2-SVP energy from the MINAO guess with the def2 ECP on iodine
+# (28 core electrons removed from the MINAO atomic density).
+[input]
+system=
+   53   0.000000000   0.000000000   0.000000000
+    9   0.100000000   0.200000000   1.910000000
+charge=0
+runtype=energy
+method=hf
+basis=def2-svp
+ispher=true
+
+[guess]
+type=minao
+
+[scf]
+conv=1.0e-10
+type=rhf
+multiplicity=1
+maxit=200
+
+[symmetry]
+enabled=false

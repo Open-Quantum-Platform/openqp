@@ -539,6 +539,18 @@ class TestSymmetryMetadata(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'electronic-model configuration/state'):
                 molecule.read_freqs()
 
+            # tdhf.tlf only selects the cross-geometry state-overlap evaluation
+            # (its default changed 2 -> 0); it must not invalidate a Hessian,
+            # while every other response setting still binds the cache.
+            molecule.config = {'tdhf': {'type': 'mrsf', 'tlf': 2}}
+            molecule.energies = np.array([-1.23])
+            molecule.save_freqs(0)
+            molecule.config = {'tdhf': {'type': 'mrsf', 'tlf': 0}}
+            molecule.read_freqs()
+            molecule.config = {'tdhf': {'type': 'rpa', 'tlf': 0}}
+            with self.assertRaisesRegex(ValueError, 'electronic-model configuration/state'):
+                molecule.read_freqs()
+
             molecule.config = {}
             corrupt = dict(data)
             corrupt['freqs'] = [float('nan')]

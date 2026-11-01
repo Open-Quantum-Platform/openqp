@@ -1,2 +1,2 @@
-rks/bhhlyp/6-31g* opt(maxit=10,coordsys=tric)
+rks/bhhlyp/6-31g* opt(maxit=10,model_hessian=constant,coordsys=tric)
 geom="../geometries/H2O-781cba5cd72b.xyz"

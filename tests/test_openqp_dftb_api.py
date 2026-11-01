@@ -195,7 +195,9 @@ class TestOpenQPDftbAPI(unittest.TestCase):
             .molecule("H 0 0 0; H 0 0 0.74")
             .dftb(response_type="mrsf", parameter_path="mio-1-1")
         )
-        job.workflow.namd(nstep=10, dt=0.5, init_state="S1")
+        job.workflow.namd(
+            scheme="Overlap", nstep=10, dt=0.5, init_state="S1"
+        )
 
         config = job.to_input_dict()
         self.assertEqual(config["input"]["runtype"], "namd")

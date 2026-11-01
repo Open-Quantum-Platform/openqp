@@ -1,0 +1,3 @@
+rks/bhhlyp/lanl2dz ispher=true grad guess(type=sap) symmetry(enabled=false)
+scf(conv=1e-10,maxit=200) dftgrid(pruned=none)
+geom="../geometries/OSi-541d7be8c8c4.xyz"

@@ -1,0 +1,25 @@
+# TDDFT/6-31G*/B3LYP5 closed-shell triplet excitation energies of H2O
+# Conventional RPA on the closed-shell RKS reference ([scf] type=rhf,
+# multiplicity=1); [tdhf] multiplicity=3 selects the triplet response
+# (no Coulomb term, f_aa - f_ab XC kernel). Energies only.
+[input]
+system=
+   8   0.000000000   0.000000000  -0.041061554
+   1  -0.533194329   0.533194329  -0.614469223
+   1   0.533194329  -0.533194329  -0.614469223
+charge=0
+runtype=energy
+basis=6-31g*
+functional=b3lyp5
+method=tdhf
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=1
+type=rhf
+
+[tdhf]
+nstate=3
+multiplicity=3

@@ -10,6 +10,7 @@ are idealized and SCF iteration counts may differ by one).
 """
 
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -113,7 +114,8 @@ def run_case(workdir, name, content):
 
 
 def main():
-    workdir = sys.argv[1] if len(sys.argv) > 1 else '/tmp/oqp_petite_bench'
+    workdir = sys.argv[1] if len(sys.argv) > 1 else tempfile.mkdtemp(prefix='oqp_petite_bench_')
+    print(f'workdir: {workdir}')
     failures = []
 
     for name, (n_rings, extra, basis) in CASES.items():

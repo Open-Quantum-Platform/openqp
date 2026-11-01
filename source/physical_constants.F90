@@ -34,6 +34,9 @@ module physical_constants
   real(real64), public, parameter :: N_AVOGADRO = 6.02214076d+23
 
   real(real64), public, parameter :: FINE_STRUCTURE = 7.2973525693d-3
+  real(real64), public, parameter :: SPEED_OF_LIGHT = 299792458.0d0
+  real(real64), public, parameter :: PLANCK = 6.62607015d-34
+  real(real64), public, parameter :: ATOMIC_MASS_UNIT = 1.66053906660d-27
 
 !   Internal default units are atomic units (length: Bohr, energy: Hartree)
 !   Units of length
@@ -56,6 +59,12 @@ module physical_constants
   real(real64), public, parameter :: AU_TO_DEBYE = UNITS_DIPOLE/DEBYE
   real(real64), public, parameter :: AU_TO_BUCK = UNITS_QUADRUPOLE/BUCKINGHAM
   real(real64), public, parameter :: AU_TO_OCT = UNITS_OCTOPOLE/CGS_OCT
+
+!  IR intensity: A = N_A / (12 eps0 c^2) |d mu / d Q|^2 (SI).  With e^2/(4 pi eps0) = alpha hbar c
+!  this is N_A alpha h / (6 c amu) per e^2/amu, i.e. for a dipole derivative in atomic units
+!  (e*bohr/bohr) and a normal coordinate Q in sqrt(amu)*bohr: 974.880 km/mol.
+  real(real64), public, parameter :: IR_INTENSITY_AU_TO_KM_MOL = &
+      N_AVOGADRO*FINE_STRUCTURE*PLANCK/(6.0d0*SPEED_OF_LIGHT*ATOMIC_MASS_UNIT)/1000.0d0
 
 !   COMPATIBILITY:
   real(real64), public, parameter :: AU2ANG = BOHR_TO_ANGSTROM

@@ -1,6 +1,23 @@
 """Input parser"""
 import configparser
 
+
+SECTION_OPTION_ALIASES = {
+    'md': {
+        'nacme_gate': 'nacme_policy',
+        'nacme_gate_invariant_tol': 'nacme_policy_invariant_tol',
+        'nacme_gate_abs_tol': 'nacme_policy_abs_tol',
+        'nacme_gate_rel_tol': 'nacme_policy_rel_tol',
+        'nacme_gate_consecutive': 'nacme_policy_consecutive',
+        'nve_gate': 'nve_policy',
+        'nve_gate_abs_tol': 'nve_policy_abs_tol',
+        'nve_gate_step_tol': 'nve_policy_step_tol',
+        'nve_gate_transition_tol': 'nve_policy_transition_tol',
+        'nve_gate_consecutive': 'nve_policy_consecutive',
+    },
+}
+
+
 class OQPConfigParser(configparser.ConfigParser):
     """Extends configparser with validation schema"""
     def __init__(self, *args, schema=None, **kwargs):
@@ -17,9 +34,32 @@ class OQPConfigParser(configparser.ConfigParser):
 
     def print_config(self):
         """Print resulting config"""
+        self._normalize_option_aliases()
         for section in self.sections():
             for option, value in self[section].items():
                 print(f'{section}.{option}={value}')
+
+    def _normalize_option_aliases(self):
+        """Lower legacy aliases to canonical public option names."""
+        if not self.schema:
+            return
+        for section, aliases in SECTION_OPTION_ALIASES.items():
+            if not self.has_section(section):
+                continue
+            for legacy, public in aliases.items():
+                if not self.has_option(section, legacy):
+                    continue
+                if public not in self.schema.get(section, {}):
+                    continue
+                default = str(self.schema[section][public]['default'])
+                current = self.get(section, public, fallback=default)
+                if current != default:
+                    raise ValueError(
+                        f"Options {section}.{public} and legacy "
+                        f"{section}.{legacy} specify the same policy; "
+                        f"use {section}.{public}"
+                    )
+                self[section][public] = self[section].pop(legacy)
 
     def strip_schema(self):
         """Convert input schema to dictionary used by OQP"""
@@ -33,6 +73,7 @@ class OQPConfigParser(configparser.ConfigParser):
 
     def validate(self):
         """Validate configuration"""
+        self._normalize_option_aliases()
         config = {}
         if not self.has_section('input'):
             raise ValueError("Missing section [input]")

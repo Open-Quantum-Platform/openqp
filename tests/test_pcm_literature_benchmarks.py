@@ -33,6 +33,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import child_env
+
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "tests" / "data" / "pcm_literature_benchmarks.json"
 
@@ -123,7 +125,7 @@ def _run(text: str):
         inp.write_text(text)
         env = dict(os.environ)
         env["OPENQP_ROOT"] = str(ROOT)
-        env["PYTHONPATH"] = str(ROOT / "pyoqp") + os.pathsep + env.get("PYTHONPATH", "")
+        env = child_env(env)
         env["OMP_NUM_THREADS"] = "1"
         proc = subprocess.run(
             [sys.executable, "-m", "oqp.pyoqp", str(inp)],

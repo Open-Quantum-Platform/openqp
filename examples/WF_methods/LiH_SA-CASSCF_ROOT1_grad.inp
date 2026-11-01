@@ -2,7 +2,7 @@
 #
 # Same LiH CAS(2,2) two-state average as LiH_SA-CASSCF_ANALYTIC_grad.inp, but
 # [casscf] gradient_state=1 asks for the derivative of E_1 itself.  This is
-# Path B of docs/sa_casscf_gradients.md, and it is a genuinely different
+# Path B of openqp-devkit docs/sa_casscf_gradients.md, and it is a genuinely different
 # calculation, not a relabelling:
 #
 #   * E_1 is stationary against CI variation (its vector is an eigenvector of

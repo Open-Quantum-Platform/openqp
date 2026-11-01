@@ -1,0 +1,3 @@
+rhf/sto-3g
+ts(S0,search="qst3",product="NH3_QST_product.xyz",guess="NH3_QST_guess.xyz",maxit=3,hessian="model")
+geom="NH3_QST_reactant.xyz"

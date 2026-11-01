@@ -77,3 +77,17 @@ job.run()
 ```
 
 `job.ccsd(...)` is the same call without the triples.
+
+## External CCpy library (run-only)
+
+`ccpy_h2o.py` runs CCSD and CR-CC(2,3) from the external
+[CCpy](https://github.com/piecuch-group/ccpy) package (GPL-3.0) on the RHF
+orbitals of `h2o_rhf_sto-3g_ccpy.inp`. CCpy is not part of OpenQP:
+`oqp.interop.ccpy` downloads and builds a pinned commit on first use (Python
+>= 3.10, git, a Fortran compiler and OpenBLAS; `OPENQP_CCPY_AUTO_INSTALL=0`
+forbids the download). CCpy also provides CC(P;Q), EOM-CC, IP/EA-EOM-CC and
+spin-flip EOM-CC through the returned driver.
+
+```bash
+python ccpy_h2o.py h2o_rhf_sto-3g_ccpy.inp
+```

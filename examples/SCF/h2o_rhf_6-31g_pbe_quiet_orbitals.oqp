@@ -1,0 +1,2 @@
+rks/pbe/6-31g guess(save_mol=true) dftgrid(pruned=none) scf(verbose=0)
+geom="../geometries/H2O-0381125c86f2.xyz"

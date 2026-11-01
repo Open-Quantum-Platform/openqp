@@ -11,7 +11,17 @@
 !>          spherical component, orthonormal against the intra-shell metric
 !>          S of unit-normalized Cartesian Gaussians (B S B^T = I). The
 !>          matrices below were generated from that reference and are
-!>          re-verified at runtime by c2s_selftest().
+!>          re-verified at runtime by c2s_selftest(). The h and i tables
+!>          (l = 5, 6) are the correctly rounded values of the c2s_build()
+!>          expansion, evaluated in 60-digit decimal arithmetic;
+!>          c2s_selftest() also compares them with c2s_build().
+!>
+!>          This module holds no mutable state. Its routines are called from
+!>          OpenMP integral loops (kin_ovl_ints, ERI shell quartets), and the
+!>          first call in a process is normally made there by several threads
+!>          at once. A table built lazily on first use into a SAVE variable
+!>          lets a second thread read it after its allocation but before its
+!>          copy, which corrupted S, T and the ERIs for l = 5 shells.
 !>
 !>          The transform is applied to integrals that are already in the
 !>          unit-normalized Cartesian basis (e.g. 2e blocks AFTER the
@@ -68,6 +78,99 @@ module cart2sph
         7.395099728874520e-01_dp,  7.395099728874520e-01_dp,  0.000000000000000e+00_dp,  0.000000000000000e+00_dp,  0.000000000000000e+00_dp,  0.000000000000000e+00_dp,  0.000000000000000e+00_dp,  0.000000000000000e+00_dp,  0.000000000000000e+00_dp, -1.299038105676658e+00_dp,  0.000000000000000e+00_dp,  0.000000000000000e+00_dp,  0.000000000000000e+00_dp,  0.000000000000000e+00_dp,  0.000000000000000e+00_dp &
      ], shape=[15,9])
 
+  ! l=5 (H): Cart(21) -> Sph(11); column i = Cartesian coeffs of spherical i (m=-l..+l)
+  real(dp), parameter :: C2S_H(21,11) = reshape([ &
+        0.0e+00_dp,  7.01560760020114e-01_dp,  0.0e+00_dp,  1.1692679333668567e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, -1.5309310892394863e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  1.118033988749895e+00_dp, -1.118033988749895e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  5.229125165837972e-01_dp,  0.0e+00_dp, -5.229125165837972e-01_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, -2.2821773229381923e-01_dp, -9.128709291752769e-01_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  1.224744871391589e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp, -6.454972243679028e-01_dp, -6.454972243679028e-01_dp,  1.2909944487358056e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  4.841229182759271e-01_dp,  0.0e+00_dp,  1.613743060919757e-01_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  1.2909944487358056e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  2.1128856368212914e-01_dp, -1.267731382092775e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, -5.669467095138409e-01_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  1.0e+00_dp,  0.0e+00_dp,  6.25e-01_dp,  0.0e+00_dp,  6.25e-01_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, -1.0910894511799618e+00_dp, &
+       -1.0910894511799618e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  3.6596252735569995e-01_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        4.841229182759271e-01_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  1.613743060919757e-01_dp,  0.0e+00_dp, &
+        1.2909944487358056e+00_dp,  0.0e+00_dp,  2.1128856368212914e-01_dp, -1.267731382092775e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, -5.669467095138409e-01_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, -8.539125638299665e-01_dp,  0.0e+00_dp,  8.539125638299665e-01_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  1.118033988749895e+00_dp, &
+       -1.118033988749895e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+       -5.229125165837972e-01_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  5.229125165837972e-01_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  2.2821773229381923e-01_dp,  9.128709291752769e-01_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, -1.224744871391589e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  7.39509972887452e-01_dp,  0.0e+00_dp,  7.39509972887452e-01_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, -1.299038105676658e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        7.01560760020114e-01_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  1.1692679333668567e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp, -1.5309310892394863e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp &
+     ], shape=[21,11])
+
+  ! l=6 (I): Cart(28) -> Sph(13); column i = Cartesian coeffs of spherical i (m=-l..+l)
+  real(dp), parameter :: C2S_I(28,13) = reshape([ &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  1.2151388809514738e+00_dp,  0.0e+00_dp,  1.2151388809514738e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, -1.976423537605237e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  7.01560760020114e-01_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  1.1692679333668567e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp, -1.5309310892394863e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, -5.982930264130992e-01_dp,  0.0e+00_dp,  5.982930264130992e-01_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  1.3055824196677337e+00_dp,  0.0e+00_dp, -1.3055824196677337e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  8.192464664112216e-01_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp, -8.192464664112216e-01_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, -1.0660035817780522e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp, -3.5754847096709713e-01_dp,  0.0e+00_dp,  1.4301938838683885e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  2.7308215547040715e-01_dp,  0.0e+00_dp,  2.7308215547040715e-01_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  1.4564381625088383e+00_dp,  2.6650089544451305e-01_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp, -9.534625892455924e-01_dp,  0.0e+00_dp, -9.534625892455924e-01_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  8.635615996346968e-01_dp, &
+        0.0e+00_dp,  1.381698559415515e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  2.878538665448989e-01_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, -1.6854996561581053e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  3.768891807222045e-01_dp,  0.0e+00_dp, -7.53778361444409e-01_dp,  0.0e+00_dp,  0.0e+00_dp, &
+       -3.125e-01_dp, -3.125e-01_dp,  1.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp, -1.631978024584667e-01_dp,  9.791868147508004e-01_dp, -1.631978024584667e-01_dp,  9.791868147508004e-01_dp, -1.3055824196677337e+00_dp, &
+       -1.3055824196677337e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  5.733530903673287e-01_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  8.635615996346968e-01_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        1.381698559415515e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  2.878538665448989e-01_dp,  0.0e+00_dp,  0.0e+00_dp, -1.6854996561581053e+00_dp,  0.0e+00_dp, &
+        3.768891807222045e-01_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, -7.53778361444409e-01_dp,  0.0e+00_dp, &
+        4.5285552331841994e-01_dp, -4.5285552331841994e-01_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  7.88320279858614e-02_dp, -1.2613124477737825e+00_dp, -7.88320279858614e-02_dp,  1.2613124477737825e+00_dp,  1.2613124477737825e+00_dp, &
+       -1.2613124477737825e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, -8.192464664112216e-01_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  8.192464664112216e-01_dp,  0.0e+00_dp,  0.0e+00_dp,  1.0660035817780522e+00_dp,  0.0e+00_dp, &
+        3.5754847096709713e-01_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, -1.4301938838683885e+00_dp,  0.0e+00_dp, &
+       -4.9607837082461076e-01_dp, -4.9607837082461076e-01_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  4.317807998173484e-01_dp,  8.635615996346968e-01_dp,  4.317807998173484e-01_dp,  8.635615996346968e-01_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, -1.5169496905422948e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  7.01560760020114e-01_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  1.1692679333668567e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+       -1.5309310892394863e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        6.716932893813962e-01_dp, -6.716932893813962e-01_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp, -1.7539019000502851e+00_dp,  0.0e+00_dp,  1.7539019000502851e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp, &
+        0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp,  0.0e+00_dp &
+     ], shape=[28,13])
+
 contains
 
   !> @brief AO component count for a shell, honoring its harmonic flag.
@@ -87,7 +190,6 @@ contains
   subroutine c2s_get(l, b)
     integer, intent(in) :: l
     real(dp), allocatable, intent(out) :: b(:,:)
-    real(dp), allocatable, save :: c2s_h(:,:), c2s_i(:,:)
     select case (l)
     case (2)
       b = C2S_D
@@ -96,11 +198,9 @@ contains
     case (4)
       b = C2S_G
     case (5)
-      if (.not. allocated(c2s_h)) c2s_h = c2s_build(l)
-      b = c2s_h
+      b = C2S_H
     case (6)
-      if (.not. allocated(c2s_i)) c2s_i = c2s_build(l)
-      b = c2s_i
+      b = C2S_I
     case default
       error stop 'cart2sph: requested angular momentum exceeds BAS_MXANG'
     end select
@@ -359,7 +459,7 @@ contains
 
   !> @brief Transform a rectangular 1e shell-pair block that is already in the
   !>        unit-normalized Cartesian convention.
-  !> @details This is used by backends such as libecpint that return normalized
+  !> @details This is for backends that return normalized
   !>          Cartesian matrices directly. Unlike cart2sph_mat, this does not
   !>          fold in shells_pnrm2 before applying the c2s coefficients.
   subroutine cart2sph_mat_unit(blk, l_fast, pure_fast, l_slow, pure_slow)
@@ -548,6 +648,7 @@ contains
       nc = NUM_CART_BF(l)
       ns = NUM_SPH_BF(l)
       call c2s_get(l, b)
+      if (l >= 5) max_err = max(max_err, maxval(abs(b - c2s_build(l))))
       allocate(s(nc, nc))
       do i = 1, nc
         do j = 1, nc

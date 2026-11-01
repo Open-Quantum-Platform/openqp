@@ -1,0 +1,53 @@
+# MRSF-TDDFT/BHHLYP/6-31G* properties of water, with spin-orbit coupling as a
+# step of the run: the singlet manifold is solved by the properties driver and
+# the triplet by SOC, and each publishes its own energies and gradients.
+[input]
+system=
+ 8   0.000000000   0.000000000  -0.041061554
+ 1  -0.533194329   0.533194329  -0.614469223
+ 1   0.533194329  -0.533194329  -0.614469223
+functional=bhhlyp
+charge=0
+method=tdhf
+basis=6-31G*
+runtype=prop
+# Dispersion on: each spin manifold must pick it up exactly once, which is only
+# a checked property while the correction is non-zero.
+d4=true
+# 2e SOC is not yet available with spherical-harmonic AOs, so this deck stays on
+# the Cartesian path like the standalone runtype=soc examples.
+ispher=false
+
+[guess]
+type=huckel
+save_mol=True
+
+[scf]
+type=rohf
+maxit=200
+multiplicity=3
+converger_type=soscf
+conv=1e-8
+
+[tdhf]
+type=mrsf
+nstate=2
+maxit=100
+maxit_zv=100
+nvdav=100
+zvconv=1.0e-10
+
+[dftgrid]
+rad_npts=96
+ang_npts=302
+pruned=
+
+[properties]
+export=true
+soc=true
+nac=nacme
+back_door=true
+grad_s=2
+grad_t=2
+
+[nac]

@@ -36,7 +36,6 @@ save_molden=false
 
 def _runtime_available():
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         import oqp  # noqa: F401
         from oqp.pyoqp import Runner  # noqa: F401
@@ -108,7 +107,7 @@ class NativeGuessZeroBetaTest(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, __file__, "--probe", guess_type, scf_type],
             cwd=ROOT,
-            env={**os.environ, "OPENQP_ROOT": str(ROOT), "OMP_NUM_THREADS": "1"},
+            env={**os.environ, "OMP_NUM_THREADS": "1"},
             capture_output=True,
             text=True,
         )

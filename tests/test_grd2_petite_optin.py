@@ -92,8 +92,9 @@ class OnlySymmetricDensitiesOptIn(unittest.TestCase):
         for path in OPTED_IN:
             with self.subTest(path=path):
                 calls = call_arguments(path, 'grd2_driver')
-                self.assertEqual(len(calls), 1, path)
-                self.assertRegex(calls[0], r'petite\s*=\s*\.true\.', path)
+                opted = [call for call in calls if 'petite' in call]
+                self.assertEqual(len(opted), 1, path)
+                self.assertRegex(opted[0], r'petite\s*=\s*\.true\.', path)
 
     def test_cphf_and_displaced_geometry_callers_do_not(self):
         for path in NOT_OPTED_IN:

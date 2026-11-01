@@ -1,0 +1,46 @@
+# Analytic CASSCF Hessian with 400 determinants: executes the direct excitation
+# products selected above the 4 MiB excitation-stack storage crossover.
+[input]
+system=
+   O   0.000000000   0.000000000   0.117300000
+   H   0.000000000   0.757200000  -0.469200000
+   H   0.000000000  -0.757200000  -0.469200000
+charge=0
+runtype=energy
+basis=6-31g
+method=casscf
+
+[guess]
+type=hcore
+
+[scf]
+multiplicity=1
+type=rhf
+maxit=100
+forced_attempt=3
+save_molden=false
+
+[properties]
+scf_prop=
+
+[cas]
+active_electrons=6
+active_orbitals=6
+frozen_core=2
+orbital_source=rhf
+sort_orbitals=energy
+max_det=500
+max_memory=512
+
+[ci]
+nroot=1
+solver=dense
+eig_tol=1.0e-10
+integral_backend=native
+target_spin=any
+root_tracking=energy
+
+[casscf]
+max_macro_iterations=50
+converger=ah
+hessian=analytic

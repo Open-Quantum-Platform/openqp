@@ -24,3 +24,11 @@ GAS_CONSTANT = 8.3144621  # J / K / mol
 PLANCK_CONSTANT = 6.62606957e-34  # J * s
 BOLTZMANN_CONSTANT = 1.3806488e-23  # J / K
 AVOGADRO_CONSTANT = 6.0221415e23  # 1 / mol
+
+HA_TO_WAVENUM = 219474.6313708  # cm-1, source/physical_constants.F90
+FINE_STRUCTURE = 7.2973525693e-3  # source/physical_constants.F90
+
+#: Multiplier for the raw spin-orbits of ``OQP::soc_hsoc_re/_im``, which the
+#: native kernel stores in atomic units WITHOUT the alpha^2/2 prefactor
+#: (source/modules/soc_mrsf.F90).  Matching the value the SOC log table prints.
+SOC_AU_TO_WAVENUM = 0.5 * FINE_STRUCTURE ** 2 * HA_TO_WAVENUM  # ~5.8438 cm-1/a.u.

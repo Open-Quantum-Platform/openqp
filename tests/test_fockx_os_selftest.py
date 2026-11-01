@@ -16,11 +16,11 @@ Skipped unless the compiled OpenQP runtime is importable.
 """
 
 import os
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
-ROOT = Path(__file__).resolve().parents[1]
-SELFTEST_OUT = Path("/tmp/fockx_os_selftest.out")
 
 INPUT_TMPL = """[input]
 system=
@@ -40,7 +40,6 @@ type={scftype}
 
 def _runtime_available():
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         import oqp  # noqa: F401
         from oqp.pyoqp import Runner  # noqa: F401
@@ -51,25 +50,33 @@ def _runtime_available():
 
 @unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime not available")
 class FockxOsSelfTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="oqp_fockx_os_")
+        self.addCleanup(tmp.cleanup)
+        self.tmpdir = Path(tmp.name)
+        # The native self-test writes its report to $OQP_SELFTEST_DIR
+        # (source/io/selftest_output.F90); keep it private to this test.
+        env = mock.patch.dict(os.environ, {"OQP_SELFTEST_DIR": str(self.tmpdir)})
+        env.start()
+        self.addCleanup(env.stop)
+
     def _run_case(self, scftype):
         import oqp
         from oqp.pyoqp import Runner
 
-        workdir = Path(f"/tmp/oqp_fockx_os_{scftype}")
-        workdir.mkdir(exist_ok=True)
+        workdir = self.tmpdir / scftype
+        workdir.mkdir()
         inp = workdir / "oh.inp"
         inp.write_text(INPUT_TMPL.format(scftype=scftype))
-
-        if SELFTEST_OUT.exists():
-            SELFTEST_OUT.unlink()
 
         runner = Runner(project=f"oh_{scftype}", input_file=str(inp),
                         log=str(workdir / "oh.log"))
         runner.run()
         oqp.fockx_os_selftest(runner.mol)
+        report = self.tmpdir / "fockx_os_selftest.out"
 
-        self.assertTrue(SELFTEST_OUT.exists(), "self-test produced no output file")
-        result = SELFTEST_OUT.read_text()
+        self.assertTrue(report.exists(), "self-test produced no output file")
+        result = report.read_text()
         self.assertIn("FOCKX_OS_SELFTEST PASS", result, msg=result)
 
     def test_uhf_contraction_matches_finite_difference(self):

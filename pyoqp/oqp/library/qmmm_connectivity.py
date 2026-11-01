@@ -25,6 +25,8 @@ identically.
 
 from __future__ import annotations
 
+import os
+
 from dataclasses import dataclass
 
 import numpy as np
@@ -207,15 +209,14 @@ def project_link_gradient(grad_link, g):
 #
 # NOTE (ESPF): OpenQP's electrostatic embedding is ESPF (Huix-Rotllant & Ferre,
 # JCTC 2021, 17, 538). There the MM potential phi_A couples to the QM *atomic
-# charge operators* Q_A (H += sum_A phi_A Q_A, eq 6), NOT to the raw electron
-# density via 1/|r-R_M| point-charge integrals. That coarse-grained coupling
-# already suppresses the electron spill-out / over-polarization that plagues
-# density-based embedding, which is why the ESPF papers use the FULL MM charges
-# with "no scaling of the QM-MM electrostatic interactions" even at a covalent
-# protein boundary (cryptochrome). So for ESPF the DEFAULT is full-field
-# ('none'); RCD/RC/Z1 are OPTIONAL refinements (physically motivated - they keep
-# the MM charge/dipole faithful near the cut - but a departure from the validated
-# ESPF baseline, so opt-in).
+# charge operators* Q_A (H += sum_A phi_A Q_A, eq 6), not to the raw electron
+# density via 1/|r-R_M| point-charge integrals.  That coupling does not remove
+# the M1 problem at a covalent cut: the link hydrogen sits on the cut bond
+# 0.4-0.5 A from M1, phi at the link atom grows as q_M1/r, and the energy is
+# unbounded below as charge moves onto the link atom and the frontier atom
+# approaches M1.  Measured in issue #551 (rhodopsin Lys296 CB|CA) and on the
+# ACE CH3|C cut of the alanine dipeptide (see DEFAULT_FRONTIER_SCHEME), so the
+# default is RCD and 'none' is kept for comparisons only.
 
 
 @dataclass(frozen=True)
@@ -253,7 +254,7 @@ def redistribute_frontier_charges(frontier, charge_of, scheme="rcd"):
         MM force-field charge (e) of an absolute atom index.
     scheme : {'rcd', 'rc', 'z1', 'none'}
         Redistribution scheme (see module notes above). ``'none'`` disables it
-        (full-field embedding, the pre-RCD behaviour).
+        and keeps the full M1 charge (unbounded at a covalent cut, #551).
 
     Returns
     -------
@@ -291,7 +292,7 @@ def redistribute_frontier_charges(frontier, charge_of, scheme="rcd"):
 
 
 def assemble_embedding_sites(mm_idx, mm_charges, mm_positions,
-                             deleted, delta_q, virtuals):
+                             deleted, delta_q, virtuals, min_image=None):
     """Assemble the embedding point-charge set the QM density is embedded in.
 
     Combines the raw MM atoms with the frontier redistribution from
@@ -346,9 +347,97 @@ def assemble_embedding_sites(mm_idx, mm_charges, mm_positions,
     for v in virtuals:
         m1, m2 = v.hosts
         w0, w1 = v.weights
-        positions.append(w0 * pos_of[m1] + w1 * pos_of[m2])
+        # Under PBC the M1-M2 bond may cross the box boundary: build the
+        # virtual site from the minimum-image displacement so it sits on the
+        # bonded midpoint rather than half a box away.
+        d = np.asarray(pos_of[m2], dtype=float) - np.asarray(pos_of[m1], dtype=float)
+        if min_image is not None:
+            d = min_image(d)
+        positions.append(np.asarray(pos_of[m1], dtype=float) + w1 * d)
         charges.append(v.charge)
         scatter.append(((m1, w0), (m2, w1)))
     return (np.asarray(charges, dtype=float),
             np.asarray(positions, dtype=float),
             scatter)
+
+
+# --- Frontier scheme at a covalent cut (issue #551) -------------------------
+
+#: Default [qmmm] frontier_scheme.  The link hydrogen sits on the cut QM-M1
+#: bond, 0.4-0.5 A from the MM host M1 ((1 - g) of a ~1.5 A bond), so the full M1
+#: charge ('none') is a point charge inside the link-atom density.  The ESPF
+#: energy is then unbounded below: the QM charge piles up at the link atom
+#: and the frontier atom collapses onto M1 (issue #551; on the ACE CH3|C cut
+#: of the alanine dipeptide, M1 charge +0.60, RHF/6-31G falls from -41.5 to
+#: -249 Eh in ten optimization steps while 'rcd' converges at -40.872 Eh).
+#: RCD (Lin & Truhlar, J. Phys. Chem. A 2005, 109, 3991) removes M1 and
+#: keeps the total charge and the M1-M2 bond dipoles.  A no-op without link
+#: atoms, so whole-molecule QM regions are unchanged.
+DEFAULT_FRONTIER_SCHEME = 'rcd'
+
+
+def frontier_scheme_warning(n_links: int, scheme: str) -> str | None:
+    """Warning text for an explicit ``frontier_scheme=none`` at covalent cuts.
+
+    Returns the message, or ``None`` when there is no cut bond or the M1
+    charge is redistributed.  ``none`` stays available for comparisons.
+    """
+    if n_links <= 0 or str(scheme).strip().lower() != 'none':
+        return None
+    return (
+        f"[QM/MM] WARNING: frontier_scheme=none with {n_links} covalent "
+        "boundary bond(s). The full MM host (M1) charge sits 0.4-0.5 A from "
+        "each link hydrogen, so the ESPF energy is unbounded below and an "
+        "optimization or MD can collapse the QM frontier atom onto its MM "
+        "host (issue #551). Remove frontier_scheme=none to use the "
+        f"default '{DEFAULT_FRONTIER_SCHEME}'."
+    )
+
+
+# --- ESPF switching-width selection (issue #260) ---------------------------
+
+#: Grid switching width for a QM region made of whole molecules. Also the
+#: value the native default falls back to when nothing selects otherwise.
+SWSCALE_WHOLE_MOLECULE = 1.8
+#: ... and across a covalent cut, where the shipped whole-molecule value
+#: over-smooths and concentrates the gradient residual on the MM host atom.
+SWSCALE_COVALENT_BOUNDARY = 1.5
+#: Companion variable recording the value the driver itself wrote into
+#: ESPF_SWSCALE, so a later driver in the same process can tell a
+#: predecessor's automatic choice apart from a user-supplied override.
+SWSCALE_AUTO_MARKER = '_OQP_ESPF_SWSCALE_AUTO'
+
+
+def select_boundary_switching(covalent: bool) -> float | None:
+    """Pick ESPF_SWSCALE from whether the QM/MM cut is covalent.
+
+    The knob lives in the native ESPF gradient, which is handed a grid and a
+    density and has no way to know whether a bond was cut. The QM/MM driver
+    does -- it just built the link atoms -- so the choice is made from its
+    boundary information and passed down the way the native code already
+    reads it.
+
+    1.8 over-smooths at a covalent boundary -- 1.5 cuts the boundary-host
+    gradient residual 5-13x on both measured link-atom systems -- while 1.5
+    is about 20% worse without a cut bond. Neither is a safe global default,
+    which is why this is selected per system rather than changed outright.
+    See openqp-devkit docs/espf_qmmm_switching.md and issue #260.
+
+    An explicit ESPF_SWSCALE always wins: someone who set it is running a
+    sweep or reproducing a number, and silently overriding that would be
+    worse than any default. A value this function wrote for an earlier
+    system in the same process is not user configuration, though: it is
+    re-selected for the new system instead of freezing the first system's
+    choice.
+
+    Returns the value selected, or ``None`` when a user setting stands.
+    """
+    current = os.environ.get('ESPF_SWSCALE', '').strip()
+    auto_marker = os.environ.get(SWSCALE_AUTO_MARKER, '').strip()
+    if current and current != auto_marker:
+        return None                       # user-set; nothing to select
+    value = float(SWSCALE_COVALENT_BOUNDARY if covalent
+                  else SWSCALE_WHOLE_MOLECULE)
+    os.environ['ESPF_SWSCALE'] = repr(value)
+    os.environ[SWSCALE_AUTO_MARKER] = repr(value)
+    return value

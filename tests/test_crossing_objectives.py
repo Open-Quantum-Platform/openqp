@@ -22,6 +22,8 @@ from pathlib import Path
 
 import numpy as np
 
+from oqp_module_isolation import isolate_modules
+
 ROOT = Path(__file__).resolve().parents[1]
 
 K, A, X0 = 1.0, 0.3, 1.5
@@ -35,23 +37,6 @@ def _load(name, relative_path):
     return module
 
 
-# Names this module injects while importing libscipy.  They are removed again
-# immediately afterwards: pytest shares one interpreter across test modules, so
-# leaving a stub (or an emptied __path__) behind would break every later import
-# of the real oqp.utils.* and oqp.library.* submodules.
-_STUBBED = (
-    "oqp",
-    "oqp.library",
-    "oqp.library.single_point",
-    "oqp.library.baeka",
-    "oqp.utils",
-    "oqp.utils.file_utils",
-    "oqp.utils.state_labels",
-    "oqp.utils.qmmm",
-    "oqp.utils.mpi_utils",
-)
-
-
 def _stub(name, is_package=False):
     module = types.ModuleType(name)
     if is_package:
@@ -60,9 +45,27 @@ def _stub(name, is_package=False):
     return module
 
 
+# Pure-Python oqp modules loaded from source, ahead of the files under test.
+# tests/test_crossing_harness_imports.py checks that these together with the
+# _stub() names cover every module-level oqp import of LOADED_FILES.
+SOURCE_MODULES = (
+    ("oqp.library.baeka", "pyoqp/oqp/library/baeka.py"),
+    # input_checker imports PT2_METHOD_IMPLIED from it; the module is pure
+    # Python, so the real definition is used rather than a copy
+    ("oqp.utils.oqp_input", "pyoqp/oqp/utils/oqp_input.py"),
+)
+LOADED_FILES = (
+    "pyoqp/oqp/library/libscipy.py",
+    "pyoqp/oqp/utils/input_checker.py",
+)
+
+
 def _load_isolated(path, extra_module=None):
     """Import a pyoqp module against stubs, then restore sys.modules."""
-    saved = {name: sys.modules.get(name) for name in _STUBBED}
+    # pytest shares one interpreter across test modules: the stubs, and the
+    # source copies loaded under oqp.* names, must be gone afterwards while any
+    # real oqp module imported earlier stays in place.
+    restore = isolate_modules()
 
     _stub("oqp")
     _stub("oqp.library", is_package=True)
@@ -86,25 +89,21 @@ def _load_isolated(path, extra_module=None):
 
     try:
         # baeka is pure NumPy, so the real kernel is used
-        baeka = _load("oqp.library.baeka", "pyoqp/oqp/library/baeka.py")
+        sources = {name: _load(name, relative)
+                   for name, relative in SOURCE_MODULES}
+        baeka = sources["oqp.library.baeka"]
         loaded = _load("oqp.library.libscipy", path)
         checker = (_load(extra_module[0], extra_module[1])
                    if extra_module else None)
     finally:
-        for name, module in saved.items():
-            if module is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = module
-        sys.modules.pop("oqp.library.libscipy", None)
-        sys.modules.pop("oqp.utils.input_checker", None)
+        restore()
 
     return loaded, baeka, checker
 
 
 libscipy, baeka_module, input_checker = _load_isolated(
-    "pyoqp/oqp/library/libscipy.py",
-    extra_module=("oqp.utils.input_checker", "pyoqp/oqp/utils/input_checker.py"),
+    LOADED_FILES[0],
+    extra_module=("oqp.utils.input_checker", LOADED_FILES[1]),
 )
 BaekAState = baeka_module.BaekAState
 
@@ -142,8 +141,9 @@ def make_mecp(search, **attributes):
     for key, value in attributes.items():
         setattr(opt, key, value)
     # keep the objectives free of file I/O and optimizer bookkeeping
-    def _record(coordinates, f, df, gap_e, gap_term):
+    def _record(coordinates, f, df, gap_e, gap_term, mean_e):
         opt.metrics["gap"] = gap_e
+        opt.metrics["energy"] = mean_e
         return f, df
 
     opt.record = _record
@@ -344,6 +344,37 @@ class MECPSQPTest(unittest.TestCase):
                 self.fail("SQPMECPOpt reads the auglag penalty parameter")
 
 
+class MECPRecordedEnergyTest(unittest.TestCase):
+    """The status table reports the mean state energy, not the objective.
+
+    Every MECP objective adds a gap term to 0.5 * (E_i + E_j).  With the SQP
+    multiplier at -53, as at step 4 of the twisted-ethylene MECP, that term
+    moved the reported "Energy" 0.12 Eh below both states at a 2.3 mEh gap.
+    """
+
+    POINT = np.array([1.2, 0.4])
+
+    def _evaluate(self, search, **attributes):
+        opt = make_mecp(search, **attributes)
+        e_lo, g_lo, e_up, g_up = model(self.POINT)
+        energies = np.array([0.0, e_lo, 0.0, e_up])
+        grads = np.array([np.zeros(2), g_lo, np.zeros(2), g_up])
+        f, _ = getattr(opt, search)(self.POINT, energies, grads)
+        return opt, f, 0.5 * (e_lo + e_up), e_up - e_lo
+
+    def test_every_objective_records_the_mean_state_energy(self):
+        for search in ("auglag", "sqp", "penalty", "quad"):
+            with self.subTest(search=search):
+                opt, f, mean, gap = self._evaluate(search, lagrange=-53.0)
+                self.assertAlmostEqual(opt.metrics["energy"], mean, places=14)
+                self.assertNotAlmostEqual(f, mean, places=6)
+
+    def test_sqp_objective_is_the_lagrangian_at_the_multiplier(self):
+        opt, f, mean, gap = self._evaluate("sqp", lagrange=-53.0)
+        self.assertAlmostEqual(f, mean - 53.0 * gap, places=12)
+        self.assertAlmostEqual(opt.metrics["energy"], mean, places=14)
+
+
 class MECIObjectiveTest(unittest.TestCase):
     def make_meci(self):
         opt = object.__new__(libscipy.MECIOpt)
@@ -394,6 +425,91 @@ class MECIObjectiveTest(unittest.TestCase):
             coordinates = coordinates - 0.05 * df
         self.assertLess(abs(exact_gap(coordinates)), 1.0e-8)
         self.assertAlmostEqual(coordinates[0], X0, places=6)
+
+
+class MECPClippedBlockTest(unittest.TestCase):
+    """The second multiplicity block starts after the roots actually solved.
+
+    A small response space clips the first solve below nstate.  The second
+    solve must start again from the input nstate, and state j must be read
+    after the clipped block rather than after nstate entries.
+    """
+
+    def _optimizer(self, solved, istate=1, jstate=1):
+        opt = object.__new__(libscipy.MECPOpt)
+        opt.istate, opt.jstate, opt.nstate = istate, jstate, 3
+        opt.imult, opt.jmult = 3, 1
+        opt.itr, opt.init_scf = 0, True
+        calls = {"nstate": [], "mult": []}
+        current = {"mult": None}
+
+        class Data:
+            def set_tdhf_multiplicity(self, mult):
+                calls["mult"].append(mult)
+                current["mult"] = mult
+
+            def set_tdhf_nstate(self, nstate):
+                calls["nstate"].append(nstate)
+
+        class Mol:
+            config = {"tdhf": {"multiplicity": 3}}
+            data = Data()
+            energies = grads = None
+
+            def update_system(self, coordinates):
+                pass
+
+        class SP:
+            def reference(self, do_init_scf):
+                return [-1.0]
+
+            def excitation(self, ref_energy):
+                n = solved[current["mult"]]
+                return ref_energy + [-1.0 + 0.1 * current["mult"] + 0.01 * k
+                                     for k in range(1, n + 1)]
+
+        class Grad:
+            grads = None
+
+            def gradient(self):
+                # Production gradients always hold nstate + 1 rows; rows past
+                # the solved roots are padding.
+                n = solved[current["mult"]]
+                rows = [np.full(2, 10.0 * current["mult"] + k) for k in range(n + 1)]
+                rows += [np.zeros(2)] * (opt.nstate - n)
+                return np.array(rows)
+
+        class LS:
+            def compute(self, mol, grad_list, state_blocks=None):
+                calls["grad_list"] = grad_list
+                calls["state_blocks"] = state_blocks
+                return np.asarray(mol.energies), np.asarray(mol.grads)
+
+        opt.mol, opt.sp, opt.grad, opt.ls = Mol(), SP(), Grad(), LS()
+        def work_func(coordinates, energies, grads):
+            calls["pair"] = opt.state_pair(energies, grads)
+            return 0.0, np.zeros_like(coordinates)
+
+        opt.work_func = work_func
+        return opt, calls
+
+    def test_state_j_follows_the_clipped_first_block(self):
+        opt, calls = self._optimizer({3: 1, 1: 3})
+        opt.one_step(np.zeros(2))
+        energy_i, energy_j, grad_i, grad_j = calls["pair"]
+        self.assertEqual(calls["nstate"][:2], [3, 3])
+        self.assertEqual(calls["grad_list"], [1, 2])
+        # the summary labels each solve in its own multiplicity
+        self.assertEqual(calls["state_blocks"], ((3, 1), (1, 3)))
+        self.assertAlmostEqual(energy_i, -1.0 + 0.3 + 0.01)
+        self.assertAlmostEqual(energy_j, -1.0 + 0.1 + 0.01)
+        np.testing.assert_allclose(grad_i, [31.0, 31.0])
+        np.testing.assert_allclose(grad_j, [11.0, 11.0])
+
+    def test_unavailable_state_is_rejected_before_its_gradient(self):
+        opt, _ = self._optimizer({3: 1, 1: 3}, istate=2)
+        with self.assertRaisesRegex(ValueError, "only 1 roots are solved"):
+            opt.one_step(np.zeros(2))
 
 
 if __name__ == "__main__":

@@ -37,17 +37,6 @@ class NLoptRemovalTests(unittest.TestCase):
         self.assertNotIn("_OQP_NLOPT_VERSION", external)
         self.assertNotRegex(external, r"\bNLOPT_(?!LEGACY)")
 
-    def test_legacy_cache_token_preserves_the_existing_namespace(self):
-        external = (ROOT / "external" / "CMakeLists.txt").read_text()
-        self.assertIn(
-            'set(_OQP_LEGACY_NLOPT_CACHE_TOKEN "nlopt2.9.1")', external
-        )
-        self.assertIn(
-            "-libint${_OQP_LIBINT2_VERSION}-"
-            "${_OQP_LEGACY_NLOPT_CACHE_TOKEN}-libxc",
-            external,
-        )
-
     def test_distribution_notice_for_removed_component_is_absent(self):
         self.assertFalse(
             (ROOT / "licenses" / "third_party" / "nlopt-notices.txt").exists()

@@ -337,4 +337,4 @@ def set_basis(mol):
 
     if mol.data["basis_set_issue"]:
         dump_log(mol, title='PyOQP: basis set is not set properly', section='end')
-        exit()
+        raise RuntimeError(f"basis set '{basis_file}' is not set properly — stopping current run.")

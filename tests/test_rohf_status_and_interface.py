@@ -16,6 +16,8 @@ import types
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import child_env, stub_module
+
 ROOT = Path(__file__).resolve().parents[1]
 RUNFUNC = ROOT / "pyoqp" / "oqp" / "library" / "runfunc.py"
 OQPDATA = ROOT / "pyoqp" / "oqp" / "molecule" / "oqpdata.py"
@@ -200,8 +202,8 @@ def load_input_checker_with_minimal_stubs():
 
     stub_names = ("oqp", "oqp.utils", "oqp.utils.mpi_utils")
     saved = {name: sys.modules.get(name) for name in stub_names}
-    sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-    sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+    stub_module("oqp")
+    stub_module("oqp.utils")
     sys.modules["oqp.utils.mpi_utils"] = mpi_utils
     try:
         spec = importlib.util.spec_from_file_location(
@@ -250,6 +252,30 @@ class ROHFStatusAndInterfaceTests(unittest.TestCase):
         self.assertIn("nmr_gauge=giao", report.to_text())
         self.assertEqual(config["scf"]["type"], "rohf")
 
+    def _sf_report(self, scf_type, runtype, functional="bhhlyp", td_type="sf"):
+        input_checker = load_input_checker_with_minimal_stubs()
+        config = {
+            "input": {"method": "tdhf", "runtype": runtype, "basis": "6-31g*",
+                      "functional": functional,
+                      "system": "\nO 0 0 0\nH 0 0 1\nH 0 1 0"},
+            "scf": {"type": scf_type, "multiplicity": 3},
+            "tdhf": {"type": td_type, "nstate": 3},
+            "properties": {"grad": [1]},
+        }
+        return input_checker.check_input_values(config, raise_error=False, emit=False)
+
+    def _errors(self, report):
+        return [(e.path, e.message) for e in report.errors if e.severity == "ERROR"]
+
+    def test_sf_requires_rohf(self):
+        for runtype in ("energy", "grad"):
+            errors = self._errors(self._sf_report("uhf", runtype))
+            self.assertTrue(any(p == "scf.type" for p, _ in errors), errors)
+
+    def test_mrsf_still_requires_rohf(self):
+        errors = self._errors(self._sf_report("uhf", "energy", td_type="mrsf"))
+        self.assertTrue(any(p == "scf.type" and "MRSF requires an ROHF" in m for p, m in errors), errors)
+
     def test_rohf_has_native_scf_driver_scaffold(self):
         scf = SCF.read_text()
         for required in (
@@ -258,7 +284,10 @@ class ROHFStatusAndInterfaceTests(unittest.TestCase):
             "form_rohf_fock",
             "Guest-Saunders ROHF Fock",
             "mo_b = mo_a",
-            "dmat_a = pdmat(:,1) - pdmat(:,2)",
+            # final ROHF densities are rebuilt from the converged orbitals on
+            # every exit path (the former pdmat(:,1) - pdmat(:,2) formula only
+            # held the alpha density after a converged DIIS iteration)
+            "call get_ab_initio_density(dmat_a, mo_a, dmat_b, mo_b, infos, basis)",
         ):
             self.assertIn(required, scf)
 
@@ -292,15 +321,8 @@ class ROHFStatusAndInterfaceTests(unittest.TestCase):
             inp.write_text(ROHF_NMR_INPUT)
             env = dict(os.environ)
             env["OPENQP_ROOT"] = str(runtime_root)
-            # Use this checkout's Python wrapper while allowing it to load the
-            # selected compiled OpenQP runtime from OPENQP_ROOT.  This keeps the
-            # ROHF/NMR guard test from accidentally exercising an older
-            # pip-installed wrapper that may not know properties.nmr_gauge.
-            root_parent = str(Path(runtime_root).parent)
-            source_parent = str(ROOT / "pyoqp")
-            env["PYTHONPATH"] = os.pathsep.join(
-                item for item in (source_parent, root_parent, env.get("PYTHONPATH", "")) if item
-            )
+            # The child imports the same oqp package as this test session.
+            env = child_env(env)
             proc = subprocess.run(
                 [sys.executable, "-m", "oqp.pyoqp", str(inp)],
                 cwd=workdir,

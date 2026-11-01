@@ -8,6 +8,8 @@ module population_analysis
   integer, parameter :: POP_LOWDIN = 1
 
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: lowdin_C, mulliken_C, mulliken_excited_C
   public mulliken
   public lowdin
   public run_population_analysis
@@ -91,7 +93,7 @@ contains
     real(kind=dp), allocatable :: dens(:,:), tmp(:)
 
     integer :: nat, nbf, nbf2, ok, istate
-    logical :: urohf, use_relaxed
+    logical :: urohf, use_relaxed, log_was_open
 
     ! tagarray pointers
     real(kind=dp), contiguous, pointer :: dmat_a(:), dmat_b(:), smat(:)
@@ -99,12 +101,22 @@ contains
 !    character(len=*), parameter :: tags_required(8) = (/ character(len=80) :: &
 !      OQP_FOCK_A, OQP_E_MO_A, OQP_VEC_MO_A, OQP_FOCK_B, OQP_VEC_MO_B, OQP_td_bvec_mo, OQP_td_t, &
 !      OQP_td_energies /)
-    character(len=*), parameter :: tags_required(5) = (/ character(len=80) :: &
-      OQP_DM_A, OQP_DM_B, OQP_TD_P, OQP_TD_ABXC, OQP_SM /)
+    ! OQP::DM_B exists only for ROHF/UHF references (the guess routines
+    ! allocate it when scftype >= 2) and OQP::td_abxc only for SF/MRSF; each is
+    ! requested in the branch that reads it.
+    character(len=*), parameter :: tags_required(3) = (/ character(len=80) :: &
+      OQP_DM_A, OQP_TD_P, OQP_SM /)
+    character(len=*), parameter :: tags_beta(1) = (/ character(len=80) :: &
+      OQP_DM_B /)
+    character(len=*), parameter :: tags_unrelaxed(1) = (/ character(len=80) :: &
+      OQP_TD_ABXC /)
 
     character(len=*), parameter :: subroutine_name = "mulliken_excited"
 
-    open (unit=IW, file=infos%log_filename, position="append")
+    ! Close the log only if this routine opened it: the Z-vector solvers call
+    ! it with the log open and keep writing afterwards.
+    inquire(unit=iw, opened=log_was_open)
+    if (.not. log_was_open) open(unit=iw, file=infos%log_filename, position="append")
 
     basis => infos%basis
     basis%atoms => infos%atoms
@@ -130,6 +142,7 @@ contains
     call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a)
     tmp = dmat_a
     if (urohf) then
+      call data_has_tags(infos%dat, tags_beta, module_name, subroutine_name, WITH_ABORT)
       call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b)
       tmp = tmp + dmat_b
     end if
@@ -138,10 +151,11 @@ contains
     if (use_relaxed) then
       ! Try to get the relaxed density first
       call tagarray_get_data(infos%dat, OQP_TD_P, td_p)
-      tmp = tmp + td_p(:,1) + td_p(:,2)
+      tmp = tmp + td_p_spin_sum(td_p)
       write(iw,'(4x,a)') 'Using RELAXED difference density (Z-vector)'
     else
       ! Fall back to unrelaxed density
+      call data_has_tags(infos%dat, tags_unrelaxed, module_name, subroutine_name, WITH_ABORT)
       call tagarray_get_data(infos%dat, OQP_TD_ABXC, td_abxc)
       tmp = tmp + td_abxc
       write(iw,'(4x,a)') 'Using UNRELAXED difference density'
@@ -173,7 +187,7 @@ contains
     write(iw,'(/,2X,A,I4)') 'Atomic partial charges (Mulliken) - State ', istate
     call print_charges(infos, chg)
 
-    close(iw)
+    if (.not. log_was_open) close(iw)
 
     deallocate(orbital_pop, chg, tmp, dens)
 

@@ -1,12 +1,11 @@
 # Contributor and AI-reviewer guide
 
-This file is read by the automated PR reviewers (Codex reads `AGENTS.md`
-natively; the Claude review workflow is pointed at it in
-`.github/workflows/claude.yml`) and by human contributors. Every pull request is
-expected to satisfy the four rules below. A reviewer should call out, per rule,
-whether the PR satisfies it or explain what is missing.
+This file is read by Codex, automated reviewers, and human contributors. Every
+merge request is expected to satisfy the rules below. A reviewer should call
+out, per rule, whether the merge request satisfies it or explain what is
+missing.
 
-## PR rules
+## Code Review Rules
 
 ### 1. BLAS/LAPACK must go through the OpenQP wrapper layer
 
@@ -77,12 +76,184 @@ flag it.
 ### 4. New functionality is documented in openqp-docs
 
 User-facing keywords, sections, and workflows must be documented in the manual
-repo [Open-Quantum-Platform/openqp-docs](https://github.com/Open-Quantum-Platform/openqp-docs):
+repo [open-quantum-platform/openqp-docs](https://qchemlab.knu.ac.kr/open-quantum-platform/openqp-docs):
 a keyword-page entry under `docs/keywords/` and/or a workflow page under
 `docs/workflows/`, wired into `mkdocs.yml` nav.
 
-- openqp-docs is a **separate repository**, so this PR's CI cannot see it
-  directly. Link the companion openqp-docs PR in this PR's description.
+- openqp-docs is a **separate repository**, so this merge request's CI cannot
+  see it directly. Link the companion openqp-docs merge request in this merge
+  request's description.
 
 **Reviewer check:** if the diff adds/changes user-facing keywords or workflows,
-confirm the PR description links an openqp-docs PR; flag it if missing.
+confirm the merge request description links an openqp-docs merge request; flag
+it if missing.
+
+### 5. openqp carries product code, not development material
+
+This repository holds the engine, its tests and examples, and the scripts the
+build and CI actually consume. Method notes, derivations, validation harnesses,
+performance investigations and one-off diagnostics belong in
+[open-quantum-platform/openqp-devkit](https://qchemlab.knu.ac.kr/open-quantum-platform/openqp-devkit)
+(private), which was split out of this repository with history preserved.
+
+This is not housekeeping. GitHub refuses to serve a diff past 20,000 changed
+lines (`406 too_large`), and Codex review reads that diff, so an oversized pull
+request gets no review and **no error message** — #405, at 24,955 changed lines,
+asked six times and was answered zero times. Nearly half of that PR was
+development scaffolding: a 2,883-line derivation, eight validation gate scripts,
+and ten tests mirroring them.
+
+- `docs/` is an allowlist, like `tools/`: a document stays only if a test reads
+  it as part of what that test checks. User documentation goes to openqp-docs
+  (rule 4); design and method notes go to openqp-devkit.
+- `tools/` is an allowlist. Every entry must name the path in this repository
+  that consumes it.
+- Markdown at the repository root is limited to the files a newcomer needs plus
+  this one.
+
+**Enforced by CI:** `tools/check_repo_layout.py` (the `PR policy` workflow)
+checks the **whole tree**, not just the files a PR adds, so the split cannot
+erode one merge at a time. As with rule 1, CI runs the trusted base-branch copy
+of the script. If the build or CI genuinely needs a new script, add it to
+`TOOLS_ALLOWED` together with its consumer.
+
+**Reviewer check:** the gate is a dumb allowlist. Judgment calls are yours — is
+a new `docs/`-style page user documentation or a design note, is a new test a
+regression test or a mirror of a development-time gate? Say so.
+
+### 6. A new two-electron gradient digest handles a spherical basis, and is tested in one
+
+`grd2` drives every `get_density` with **Cartesian** shell extents. A digest
+that indexes its densities with `basis%ao_offset` / `basis%naos`, which count
+the *actual* AOs, therefore reads the wrong elements whenever the basis is
+spherical — and only then, because in a Cartesian basis the two index spaces
+coincide.
+
+That failure is completely silent in a Pople basis. The analytic MRSF NAC
+digest shipped without the branch and was wrong for every spherical basis: with
+d functions (5 vs 6) it read neighbouring AO elements, broke molecular
+symmetry, and turned the 1e-13 run-to-run noise of the threaded SCF into an
+O(1) change in the answer; with f functions (7 vs 10) it wrote past the end of
+the array and aborted. Every analytic-NAC example and test in the repository
+used `6-31G` or `6-31G*`, so CI was green throughout.
+
+Under `HARMONIC_ACTIVE`, build Cartesian-effective, `bfnrm`-folded copies of
+the densities and address them at Cartesian offsets. See
+`grd2_mrsf_build_cart` and the `usecart` branch of
+`grd2_mrsf_compute_data_t_get_density` in `source/modules/tdhf_mrsf_gradient.F90`.
+
+**Enforced by CI:** `tools/check_digest_harmonic.py` (the `PR policy` workflow)
+requires the `get_density` bound to each concrete `grd2_compute_data_t`
+extension to mention `HARMONIC_ACTIVE`. The check is **per type**, not per
+file: the NAC digest above was added to a file whose other digest already
+handled the spherical case. It follows the inheritance transitively, so a
+digest that extends an intermediate subtype — `grd2_rhf_compute_data_t` under
+the abstract `grd2_hf_compute_data_t`, say — is examined like any other. As
+with rules 1 and 5, CI runs the trusted base-branch copy of the script.
+
+**Reviewer check:** the gate proves only that the question was asked, never
+that the branch is right. Any change touching AO-indexed code should be
+exercised in a spherical basis, not just a Pople one — `cc-pVDZ` reaches the d
+mismatch and `cc-pVTZ` the f one. Symmetry makes a good detector and needs no
+reference value: see `tests/test_grd2_digest_spherical_basis.py`.
+
+
+### 7. Initialization and resource cleanup are part of correctness
+
+For every changed allocation, pointer, persistent buffer, native handle, file or
+worker, review its complete lifetime: creation, use, replacement, normal return,
+early return and error exit. This applies to Fortran, C/C++, Python and bundled
+library patches, not only to the numerical kernel that uses them.
+
+- Initialize every value before it is read, including optional-branch outputs,
+  allocation descriptors, pointer association and module/SAVE state. Declaration
+  initialization of a Fortran local implies SAVE; do not use it for per-call state.
+- Identify the owner of each allocation and borrowed view. After replacing or
+  erasing a backing record, reacquire pointers; never retain a NumPy view past
+  its native owner's lifetime. Match allocator/deallocator, alignment and ABI.
+- Cleanup must release owned resources once, permit safe repeated cleanup where
+  exposed, and preserve borrowed resources. Close a file only when the current
+  operation opened it. Restore temporary settings and modified molecular data
+  on recoverable failures as well as successful returns.
+- Size persistent buffers from the current molecule, basis and state count;
+  invalidate or resize them when that identity changes. Exercise repeated calls
+  in one process, increasing and decreasing dimensions, and relevant early/error
+  paths. One successful fresh-process calculation does not establish safety.
+- Memory fixes need a regression that fails for the original defect, plus a
+  suitable native memory/bounds check when feasible. Record compiler, dimensions,
+  result and any remaining diagnostics. Do not silence a memory error, enable an
+  allocator workaround, or loosen numerical tolerances to obtain a passing CI.
+- Patches to bundled libraries must invalidate only the affected cache entries;
+  validate allocation and destruction with the patched dependency actually linked.
+
+**Reviewer check:** report PASS with the relevant tests, NOT APPLICABLE with a
+reason, or identify the missing evidence. Static pattern checks and an ordinary
+CI pass alone cannot prove initialization or resource lifetime correctness.
+
+
+### 8. Every derivative of the nuclear attraction is ECP-aware, and is tested with a core actually removed
+
+With an effective core potential the valence electrons see a nucleus of charge
+`Z - N_core` and a semilocal potential. `infos%basis%ecp_zn_num` holds `N_core`
+per atom, and the derivative of the semilocal part is `grad_1e_ecp` (packed
+density) or `ecp_deriv_ints` (AO derivative matrices). A one-electron gradient
+or coupling assembly is therefore complete only when it (a) passes
+`infos%atoms%zn - infos%basis%ecp_zn_num` to `grad_en_hellman_feynman`,
+`grad_en_pulay` and `der_nucattr_matrix`, and (b) contracts the same density
+with the ECP derivative. `hf_gradient`, `tdhf_gradient` and the CASSCF/PT2
+gradients received both when ECPs arrived (#46).
+
+Two assemblies did not, and nothing noticed for eight months. `sf_1e_grad`
+(SF-TDDFT and RO-MRSF-TDDFT gradients) kept the full `Z`; the analytic MRSF
+NAC 1e term (`mrsf_nac_esum`) kept the full `Z` and had no ECP derivative;
+the UMRSF gradient arrived without the ECP derivative of its relaxed
+difference density. The only ECP MRSF gradient example used LANL2DZ on C and
+H, which removes no core electrons (`ecp_zn_num = 0`), the heavy-atom ECP
+MRSF examples were energy-only, and every other gradient and NAC validation
+was all-electron — so CI was green while HBr/LANL2DZ gave a 6.3 Ha/Bohr
+gradient error and an analytic coupling 140 times the numerical one.
+
+**Reviewer check:** For each enclosing subroutine, verify that the charge argument of every
+`grad_en_hellman_feynman` / `grad_en_pulay` / `der_nucattr_matrix` call is
+ECP-screened (in the argument itself or in the line that defines it), and
+that a subroutine contracting a density with `dV_en/dx` also references
+`grad_1e_ecp` or `ecp_deriv_ints`.
+
+The presence of these terms alone is insufficient. A new
+gradient, Hessian, NAC or response-property term must be exercised with an
+ECP on an atom whose core is actually removed — HBr/LANL2DZ or NaCl/SBKJC,
+not C/H with LANL2DZ — against central finite differences (gradients), the
+numerical NAC (couplings), or GAMESS with the identical Basis Set Exchange
+basis and ECP (energies). Ship that case as an example under `examples/ECP/`
+(rule 2); the reference must fail on the pre-fix code. Report PASS with the
+case, NOT APPLICABLE when no `dV_en/dx` or ECP integral is touched, or name
+the missing evidence.
+
+### 9. Numerical performance changes need measured evidence
+
+For a PR or MR that changes SCF, integral contraction, Davidson, or another
+numerical hot path, assess BLAS and parallel execution explicitly.
+
+- Use existing ILP64 BLAS/LAPACK wrappers. Prefer matrix operations and Level-3
+  BLAS when they reduce total work; account for packing, transposes, copies,
+  temporary storage, and small-matrix overhead in the measurement.
+- Explain the OpenMP/MPI decomposition, thread ownership, reductions, and memory
+  growth. Avoid nested BLAS/OpenMP oversubscription. Check both serial and the
+  intended parallel configuration, including any supported low-memory path.
+- Compare baseline and changed code on identical inputs, basis, convergence
+  tolerances, precision, hardware, compiler, and thread counts. Record commits,
+  linked BLAS, affinity where available, warm-up policy, repeated timings, and
+  peak or estimated extra memory. Include representative small and larger cases.
+- Report kernel and whole-calculation time separately where measurable. For SCF
+  and Davidson, also compare iteration counts and residuals; reduced iteration
+  count alone does not establish a speedup or the same converged state.
+- Verify numerical results at the changed boundary (signed Fock/response
+  matrices when applicable), final energies and state identity. Preserve
+  screening, symmetry factors, spin conventions, and the requested tolerance.
+- Disclose regressions and unsupported cases. A default-path change needs
+  evidence for its intended workload; retain a tested fallback or restrict the
+  optimization when dispatch, memory, or parallel overhead outweighs the gain.
+
+**Reviewer check:** state PASS with the timing and numerical evidence, NOT
+APPLICABLE with a reason, or identify the missing BLAS/parallel assessment.
+Claims of faster execution require measurements, not only a plausible design.

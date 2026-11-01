@@ -5,6 +5,8 @@ module electric_moments_mod
   character(len=*), parameter :: module_name = "electric_moments_mod"
 
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: electric_moments_C, electric_moments_excited_C
   public electric_moments
   public electric_moments_excited
   public electric_dipole_au_C
@@ -351,7 +353,7 @@ contains
 
     call tagarray_get_data(infos%dat, OQP_TD_P, td_p, status)
     call check_status(status, module_name, subroutine_name, OQP_TD_P)
-    dens_ex = dens_ex + td_p(:,1) + td_p(:,2)
+    dens_ex = dens_ex + td_p_spin_sum(td_p)
 
     com = 0
     do i = 1, nat

@@ -16,6 +16,7 @@ TDHF_SF_LIB_SRC = ROOT / "source" / "tdhf_sf_lib.F90"
 TDHF_ENERGY_SRC = ROOT / "source" / "modules" / "tdhf_energy.F90"
 TDHF_SF_ENERGY_SRC = ROOT / "source" / "modules" / "tdhf_sf_energy.F90"
 TDHF_MRSF_ENERGY_SRC = ROOT / "source" / "modules" / "tdhf_mrsf_energy.F90"
+RUNFUNC_SRC = ROOT / "pyoqp" / "oqp" / "library" / "runfunc.py"
 
 
 class DavidsonAutoRestartTests(unittest.TestCase):
@@ -50,6 +51,29 @@ class DavidsonAutoRestartTests(unittest.TestCase):
 
 
 class DavidsonSolverStabilityTests(unittest.TestCase):
+    def test_mrsf_energy_uses_larger_integral_buffer_and_active_slice(self):
+        """MRSF/UMRSF Davidson builds should avoid small-buffer update overhead."""
+        src = TDHF_MRSF_ENERGY_SRC.read_text()
+
+        self.assertIn("mrsf_int2_buffer_size = 200000", src)
+        self.assertRegex(
+            src,
+            r"int2_driver%buf_size\s*=\s*max\(int2_driver%buf_size,\s*mrsf_int2_buffer_size\)",
+        )
+        compact_src = re.sub(r"\s+", "", src)
+        self.assertIn("d3=>mrsf_density(:iv,:,:,:)", compact_src)
+        self.assertIn("d2=fmrq1(:,:,:iv)", compact_src)
+
+    def test_mrsf_family_converges_every_published_root(self):
+        """A gradient run must not publish unconverged roots as final results."""
+        src = TDHF_MRSF_ENERGY_SRC.read_text()
+        runfunc = RUNFUNC_SRC.read_text()
+
+        self.assertNotIn("OQP_MRSF_TARGET_ONLY_GRAD", src)
+        self.assertNotIn("OQP_MRSF_TARGET_ONLY_GRAD", runfunc)
+        self.assertNotIn("target_only_gradient", src)
+        self.assertIn("maxval(rnorm(1:nstates))", src)
+
     def test_rpa_residual_preconditioner_uses_finite_floor_guard(self):
         """RPA/TDA Davidson q vectors must not divide by tiny or non-finite gaps."""
         src = TDHF_LIB_SRC.read_text()
@@ -80,6 +104,24 @@ class DavidsonSolverStabilityTests(unittest.TestCase):
         self.assertIn("davidson_safe_denominator(denom)", helper_block)
         self.assertIn("merge(DAVIDSON_DENOMINATOR_FLOOR, -DAVIDSON_DENOMINATOR_FLOOR", helper_block)
         self.assertIn("ieee_is_finite", helper_block)
+
+    def test_rpa_residual_is_never_reset_before_convergence_check(self):
+        """A large residual must keep its true value so the root stays unconverged.
+
+        The GAMESS-inherited clamp set errors(ivec) = 0 for ||r||^2 > 1, which
+        removed the root from maxval(errors) and declared it converged at its
+        current Ritz value. Behaviour is pinned in test_rpa_davidson_residual.py.
+        """
+        src = TDHF_LIB_SRC.read_text()
+        solve = re.search(r"subroutine rparesvec\(.*?end subroutine rparesvec", src, re.S | re.I)
+        if solve is None:
+            self.fail("Could not locate rparesvec implementation")
+        block = solve.group(0)
+        self.assertEqual(len(re.findall(r"errors\(ivec\)\s*=\s*0", block)), 0)
+
+        driver = TDHF_ENERGY_SRC.read_text()
+        self.assertIn("mxerr = rpa_max_residual(errors, imax, ndsr)", driver)
+        self.assertNotIn("mxerr = maxval(errors", driver)
 
     def test_rpanewb_rejects_nonfinite_candidate_vectors(self):
         """Davidson basis expansion must not normalize or append NaN/Inf vectors."""
@@ -128,7 +170,7 @@ class DavidsonSolverStabilityTests(unittest.TestCase):
         loop_block = residual_check.group(0)
         self.assertIn("if (any(.not. ieee_is_finite(errors(imax+1:ndsr)))) then", loop_block)
         self.assertIn("ierr = 4", loop_block)
-        self.assertLess(loop_block.index("if (any(.not. ieee_is_finite(errors(imax+1:ndsr)))) then"), loop_block.index("mxerr = maxval(errors(imax+1:ndsr))"))
+        self.assertLess(loop_block.index("if (any(.not. ieee_is_finite(errors(imax+1:ndsr)))) then"), loop_block.index("mxerr = rpa_max_residual(errors, imax, ndsr)"))
 
         breakdown = src.index("case (4)")
         first_output = min(
@@ -142,6 +184,15 @@ class DavidsonSolverStabilityTests(unittest.TestCase):
         self.assertIn("call int2_driver%clean()", guard_block)
         self.assertIn("if (dft) call dftclean(infos)", guard_block)
         self.assertIn("call measure_time", guard_block)
+
+        # All requested RPA roots imaginary (omega^2 < 0): nothing converges,
+        # so the driver must also stop before any output (ierr 5).
+        self.assertIn("if (.not. tamm_dancoff .and. imax >= ndsr) then", src)
+        imaginary = src.index("case (5)")
+        self.assertLess(imaginary, first_output)
+        imag_block = src[imaginary:first_output]
+        self.assertIn("infos%mol_energy%Davidson_converged=.false.", imag_block)
+        self.assertIn("return", imag_block)
         self.assertRegex(guard_block, r"return\b")
 
 

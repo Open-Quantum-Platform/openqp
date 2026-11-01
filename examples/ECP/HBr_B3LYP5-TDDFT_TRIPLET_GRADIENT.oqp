@@ -1,0 +1,3 @@
+tddft(nstate=3)/b3lyp5/lanl2dz ispher=true grad(T0) scf(conv=1e-10) dftgrid(pruned=none)
+tdhf(conv=1e-09,zvconv=1e-09)
+geom="../geometries/BrH-a6a9d6f6a6f3.xyz"

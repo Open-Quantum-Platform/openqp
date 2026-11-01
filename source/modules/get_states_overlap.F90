@@ -77,9 +77,9 @@ contains
     nbf = basis%nbf
     xvec_dim = infos%mol_prop%nelec_a*(nbf-infos%mol_prop%nelec_b)
 
-!   ndtlf = 0          less accurate
+!   ndtlf = 0 : EXACT hole-pair minor determinants (ov_exact; GAMESS "no tlf")
 !   ndtlf = 1 : tlf(1)
-!   ndtlf = 2 : tlf(2) most accurate
+!   ndtlf = 2 : tlf(2) most accurate TLF approximation
     ndtlf = infos%tddft%tlf
 
     ! Allocate data for outputing in python level
@@ -112,7 +112,7 @@ contains
           infos, overlap_mo, td_states_overlap, bvec, &
           bvec_old, nbf,noca, nocb, nstates, ndtlf)
 
-    call get_dcv(nac_out, td_states_overlap, nstates)
+    call get_dcv(nac_out, td_states_overlap, nstates, int(infos%control%verbose))
 
 !   call print_nac(infos, td_states_overlap, nac_out)
 
@@ -205,6 +205,11 @@ contains
              s_ab(nvirb,nvirb), &
              s_ia(noca,nvirb), &
              source=0.0_dp)
+
+    ! the summation loops below accumulate into s_st; define it here so that
+    ! repeated in-process calls (the OQP::td_states_overlap record persists
+    ! between invocations) do not accumulate onto the previous result
+    s_st = 0.0_dp
 
 !   get S_ij, S_ab, S_ia
     call mrsf_tlf(infos, s_mo, s_ij, s_ab, s_ia, ndtlf)
@@ -512,7 +517,7 @@ contains
     integer, intent(in) :: ilow, noc, itype
 
     real(kind=dp), dimension(noc*noc) :: ddet
-    integer :: i, iipp, imax, imin, ipp
+    integer :: i, iipp, imax, imin, ipp, rs, cs
 
     select case (itype)
     case (1)
@@ -547,6 +552,25 @@ contains
        end if
        imin = min(i1,i2)
        imax = max(i1,i2)
+       if (i1 == i2) then
+          ! Diagonal s_ij(k,k): single-hole minor (remove row/col k).
+          ! The generic two-hole block layout below degenerates here --
+          ! for k=1 it indexes ddet(0) and below (heap corruption), and for
+          ! k>=2 it clobbers row/col k-1, yielding minor(k-1) instead of
+          ! minor(k). Inherited from GAMESS OVEXACT (namd.src), where the
+          ! same out-of-bounds write is silent in static F77 memory.
+          do ipp = 1, noc
+             cs = ipp
+             if (ipp >= i1) cs = ipp+1
+             do i = 1, noc
+                rs = i
+                if (i >= i1) rs = i+1
+                ddet((ipp-1)*noc+i) = s_mo(rs+ilow-1, cs+ilow-1)
+             end do
+          end do
+          temp1 = comp_det(ddet, noc)
+          return
+       end if
     !  (1,1) block
        do i = 1, imin-1
           do ipp = 1, imin-1
@@ -699,6 +723,15 @@ contains
        return
 
     case (3)
+       ! A two-electron MRSF reference leaves a 1x1 alpha determinant.
+       ! The generic four-block layout below degenerates at noc=1 and writes
+       ! ddet(0) before its final (4,4) assignment.  That final assignment is
+       ! the only in-bounds element and therefore defines the literal legacy
+       ! result; make it explicit and avoid the inherited F77 memory error.
+       if (noc == 1) then
+          temp1 = s_mo(noc+1,ia1)
+          return
+       end if
     !  (1,1) block
        do i = 1, i1-1
           do ipp = 1, i1-1
@@ -891,9 +924,11 @@ contains
 !> @brief Compute derivative coupling vectors (DCV) using the finite difference method,
 !>        typically denoted as d_IJ between states I and J.
 !>
-!>        d_IJ = <I| d/dR |J> = h_IJ / (E_I - E_J),
-!>        where h_IJ is the nonadiabatic coupling, defined as
-!>        h_IJ = <I| dH/dR |J>.
+!>        d_IJ = <I| d/dR |J>,  with  h_IJ = (E_J - E_I) * d_IJ,
+!>        where h_IJ = <I| dH/dR |J> is the nonadiabatic coupling
+!>        (d antisymmetric, h symmetric). This routine returns only the
+!>        raw antisymmetrized numerator S_IJ - S_JI; the caller supplies
+!>        the displacement AND the energy-gap denominator/orientation.
 !>
 !>        Note that R is an entire vector, and so is d_IJ.
 !>
@@ -920,7 +955,7 @@ contains
 !>
 !>     @author Seunghoon Lee, Konstantin Komarov
 !>
-  subroutine get_dcv(nact, s_st, nstates)
+  subroutine get_dcv(nact, s_st, nstates, verbose)
 
     use precision, only: dp
     use io_constants, only: iw
@@ -930,8 +965,15 @@ contains
     integer :: nstates
     real(kind=dp), dimension(nstates,*) :: nact, s_st
 
+    integer, intent(in), optional :: verbose
     integer :: i, j
-    logical :: debug = .true.
+    logical :: debug
+
+    ! The forward/backward overlap table is a diagnostic of the finite-difference
+    ! coupling: detailed log only (verbose >= 2).  Without the level it prints,
+    ! as it always did.
+    debug = .true.
+    if (present(verbose)) debug = verbose >= 2
 
     if (debug) write(iw, &
       fmt='(/x/,a,/29x," F              B          F - B")') &
@@ -988,6 +1030,14 @@ contains
           end do
           det = -1.0_dp*det
        end if
+       ! A structurally singular overlap minor has an exact zero pivot after
+       ! partial pivoting.  Return its determinant as zero instead of dividing
+       ! by zero below.  Sparse orbital-plane rotations used by the analytic
+       ! MRSF metric expose this ordinary determinant case frequently.
+       if (abs(array(k,k)) <= tiny(1.0_dp)) then
+          det = 0.0_dp
+          return
+       end if
        do m = k+1, n
           work(m,k) = array(m,k)/array(k,k)
           do l = k, n
@@ -1018,11 +1068,21 @@ contains
     ndtlf = infos%tddft%tlf
     nstates = infos%tddft%nstate
 
-    write (iw, fmt='(/5x,40(1h-)/&
-               &5x,"state overlap integral between different"/ &
-               &5x,"   time steps by using TLF(",i0,") approx"/ &
-               &5x,"     (<phi^{i}(t-dt)|phi^{j}(t)>)"/ &
-               &5x,40(1h-))') ndtlf
+    if (ndtlf == 0) then
+      write (iw, fmt='(/5x,40(1h-)/&
+                 &5x,"state overlap integral between different"/ &
+                 &5x,"   time steps: exact minor determinants"/ &
+                 &5x,"   (tlf=0, no TLF truncation; default)"/ &
+                 &5x,"     (<phi^{i}(t-dt)|phi^{j}(t)>)"/ &
+                 &5x,40(1h-))')
+    else
+      write (iw, fmt='(/5x,40(1h-)/&
+                 &5x,"state overlap integral between different"/ &
+                 &5x,"   time steps by using TLF(",i0,") approx"/ &
+                 &5x,"   (truncated Leibniz minors; tlf=0 is exact)"/ &
+                 &5x,"     (<phi^{i}(t-dt)|phi^{j}(t)>)"/ &
+                 &5x,40(1h-))') ndtlf
+    end if
     max = 10
     imax = 0
     do

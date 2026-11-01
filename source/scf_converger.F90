@@ -445,6 +445,10 @@ module scf_converger
   !> Maximum length for converger names
   integer, parameter, public :: conv_name_maxlen = 32
   integer, parameter, public :: SCF_RHF=1, SCF_UHF=2, SCF_ROHF=3
+  !> ARH: densities closer than this (max |dD|) are the same point
+  real(dp), parameter :: arh_same_density = 1.0e-12_dp
+  !> ARH: relative eigenvalue cut of the secant curvature matrix
+  real(dp), parameter :: arh_curv_cut = 1.0e-8_dp
   !> @brief Type to encapsulate SCF iteration data
   !> @detail Stores Fock, density, DIIS error matrices, and SCF energy for a single SCF iteration.
   !>         Designed for efficient memory use and data locality in a ring buffer.
@@ -796,6 +800,24 @@ module scf_converger
     real(dp), allocatable :: work2(:,:)     ! (nbf, nbf)
     real(dp), allocatable :: work3(:,:)     ! (nbf, nbf)
 
+    ! Augmented Roothaan-Hall (ARH) model of the response Fock F'(D).dD,
+    ! Host et al., J. Chem. Phys. 129, 124106 (2008); Zhang and Yang,
+    ! arXiv:2606.03709 (open-shell).  arh_mem = 0 keeps the exact response.
+    integer :: arh_mem    = 0               ! number of stored (D, F) pairs
+    integer :: arh_nhist  = 0               ! filled history slots
+    integer :: arh_last   = 0               ! slot written last
+    integer :: arh_nb     = 0               ! pairs in the active model
+    logical :: arh_exact  = .false.         ! force the exact response
+    integer :: n_resp_builds = 0            ! exact response-Fock builds
+    integer :: n_diag_builds = 0            ! response builds of the verbose>=3 linearity check
+    real(dp), allocatable :: arh_d(:,:,:)   ! (nbf_tri, nfocks, arh_mem)
+    real(dp), allocatable :: arh_f(:,:,:)   ! (nbf_tri, nfocks, arh_mem)
+    real(dp), allocatable :: arh_dref(:,:)  ! density at the model reference
+    real(dp), allocatable :: arh_fref(:,:)  ! Fock at the model reference
+    integer,  allocatable :: arh_idx(:)     ! history slots in the active model
+    real(dp), allocatable :: arh_scale(:)   ! 1/|D_i - D_ref| of each active pair
+    real(dp), allocatable :: arh_minv(:,:)  ! pseudo-inverse of the curvature matrix
+
   contains
     procedure, pass :: init  => trah_init
     procedure, pass :: clean => trah_clean
@@ -804,6 +826,11 @@ module scf_converger
     procedure, pass :: rotate_orbs => rotate_orbs_trah
     procedure, pass :: calc_h_op => calc_h_op
     procedure, pass :: calc_g_h => calc_g_h
+    procedure, pass :: arh_init => trah_arh_init
+    procedure, pass :: arh_push => trah_arh_push
+    procedure, pass :: arh_set_reference => trah_arh_set_reference
+    procedure, pass :: response_fock => trah_response_fock
+    procedure, pass :: arh_linearity_residual => trah_arh_linearity_residual
   end type trah_converger
 
 contains
@@ -3459,6 +3486,7 @@ contains
 
     if (allocated(self%d_old))   deallocate(self%d_old)
     if (allocated(self%f_old))  deallocate(self%f_old)
+    call self%arh_init(0)
 
   end subroutine trah_clean
 
@@ -3485,7 +3513,6 @@ contains
   !> @author Mohsen Mazaherifar
   !> @date August 2025
   subroutine trah_run(self, res)
-!    use otr_interface, only: init_trah_solver, run_trah_solver
     class(trah_converger), target, intent(inout) :: self
     class(scf_conv_result), allocatable, intent(out) :: res
     ! --- Step 1: Extract current data from converger_data ---
@@ -3664,7 +3691,6 @@ contains
     use precision,  only: dp
     use types, only: information
     use mathlib,    only: pack_matrix, unpack_matrix
-    use scf_addons, only: get_response_packed
     implicit none
     class(trah_converger), intent(inout) :: self
     class(information), intent(inout), target :: infos
@@ -3723,7 +3749,7 @@ contains
         end do
       end do
       call pack_matrix(dm,dm_tri(:,1))
-      call get_response_packed(infos%basis, infos, self%molGrid, mo, dm_tri, pfock)
+      call self%response_fock(infos, mo, dm_tri, pfock)
       call unpack_matrix(pfock(:,1), v)
       work2 = 0
       call dgemm('T','N', nbf, nbf, nbf, &
@@ -3818,7 +3844,7 @@ contains
 
       call pack_matrix(dm,dm_tri(:,2))
       ! end of dm calculation
-      call get_response_packed(infos%basis, infos, self%molGrid, mo, dm_tri, pfock, mo_b)
+      call self%response_fock(infos, mo, dm_tri, pfock, mo_b)
       ! alpha x2mat
       call unpack_matrix(pfock(:,1), v)
       work2 = 0
@@ -3921,7 +3947,7 @@ contains
 
       call pack_matrix(dm,dm_tri(:,2))
       ! end of dm calculation
-      call get_response_packed(infos%basis, infos, self%molGrid, mo, dm_tri, pfock, mo_b)
+      call self%response_fock(infos, mo, dm_tri, pfock, mo_b)
       ! alpha x2mat
       call unpack_matrix(pfock(:,1), v)
       work2 = 0
@@ -3949,10 +3975,292 @@ contains
                          mo_b, nbf, &
                  0.0_dp, work3,  nbf)
       x2mat_b = x2mat_b + work3(nocc_b+1:,1:nocc_b)
+      call rohf_missing_fock_terms(self,x,x2mat,x2mat_b)
       call pack_rohf_trial(x2,x2mat,x2mat_b, nbf, nocc_a, nocc_b)
     end select
     end associate
   end subroutine calc_h_op
+
+  !> @brief Response Fock F'(D).dD of a trial density for calc_h_op.
+  !> @detail With arh_mem = 0 (or arh_exact) this is the exact two-electron
+  !>         (+XC kernel) response.  Otherwise it is the augmented Roothaan-Hall
+  !>         model built from the stored density differences X_i = D_i - D_ref
+  !>         and Fock differences G_i = F_i - F_ref (G_i = F' X_i exactly for
+  !>         Hartree-Fock) as the symmetric secant model
+  !>             F' dD ~ sum_ij G_i (M^+)_ij <G_j, dD>,  M_ij = <X_i, G_j>,
+  !>         <A,B> = Tr(AB) summed over the spin components, M symmetrized and
+  !>         restricted to its positive eigenvalues.  It satisfies the secant
+  !>         condition F'X_i = G_i, reproduces <X_i, F' X_j> on the span, and is
+  !>         positive semidefinite, so with the exact Fock-curvature terms of
+  !>         calc_h_op the model Hessian is positive definite at an aufbau
+  !>         point.  The symmetric part (F'P + P F')/2 of the one-sided model
+  !>         does not have this property: it keeps the coupling Q F' P out of
+  !>         the span (Q = 1 - P) but drops the Q F' Q block that bounds it.
+  !>         With an XC kernel the coupling is large and that model was
+  !>         indefinite (benzene B3LYP: lowest model eigenvalue -6 to -19
+  !>         against +7 exact, with a single stored pair), so model steps
+  !>         followed spurious negative curvature and the trust region collapsed.
+  !>         No Fock build is needed; only this response part is modelled.
+  !> @param[inout] mo_a   alpha MOs (exact path only)
+  !> @param[in]    dm     packed trial density (nbf_tri, nfocks)
+  !> @param[out]   pf     packed response Fock (nbf_tri, nfocks)
+  !> @param[inout] mo_b   beta MOs (exact path only)
+  subroutine trah_response_fock(self, infos, mo_a, dm, pf, mo_b)
+    use types,      only: information
+    use mathlib,    only: traceprod_sym_packed
+    use scf_addons, only: get_response_packed
+    implicit none
+    class(trah_converger), intent(inout) :: self
+    class(information), intent(inout), target :: infos
+    real(dp), intent(inout) :: mo_a(:,:)
+    real(dp), intent(in)    :: dm(:,:)
+    real(dp), intent(out)   :: pf(:,:)
+    real(dp), intent(inout), optional :: mo_b(:,:)
+    real(dp), allocatable :: s(:), c(:), tmp(:)
+    integer :: i, j, k, ns, nb
+
+    if (self%arh_mem == 0 .or. self%arh_exact) then
+      self%n_resp_builds = self%n_resp_builds + 1
+      if (present(mo_b)) then
+        call get_response_packed(infos%basis, infos, self%molGrid, mo_a, dm, pf, mo_b)
+      else
+        call get_response_packed(infos%basis, infos, self%molGrid, mo_a, dm, pf)
+      end if
+      return
+    end if
+
+    pf = 0.0_dp
+    if (self%arh_nb == 0) return
+    ns = size(self%arh_dref, 2)
+    nb = self%arh_nb
+    allocate(s(nb), c(nb), tmp(self%nbf_tri))
+    do j = 1, nb
+      k = self%arh_idx(j)
+      s(j) = 0.0_dp
+      do i = 1, ns
+        tmp = self%arh_f(:,i,k) - self%arh_fref(:,i)
+        s(j) = s(j) + traceprod_sym_packed(tmp, dm(:,i), self%nbf)
+      end do
+      s(j) = s(j) * self%arh_scale(j)
+    end do
+    c = matmul(self%arh_minv(1:nb,1:nb), s) * self%arh_scale(1:nb)
+    do j = 1, nb
+      k = self%arh_idx(j)
+      do i = 1, ns
+        pf(:,i) = pf(:,i) + c(j) * (self%arh_f(:,i,k) - self%arh_fref(:,i))
+      end do
+    end do
+    deallocate(s, c, tmp)
+  end subroutine trah_response_fock
+
+  !> @brief Relative residual |G_j - F'(D_ref).X_j| / |G_j| of the newest
+  !>        active ARH pair, with the exact response F'.
+  !> @detail The model pairs stored densities with stored Fock matrices and
+  !>         applies the result to the trial densities calc_h_op builds, so both
+  !>         must use one density convention (RHF total density, UHF/ROHF spin
+  !>         densities).  Hartree-Fock F is linear in D, so the residual is at the
+  !>         level of integral screening when they agree and O(1) when they do not.
+  function trah_arh_linearity_residual(self, infos) result(res)
+    use types,      only: information
+    use mathlib,    only: traceprod_sym_packed
+    use scf_addons, only: get_response_packed
+    implicit none
+    class(trah_converger), intent(inout) :: self
+    class(information), intent(inout), target :: infos
+    real(dp) :: res
+    real(dp), allocatable :: x(:,:), g(:,:), r(:,:)
+    real(dp) :: num, den
+    integer :: i, k, ns
+    res = -1.0_dp
+    if (self%arh_mem == 0 .or. self%arh_nb == 0) return
+    ns = size(self%arh_dref, 2)
+    k = self%arh_idx(self%arh_nb)
+    allocate(x(self%nbf_tri, ns), g(self%nbf_tri, ns), r(self%nbf_tri, ns))
+    self%n_diag_builds = self%n_diag_builds + 1
+    x = self%arh_d(:,:,k) - self%arh_dref
+    g = self%arh_f(:,:,k) - self%arh_fref
+    if (ns > 1) then
+      call get_response_packed(infos%basis, infos, self%molGrid, self%mo_a, x, r, self%mo_b)
+    else
+      call get_response_packed(infos%basis, infos, self%molGrid, self%mo_a, x, r)
+    end if
+    num = 0.0_dp; den = 0.0_dp
+    do i = 1, ns
+      num = num + traceprod_sym_packed(g(:,i) - r(:,i), g(:,i) - r(:,i), self%nbf)
+      den = den + traceprod_sym_packed(g(:,i), g(:,i), self%nbf)
+    end do
+    if (den > 0.0_dp) res = sqrt(num/den)
+  end function trah_arh_linearity_residual
+
+  !> @brief Reset the ARH model and size its history.
+  !> @param[in] mem  number of (D, F) pairs to keep; 0 selects the exact response
+  subroutine trah_arh_init(self, mem)
+    implicit none
+    class(trah_converger), intent(inout) :: self
+    integer, intent(in) :: mem
+    integer :: nf
+    self%arh_mem   = max(0, mem)
+    self%arh_nhist = 0
+    self%arh_last  = 0
+    self%arh_nb    = 0
+    self%arh_exact = .false.
+    self%n_resp_builds = 0
+    self%n_diag_builds = 0
+    if (allocated(self%arh_d))     deallocate(self%arh_d)
+    if (allocated(self%arh_f))     deallocate(self%arh_f)
+    if (allocated(self%arh_dref))  deallocate(self%arh_dref)
+    if (allocated(self%arh_fref))  deallocate(self%arh_fref)
+    if (allocated(self%arh_idx))   deallocate(self%arh_idx)
+    if (allocated(self%arh_scale)) deallocate(self%arh_scale)
+    if (allocated(self%arh_minv))  deallocate(self%arh_minv)
+    if (self%arh_mem == 0) return
+    nf = size(self%dens, 2)
+    allocate(self%arh_d(self%nbf_tri, nf, self%arh_mem), &
+             self%arh_f(self%nbf_tri, nf, self%arh_mem), &
+             self%arh_dref(self%nbf_tri, nf), self%arh_fref(self%nbf_tri, nf), &
+             source=0.0_dp)
+    allocate(self%arh_idx(self%arh_mem), self%arh_scale(self%arh_mem), &
+             self%arh_minv(self%arh_mem, self%arh_mem))
+  end subroutine trah_arh_init
+
+  !> @brief Store the current (dens, fock_ao) pair in the ARH history.
+  !> @detail A pair at the density stored last (the accepted trial point,
+  !>         rebuilt by the gradient evaluation) replaces it instead of
+  !>         occupying a second slot.
+  subroutine trah_arh_push(self)
+    implicit none
+    class(trah_converger), intent(inout) :: self
+    integer :: k
+    if (self%arh_mem == 0) return
+    k = self%arh_last
+    ! A gradient re-evaluation at the reference (after a rejected step) adds
+    ! no information; the reference pair is already in the history.
+    if (self%arh_nhist > 0) then
+      if (maxval(abs(self%dens - self%arh_dref)) <= arh_same_density) return
+    end if
+    if (self%arh_nhist == 0) then
+      k = 1
+      self%arh_nhist = 1
+    else if (maxval(abs(self%dens - self%arh_d(:,:,k))) > arh_same_density) then
+      k = mod(k, self%arh_mem) + 1
+      self%arh_nhist = min(self%arh_nhist + 1, self%arh_mem)
+    end if
+    self%arh_last = k
+    self%arh_d(:,:,k) = self%dens
+    self%arh_f(:,:,k) = self%fock_ao
+  end subroutine trah_arh_push
+
+  !> @brief Make the current (dens, fock_ao) the ARH reference and rebuild the
+  !>        model from the stored history.
+  !> @detail Each pair (X_i, G_i) is scaled by 1/|X_i| before the curvature
+  !>         matrix M_ij = <X_i, G_j> is formed, so the relative eigenvalue cut
+  !>         removes near-linear dependence and directions of non-positive
+  !>         curvature, and never drops a short (recent) step for being short.
+  subroutine trah_arh_set_reference(self)
+    use mathlib,   only: traceprod_sym_packed
+    use oqp_linalg
+    implicit none
+    class(trah_converger), intent(inout) :: self
+    real(dp), allocatable :: x(:,:,:), gk(:,:), t(:,:), w(:), work(:)
+    integer :: i, j, k, ns, nb, info, lwork
+    real(dp) :: xn
+
+    if (self%arh_mem == 0) return
+    self%arh_dref = self%dens
+    self%arh_fref = self%fock_ao
+    self%arh_nb = 0
+    ns = size(self%dens, 2)
+    allocate(x(self%nbf_tri, ns, self%arh_nhist))
+    nb = 0
+    do k = 1, self%arh_nhist
+      if (maxval(abs(self%arh_d(:,:,k) - self%arh_dref)) <= arh_same_density) cycle
+      nb = nb + 1
+      x(:,:,nb) = self%arh_d(:,:,k) - self%arh_dref
+      xn = 0.0_dp
+      do i = 1, ns
+        xn = xn + traceprod_sym_packed(x(:,i,nb), x(:,i,nb), self%nbf)
+      end do
+      self%arh_idx(nb) = k
+      self%arh_scale(nb) = 1.0_dp / sqrt(xn)
+      x(:,:,nb) = x(:,:,nb) * self%arh_scale(nb)
+    end do
+    if (nb == 0) return
+
+    allocate(t(nb,nb), w(nb), gk(self%nbf_tri, ns))
+    do j = 1, nb
+      gk = (self%arh_f(:,:,self%arh_idx(j)) - self%arh_fref) * self%arh_scale(j)
+      do k = 1, nb
+        t(k,j) = 0.0_dp
+        do i = 1, ns
+          t(k,j) = t(k,j) + traceprod_sym_packed(x(:,i,k), gk(:,i), self%nbf)
+        end do
+      end do
+    end do
+    ! <X_i, F' X_j> is symmetric; the stored pairs agree to screening (HF) or
+    ! to second order in the step (XC), so take the symmetric part.
+    t = 0.5_dp * (t + transpose(t))
+    lwork = max(1, 3*nb)
+    allocate(work(lwork))
+    call dsyev('V', 'U', nb, t, nb, w, work, lwork, info)
+    if (info /= 0) return     ! arh_nb stays 0: the model holds no response
+    self%arh_minv(1:nb,1:nb) = 0.0_dp
+    do k = 1, nb
+      if (w(k) <= arh_curv_cut * maxval(abs(w))) cycle
+      do j = 1, nb
+        self%arh_minv(1:nb,j) = self%arh_minv(1:nb,j) + t(1:nb,k) * (t(j,k) / w(k))
+      end do
+    end do
+    self%arh_nb = nb
+  end subroutine trah_arh_set_reference
+
+  ! Replace the spin-specific Fock curvature by the symmetric second
+  ! derivative of E(C exp(K)). Away from stationarity, differentiating a
+  ! moving-frame gradient alone omits the orbital-coordinate connection.
+  subroutine rohf_missing_fock_terms(self,x,ha,hb)
+    class(trah_converger), intent(inout) :: self
+    real(dp), intent(in) :: x(:)
+    real(dp), intent(inout) :: ha(:,:),hb(:,:)
+    real(dp), allocatable :: k(:,:),ks(:,:),fm(:,:),a(:,:),dk(:,:),fk(:,:),h(:,:)
+    integer :: n,na,nb,no,spin
+    n=self%nbf;na=self%nocc_a;nb=self%nocc_b
+    allocate(k(n,n),ks(n,n),fm(n,n),a(n,n),dk(n,n),fk(n,n),h(n,n))
+    call skew_sym_k(self,x,k,na)
+    h=0.0_dp
+    do spin=1,2
+      no=na
+      call unpack_matrix(self%fock_ao(:,spin),a)
+      if (spin == 1) then
+        fm=matmul(transpose(self%mo_a),matmul(a,self%mo_a))
+      else
+        no=nb
+        fm=matmul(transpose(self%mo_b),matmul(a,self%mo_b))
+      end if
+      ! Remove the canonical Fvv X - X Foo already included by calc_h_op.
+      ks=0.0_dp
+      ks(no+1:n,1:no)=k(no+1:n,1:no)
+      ks(1:no,no+1:n)=k(1:no,no+1:n)
+      fk=matmul(fm,ks)-matmul(ks,fm)
+      if (spin == 1) then
+        ha=ha-fk(no+1:n,1:no)
+      else
+        hb=hb-fk(no+1:n,1:no)
+      end if
+      ! For spin occupation D, the symmetric half-Hessian is
+      ! 1/2 ( [[F,K],D] + [F,[K,D]] ), including redundant-spin blocks.
+      dk=0.0_dp
+      dk(:,1:no)=k(:,1:no)
+      dk(1:no,:)=dk(1:no,:)-k(1:no,:)
+      fk=matmul(fm,k)-matmul(k,fm)
+      a=matmul(fm,dk)-matmul(dk,fm)
+      a(:,1:no)=a(:,1:no)+fk(:,1:no)
+      a(1:no,:)=a(1:no,:)-fk(1:no,:)
+      h=h+0.5_dp*a
+    end do
+    ! Pack each common rotation once; the response contributions in ha/hb
+    ! are untouched. CV is stored in alpha here and summed by pack_rohf_trial.
+    hb(1:na-nb,:)=hb(1:na-nb,:)+h(nb+1:na,1:nb)
+    ha=ha+h(na+1:n,1:na)
+  end subroutine rohf_missing_fock_terms
 
   !> @brief Pack ROHF α/β trial matrices into a single rotation vector.
   !> @detail Packs S↔D, V↔D, and V↔S blocks according to the ROHF layout

@@ -1,0 +1,22 @@
+# Ground-state QM/MM equilibration that produces the starting points of later
+# runs.  Formaldehyde (QM) in 5 TIP3P waters, NVT, four steps.
+#
+#   restart_file      the checkpoint: rewritten every restart_interval steps
+#                     and at the end.  Adding restart=true to this deck (and
+#                     raising nstep, which is the TOTAL length) continues the
+#                     run and appends to its trajectory and log.
+#   snapshot_interval a numbered snapshot every N steps, here
+#                     H2CO-water-eq.snapshot.00000002.npz and ...00000004.npz:
+#                     positions, velocities and cell of every atom.  Each one
+#                     can start a QM/MM surface-hopping trajectory with
+#                     md(snapshot="..."); see
+#                     H2CO-water_BHHLYP-MRSF-NAMD-QMMM-SNAPSHOT.oqp.
+#
+# rigidwater=true matters for the hand-over: QM/MM surface hopping keeps MM
+# water rigid, and refuses a snapshot whose water is not.
+#
+# In production the snapshots are taken every 50-100 fs from a few-ps NVT run,
+# after a classical NPT equilibration of the density.  Requires OpenMM.
+rks/bhhlyp/6-31g md(nstep=4,dt=0.5,ensemble=nvt,temperature=300,seed=7,snapshot_interval=2,restart_file="H2CO-water-eq.restart.npz")
+qmmm(pdb_file="formaldehyde_water.pdb",forcefield_files="formaldehyde.xml tip3p.xml",qm_atoms="0-3",cutoff=NoCutoff,rigidwater=true)
+geom="formaldehyde_water.pdb"

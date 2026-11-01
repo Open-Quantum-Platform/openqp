@@ -108,7 +108,7 @@ contains
     integer :: ierr
     real(kind=dp) :: mxerr, cnvtol, scale_exch
     integer :: maxvec, target_state
-    logical :: roref = .false.
+    logical :: roref
 
     type(int2_compute_t) :: int2_driver
     type(int2_td_data_t), target :: int2_data
@@ -135,7 +135,7 @@ contains
 !    end if 
     
     scf_type = infos%control%scftype
-    if (scf_type==3) roref = .true.
+    roref = scf_type == 3
 
     dft = infos%control%hamilton == 20
 
@@ -356,7 +356,7 @@ contains
       sym_ritz = matmul(bvec_mo(:,1:nvec), vr_p(1:nvec,1:nstates))
       call sym_response_project(infos, sym_ritz, scr3, nstates)
 
-      call rpaprint(eex, rnorm, cnvtol, iter, imax, nstates, do_neg=.true.)
+      if (infos%control%verbose >= 1) call rpaprint(eex, rnorm, cnvtol, iter, imax, nstates, do_neg=.true.)
 
       mxerr = maxval(rnorm)
 
@@ -368,7 +368,10 @@ contains
       if (nvec==mxvec) ierr = 1
       if (ierr/=0) exit
 
-      call rpanewb(nstates,bvec_mo,scr3,novec,nvec,ierr,tamm_dancoff=.true.)
+!     Corrections of roots that already meet cnvtol are optional: they
+!     refine the subspace only while slots remain (see rpanewb).
+      call rpanewb(nstates,bvec_mo,scr3,novec,nvec,ierr,tamm_dancoff=.true., &
+                   optional_candidate=rnorm(1:nstates)<=cnvtol)
 
   !   ierr=1 nvec over mxvec: not converged case
       if (ierr/=0) exit
@@ -417,7 +420,10 @@ contains
 
     sf_energies = eex(:nstates)
     bvec_mo_out = bvec_mo(:,:nstates)
-    infos%mol_energy%excited_energy = sf_energies(infos%tddft%target_state)
+    ! nstates may have been clipped to the response-space size above; bound the
+    ! index here and let the gradient reject an unavailable target.
+    target_state = max(1, min(int(infos%tddft%target_state), nstates))
+    infos%mol_energy%excited_energy = sf_energies(target_state)
     call print_results(infos, bvec_mo, eex, trans, dip, spin_square, nstates)
     call flush(iw)
 

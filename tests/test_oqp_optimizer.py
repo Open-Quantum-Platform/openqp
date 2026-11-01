@@ -17,6 +17,8 @@ from unittest import mock
 
 import numpy as np
 
+from oqp_module_isolation import stub_module
+
 ROOT = Path(__file__).resolve().parents[1]
 LIB = ROOT / "pyoqp" / "oqp" / "library"
 EXAMPLES_OPT = ROOT / "examples" / "OPT"
@@ -34,7 +36,7 @@ def _load_oqp_modules():
     """Load oqp_coords and oqp_engine without the oqp backend."""
     package_names = ("oqp", "oqp.library")
     module_names = (
-        "oqp.library.oqp_coords", "oqp.library.oqp_engine",
+        "oqp.library.oqp_coords", "oqp.library.oqp_transit", "oqp.library.oqp_model_hessian", "oqp.library.oqp_gpr", "oqp.library.oqp_engine",
         "oqp.library.oqp_neb", "oqp.library.oqp_irc", "oqp.library.baeka",
     )
     saved = {name: sys.modules.get(name) for name in package_names + module_names}
@@ -44,6 +46,9 @@ def _load_oqp_modules():
             module.__path__ = []
             sys.modules[pkg] = module
         nc = _load("oqp.library.oqp_coords", LIB / "oqp_coords.py")
+        _load("oqp.library.oqp_transit", LIB / "oqp_transit.py")
+        _load("oqp.library.oqp_model_hessian", LIB / "oqp_model_hessian.py")
+        _load("oqp.library.oqp_gpr", LIB / "oqp_gpr.py")
         ne = _load("oqp.library.oqp_engine", LIB / "oqp_engine.py")
         nb = _load("oqp.library.oqp_neb", LIB / "oqp_neb.py")
         ni = _load("oqp.library.oqp_irc", LIB / "oqp_irc.py")
@@ -1444,8 +1449,7 @@ class TestDispatchAndValidation(unittest.TestCase):
 
     def test_input_checker_accepts_oqp(self):
         # input_checker only needs a tiny mpi_utils stub.
-        utils = sys.modules.setdefault("oqp.utils",
-                                       types.ModuleType("oqp.utils"))
+        utils = stub_module("oqp.utils")
         utils.__path__ = []
         mpi = types.ModuleType("oqp.utils.mpi_utils")
         mpi.MPIManager = type("MPIManager", (), {})
@@ -1519,8 +1523,7 @@ class TestDispatchAndValidation(unittest.TestCase):
             self.assertIn("masses", keywords)
 
     def test_neb_product_resolves_relative_to_input_dir(self):
-        utils = sys.modules.setdefault("oqp.utils",
-                                       types.ModuleType("oqp.utils"))
+        utils = stub_module("oqp.utils")
         utils.__path__ = []
         mpi = types.ModuleType("oqp.utils.mpi_utils")
         mpi.MPIManager = type("MPIManager", (), {})
@@ -1543,8 +1546,7 @@ class TestDispatchAndValidation(unittest.TestCase):
         self.assertEqual([d for d in with_dir.errors if d.path == "neb.product"], [])
 
     def test_tci_validation(self):
-        utils = sys.modules.setdefault("oqp.utils",
-                                       types.ModuleType("oqp.utils"))
+        utils = stub_module("oqp.utils")
         utils.__path__ = []
         mpi = types.ModuleType("oqp.utils.mpi_utils")
         mpi.MPIManager = type("MPIManager", (), {})

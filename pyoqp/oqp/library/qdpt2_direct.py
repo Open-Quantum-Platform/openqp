@@ -25,13 +25,16 @@ memory ~ the merged external space (guarded by ``[pt2] max_terms``).  Numerical
 conventions (integrals, phases, shifts) are pinned to the dense engine by the
 equivalence tests in ``tests/test_qdpt2_direct.py`` (agreement <= 1e-10 Eh).
 
-Scope: the diagonal-Fock QDPT family only.  The CASPT2 Fock-MATRIX H0 and the
-Dyall H0 are not diagonal in the determinant basis and keep the dense path.
+Scope: the diagonal-Fock QDPT family, plus explicit single-state uncontracted
+CASPT2 energies with the diagonal Fock H0 and zero IPEA shift. The full-Fock
+multistate and Dyall H0 are not diagonal and keep the dense path.
 Alpha/beta strings are encoded in uint64 words (norb <= 63 per spin).
 """
 from __future__ import annotations
 
 import numpy as np
+
+from oqp.library.fci import canonicalize_ci_phase
 
 
 # --------------------------------------------------------------------------- bit utilities
@@ -433,6 +436,11 @@ def direct_qdpt2(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore, nact,
         F = _effective_fock(h1e, eri, D_sa)
         fmodel = _support_one_electron_model(F, sup_a, sup_b, norb, C)
         _w, R = np.linalg.eigh(0.5 * (fmodel + fmodel.T))
+        # Same canonical column phase _xms_rotation applies on the Dyall path:
+        # eigh fixes each rotated reference only up to a sign, and that sign
+        # reaches the off-diagonal of heff below, which carries the product of
+        # two of them.  This is the branch xmcqdpt2 and xms-caspt2 actually take.
+        R = canonicalize_ci_phase(R)
         C = C @ R
         hmodel = R.T @ np.diag(E_ref_in) @ R
     else:

@@ -1,0 +1,3 @@
+rhf/sto-3g
+neb(S0,product="NH3_QST_product.xyz",images=5,interpolation="idpp",maxit=2,opt_ends=false,align=true)
+geom="NH3_QST_reactant.xyz"

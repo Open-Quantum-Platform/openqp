@@ -14,6 +14,8 @@ import json
 import os
 import sys
 import time
+import re
+import signal
 import subprocess
 from typing import List, Dict, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -36,6 +38,74 @@ def _test_timeout():
     except ValueError:
         return 1800.0
     return val if val > 0 else None
+
+# Lines a dead child prints when a runtime -- not PyOQP -- ended the run.
+# The first match is hoisted into the ERROR message so a CI log names the
+# failure instead of only its exit code.
+_RUNTIME_ABORT_PATTERNS = (
+    re.compile(r"forrtl: severe \(\d+\).*", re.I),
+    re.compile(r"forrtl: error \(\d+\).*", re.I),
+    re.compile(r"Fortran runtime error:.*", re.I),
+    re.compile(r"Program received signal.*", re.I),
+    re.compile(r"ERROR STOP.*"),
+    re.compile(r"Segmentation fault.*", re.I),
+    re.compile(r"double free or corruption.*", re.I),
+    re.compile(r"Intel MKL ERROR:.*"),
+    re.compile(r"terminate called after throwing.*"),
+)
+
+
+def _first_runtime_abort(*texts):
+    """First runtime-abort line found in the given texts, or ''.
+
+    Searched in argument order, so a caller passes stderr before stdout before
+    the run log: the Fortran runtime writes its diagnosis to stderr, while the
+    log holds ordinary progress output that would otherwise crowd it out of a
+    3-line excerpt.
+    """
+    for text in texts:
+        for line in (text or "").splitlines():
+            for pattern in _RUNTIME_ABORT_PATTERNS:
+                match = pattern.search(line)
+                if match:
+                    return match.group(0).strip()
+    return ""
+
+
+def _exit_status_text(rc):
+    """Human-readable form of a subprocess return code."""
+    if rc is None:
+        return "no exit status"
+    if rc < 0:
+        name = signal.Signals(-rc).name if -rc in set(
+            int(sig) for sig in signal.Signals) else f"signal {-rc}"
+        return f"killed by {name}"
+    return f"exit {rc}"
+
+
+
+def _read_inp_config(input_file):
+    """Legacy .inp as {section: {key: value}} (INI layout), or {} if unreadable."""
+    import configparser
+    parser = configparser.ConfigParser(strict=False, interpolation=None,
+                                       comment_prefixes=('#', ';'),
+                                       inline_comment_prefixes=None)
+    try:
+        with open(input_file, 'r', encoding='utf-8') as fh:
+            parser.read_string(fh.read())
+    except (OSError, configparser.Error):
+        return {}
+    return {sec: dict(parser.items(sec)) for sec in parser.sections()}
+
+
+def _resolved_hessian_type(cfg, input_file=None):
+    """What [hess] type=auto (or an omitted type) resolves to for this input."""
+    try:
+        from oqp.utils.input_checker import resolve_hessian_type
+        input_dir = os.path.dirname(os.path.abspath(input_file)) if input_file else None
+        return resolve_hessian_type(cfg or {}, input_dir)[0]
+    except Exception:
+        return 'numerical'
 
 class OQPTester:
     """
@@ -227,6 +297,11 @@ class OQPTester:
         real_input = os.path.realpath(os.path.abspath(input_file))
         if real_input.lower().endswith(".restart.oqp"):
             real_input = real_input[:-len(".restart.oqp")] + ".oqp"
+        elif real_input.lower().endswith(".continuation.oqp"):
+            # Share checkpoint inputs, but use a distinct project/log so the
+            # child never overwrites its producer's restart manifest.
+            real_input = real_input[:-len(".continuation.oqp")] + ".oqp"
+            project_name = os.path.splitext(os.path.basename(real_input))[0]
         digest = hashlib.sha256(os.fsencode(real_input)).hexdigest()[:12]
         return os.path.join(self.output_dir, f"{project_name}__{digest}")
 
@@ -375,6 +450,11 @@ class OQPTester:
             # build without the optional DFTB backend still produces a green suite.
             needs_dftb_missing = 'openqp-dftb not found' in str(err).lower()
             needs_xtb_missing = 'openqp-xtb not found' in str(err).lower()
+            needs_serial_ground_state_md = (
+                usempi
+                and "ground-state all-qm md currently requires a single mpi rank"
+                in str(err).lower()
+            )
 
             # The native optimizer covers the ordinary geometry workflows,
             # but legacy constrained inputs may still explicitly select the
@@ -400,6 +480,12 @@ class OQPTester:
                 result["status"] = "SKIPPED"
                 result["message"] = ("requires the optional openqp-xtb backend "
                                      "(not installed); skipped")
+            elif needs_serial_ground_state_md:
+                result["status"] = "SKIPPED"
+                result["message"] = (
+                    "ground-state all-QM MD is serial-only; skipped in the "
+                    "MPI regression lane"
+                )
             elif needs_geometric_missing:
                 result["status"] = "SKIPPED"
                 result["message"] = ("requires the optional geomeTRIC optimizer "
@@ -480,12 +566,13 @@ class OQPTester:
         # optional feature the example needs (e.g. the ddX/PCM backend when
         # ENABLE_DDX is OFF), report SKIPPED rather than ERROR so an
         # intentionally-trimmed build still produces a green suite.
-        combined = (stdout or "") + (stderr or "")
+        log_text = ""
         try:
             with open(log, "r", encoding="utf-8", errors="ignore") as fh:
-                combined += fh.read()
+                log_text = fh.read()
         except OSError:
             pass
+        combined = (stdout or "") + (stderr or "") + log_text
         for feature in self._OPTIONAL_FEATURE_SENTINELS:
             if feature in combined:
                 self.log(f"Skipping test {project_name}: build lacks {feature}")
@@ -497,13 +584,45 @@ class OQPTester:
                     "execution_time": time.perf_counter() - start_time,
                 }
 
+        # A child that dies inside the native backend says why on ITS stderr,
+        # and nothing used to keep that: the parent reported the exit code
+        # alone, which is how an intermittent `forrtl: severe (184)` reached
+        # CI as the uninformative "subprocess exit 184". Persist both streams
+        # as artifacts and hoist the runtime's own diagnosis into the message.
+        crash_paths = []
+        for name, text in (("stderr", stderr), ("stdout", stdout)):
+            if not (text or "").strip():
+                continue
+            path = os.path.join(case_output_dir, f"{project_name}.crash-{name}.txt")
+            try:
+                with open(path, "w", encoding="utf-8", errors="replace") as fh:
+                    fh.write(text)
+                crash_paths.append(path)
+            except OSError:
+                pass
+
+        # stderr first, then stdout, then the run log: the runtime writes its
+        # diagnosis to stderr, while the log is ordinary progress output that
+        # would otherwise fill a short excerpt.
+        abort_line = _first_runtime_abort(stderr, stdout, log_text)
         tail = combined.strip().splitlines()[-3:]
-        self.log(f"Error in test {project_name}: subprocess exit {rc}")
+
+        parts = [f"PyOQP test crashed ({_exit_status_text(rc)})"]
+        if abort_line:
+            parts.append(f"runtime abort: {abort_line}")
+        if tail:
+            parts.append("last output: " + " | ".join(ln.strip() for ln in tail))
+        if crash_paths:
+            parts.append("captured streams: "
+                         + ", ".join(os.path.basename(q) for q in crash_paths)
+                         + f" in {case_output_dir}")
+        message = "; ".join(parts)
+
+        self.log(f"Error in test {project_name}: {message}")
         return {
             "project": project_name, "input_file": input_file,
             "log_file": log, "status": "ERROR",
-            "message": f"PyOQP test crashed (subprocess exit {rc}): "
-                       + " | ".join(tail),
+            "message": message,
             "execution_time": time.perf_counter() - start_time,
         }
 
@@ -587,12 +706,13 @@ class OQPTester:
         restart = []
         for path in input_files:
             real_path = os.path.realpath(os.path.abspath(path))
-            if real_path.lower().endswith(".restart.oqp"):
-                producer = real_path[:-len(".restart.oqp")] + ".oqp"
-                if producer in selected:
-                    restart.append(path)
-                    continue
-            primary.append(path)
+            suffix = next((suffix for suffix in
+                           (".restart.oqp", ".continuation.oqp")
+                           if real_path.lower().endswith(suffix)), None)
+            if suffix and real_path[:-len(suffix)] + ".oqp" in selected:
+                restart.append(path)
+            else:
+                primary.append(path)
         return primary, restart
 
     def _get_input_files(self, test_path: str, *,
@@ -714,6 +834,8 @@ class OQPTester:
                 'true', '1', 'yes', 'on'
             }
             method = str(input_cfg.get('method', 'hf')).strip().lower()
+            if runtype == 'hess' and hess_type in ('', 'auto'):
+                hess_type = _resolved_hessian_type(cfg, input_file)
             return (
                 runtype == 'irc'
                 or (runtype == 'hess' and hess_type != 'analytical')
@@ -728,7 +850,10 @@ class OQPTester:
         if 'runtype=irc' in text:
             return True
         if 'runtype=hess' in text and 'type=analytical' not in text:
-            return True
+            # An omitted type (or type=auto) may still resolve to the analytic
+            # Hessian; only skip what actually runs numerically.
+            if 'type=numerical' in text or _resolved_hessian_type(_read_inp_config(input_file), input_file) != 'analytical':
+                return True
         if 'qmmm_flag=true' in text and 'runtype=namd' not in text:
             return True
         if 'method=dftb' in text:

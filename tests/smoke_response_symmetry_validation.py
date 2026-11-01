@@ -9,6 +9,7 @@ and the state labels are unchanged.
 """
 
 import sys
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -21,15 +22,16 @@ WATER = """\
    1   0.533194329  -0.533194329  -0.614469223"""
 
 # (scf block, extra input lines, tdhf block)
+# Tighten solver convergence to resolve the energy-comparison gate.
 CASES = {
     'water_mrsf_3': ('multiplicity=3\ntype=rohf', 'functional=bhhlyp\n',
-                     '[tdhf]\ntype=mrsf\nnstate=3\n\n'),
+                     '[tdhf]\nconv=1e-10\nmaxit=100\ntype=mrsf\nnstate=3\n\n'),
     'water_mrsf_5': ('multiplicity=3\ntype=rohf', 'functional=bhhlyp\n',
-                     '[tdhf]\ntype=mrsf\nnstate=5\n\n'),
+                     '[tdhf]\nconv=1e-10\nmaxit=100\ntype=mrsf\nnstate=5\n\n'),
     'water_tda_5': ('multiplicity=1\ntype=rhf', 'functional=bhhlyp\n',
-                    '[tdhf]\ntype=tda\nnstate=5\n\n'),
+                    '[tdhf]\nconv=1e-10\nmaxit=100\ntype=tda\nnstate=5\n\n'),
     'water_rpa_4': ('multiplicity=1\ntype=rhf', 'functional=bhhlyp\n',
-                    '[tdhf]\ntype=rpa\nnstate=4\n\n'),
+                    '[tdhf]\nconv=1e-10\nmaxit=100\ntype=rpa\nnstate=4\n\n'),
 }
 
 INPUT_TEMPLATE = """\
@@ -45,6 +47,8 @@ basis=6-31g*
 type=huckel
 
 [scf]
+conv=1e-11
+maxit=100
 {scf}
 
 {tdhf}[symmetry]
@@ -66,7 +70,8 @@ def run_case(workdir, name, content):
 
 
 def main():
-    workdir = sys.argv[1] if len(sys.argv) > 1 else '/tmp/oqp_response_sym'
+    workdir = sys.argv[1] if len(sys.argv) > 1 else tempfile.mkdtemp(prefix='oqp_response_sym_')
+    print(f'workdir: {workdir}')
     failures = []
 
     for name, (scf, extra, tdhf) in CASES.items():

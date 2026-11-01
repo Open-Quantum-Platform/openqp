@@ -7,7 +7,9 @@ SOC-QMMM production path.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
+import json
 import re
 import sys
 import tempfile
@@ -16,6 +18,8 @@ import unittest
 from pathlib import Path
 
 import numpy as np
+
+from oqp_module_isolation import isolate_modules
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -64,6 +68,7 @@ def load_runfunc_with_namd_stubs():
     setattr(tb_backends, "tb_section_name", lambda *_args, **_kwargs: "dftb")
 
     single_point = types.ModuleType("oqp.library.single_point")
+    single_point.SCFnotConverged = type("SCFnotConverged", (Exception,), {})
     noop = type("_Noop", (), {
         "__init__": lambda self, *_args, **_kwargs: None,
         "energy": lambda self: None,
@@ -113,21 +118,36 @@ def load_runfunc_with_namd_stubs():
         for name in names:
             setattr(modules[module_name], name, noop)
 
-    saved = {name: sys.modules.get(name) for name in modules}
+    cleanup = isolate_modules()
     sys.modules.update(modules)
-
-    def cleanup():
-        for name, value in saved.items():
-            if value is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = value
 
     spec = importlib.util.spec_from_file_location("runfunc_soc_namd_under_test", RUNFUNC)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module, calls, cleanup
+
+
+def _source_copy(name, relative_path):
+    spec = importlib.util.spec_from_file_location(name, ROOT / "pyoqp" / "oqp" / relative_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _module_level_oqp_imports(path):
+    """``oqp.*`` modules a source file imports when it is executed.
+
+    Only module-level statements count; imports inside functions run lazily
+    and are the caller's business.
+    """
+    names = set()
+    for node in ast.parse(path.read_text()).body:
+        if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            names.add(node.module)
+        elif isinstance(node, ast.Import):
+            names.update(alias.name for alias in node.names)
+    return {name for name in names if name == "oqp" or name.startswith("oqp.")}
 
 
 def load_namd_with_stubs():
@@ -147,6 +167,7 @@ def load_namd_with_stubs():
     utils = types.ModuleType("oqp.utils")
     utils.__path__ = []
     single_point = types.ModuleType("oqp.library.single_point")
+    single_point.SCFnotConverged = type("SCFnotConverged", (Exception,), {})
     noop = type("_Noop", (), {})
     for name in ("SinglePoint", "Gradient", "LastStep", "BasisOverlap", "NACME"):
         setattr(single_point, name, noop)
@@ -164,10 +185,29 @@ def load_namd_with_stubs():
     setattr(tb_backends, "tb_section_name", lambda *_args, **_kwargs: "dftb")
     odp = types.ModuleType("oqp.library.odp")
     setattr(odp, "odp_from_config", lambda *_args, **_kwargs: None)
+    ints_1e = types.ModuleType("oqp.library.ints_1e")
+    setattr(ints_1e, "ints_1e", lambda *_args, **_kwargs: None)
+    setattr(oqp, "lib", types.SimpleNamespace())
+    molecule = types.ModuleType("oqp.molecule")
+    molecule.__path__ = []
 
     modules = {
         "oqp": oqp,
         "oqp.library": library,
+        "oqp.library.ints_1e": ints_1e,
+        # namd.py uses these pure-Python modules (active-atom selection since
+        # #404, the [md] schema defaults since b27cbe438); private copies of the
+        # real code, not stubs of it.
+        "oqp.library.qmmm_active": _source_copy("oqp.library.qmmm_active",
+                                                "library/qmmm_active.py"),
+        "oqp.periodic_table": _source_copy("oqp.periodic_table",
+                                           "periodic_table/__init__.py"),
+        "oqp.utils.constants": _source_copy("oqp.utils.constants", "utils/constants.py"),
+        "oqp.utils.qmmm": _source_copy("oqp.utils.qmmm", "utils/qmmm.py"),
+        # FlexiBLE boundary (#531): pure Python (math, numpy).
+        "oqp.library.flexible_boundary": _source_copy(
+            "oqp.library.flexible_boundary", "library/flexible_boundary.py"),
+        "oqp.molecule": molecule,
         "oqp.library.nac_utils": nac_utils,
         "oqp.library.odp": odp,
         "oqp.library.single_point": single_point,
@@ -175,15 +215,19 @@ def load_namd_with_stubs():
         "oqp.utils.file_utils": file_utils,
         "oqp.utils.tb_backends": tb_backends,
     }
-    saved = {name: sys.modules.get(name) for name in modules}
+    # The stub packages have an empty __path__, so a module namd.py imports
+    # at load time that is missing here resolves only if an earlier test left
+    # the real one in sys.modules: the file then fails when run alone but
+    # passes in the full suite.  Require every such import to be provided.
+    missing = sorted(_module_level_oqp_imports(NAMD) - set(modules))
+    if missing:
+        raise AssertionError(
+            "load_namd_with_stubs provides no module for namd.py import(s) "
+            + ", ".join(missing))
+    cleanup = isolate_modules()
     sys.modules.update(modules)
-
-    def cleanup():
-        for name, value in saved.items():
-            if value is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = value
+    sys.modules["oqp.molecule.oqpdata"] = _source_copy("oqp.molecule.oqpdata",
+                                                       "molecule/oqpdata.py")
 
     spec = importlib.util.spec_from_file_location("namd_state_map_under_test", NAMD)
     assert spec is not None and spec.loader is not None
@@ -227,15 +271,8 @@ def load_pyoqp_with_stubs():
         "oqp.utils.mpi_utils": mpi_utils,
         "oqp.molecule": molecule,
     }
-    saved = {name: sys.modules.get(name) for name in modules}
+    cleanup = isolate_modules()
     sys.modules.update(modules)
-
-    def cleanup():
-        for name, value in saved.items():
-            if value is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = value
 
     spec = importlib.util.spec_from_file_location("pyoqp_runner_under_test", PYOQP)
     assert spec is not None and spec.loader is not None
@@ -253,6 +290,9 @@ class DummyMol:
 
 
 class SOCNAMDQMMMProductionTests(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(isolate_modules())
+
     def test_rank_zero_io_failure_is_broadcast_to_every_mpi_rank(self):
         namd, _logs, cleanup = load_namd_with_stubs()
         try:
@@ -398,6 +438,9 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
                     "tests": {"exception": False},
                 },
                 usempi=False,
+                # Runner.run drops any gradient left by a previous run through
+                # the same Molecule before it dispatches.
+                invalidate_grad=lambda: None,
             )
             runner = pyoqp.Runner.__new__(pyoqp.Runner)
             runner.mol = mol
@@ -446,7 +489,7 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
         self.assertIn("self._rng_step >= self.first_hop_step", src)
         self.assertNotIn("np.random.default_rng", src)
         self.assertIn("cfg['properties']['back_door'] = True", src)
-        self.assertIn("NAMD_SOC._store_prev(self, self.r_all[self.qm_atoms].reshape((self.natom, 3)), u, eval_ha)", src)
+        self.assertIn("NAMD_SOC._store_prev(self, self._qm_positions_bohr(), u, eval_ha)", src)
         self.assertIn("BasisOverlap(mol).overlap()", src)
         self.assertIn("s_mch = NAMD_SOC._mch_overlap(self)", src)
 
@@ -607,6 +650,8 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
             driver.tdc_scheme = 0
             driver.trivial = 0
             driver.trivial_thresh = 0.5
+            driver.rescale_provider = "isotropic"
+            driver.tdc_provider = "overlap"
             driver.coef = np.array([1.0 + 0.0j, 0.0 + 0.0j])
             driver.vel = np.zeros((1, 3))
             driver._hop_random_override = lambda: self.fail(
@@ -625,6 +670,7 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
                     mol.data["OQP::namd_params"], copy=True))
                 mol.data["OQP::namd_coef"] = np.array(
                     [np.sqrt(0.75), 0.0, 0.0, 0.5])
+                mol.data["OQP::namd_results"] = np.zeros(2*2 + 8)
 
             namd.oqp.mrsf_namd_hop = propagate_only
             new_active, hopped = driver._hop(allow_hop=False)
@@ -735,21 +781,6 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
         finally:
             cleanup()
 
-    def test_periodic_odp_is_rejected_until_minimum_images_exist(self):
-        namd, _logs, cleanup = load_namd_with_stubs()
-        try:
-            self.assertIsNone(
-                namd._validate_odp_boundary_conditions(object(), False))
-            with self.assertRaisesRegex(NotImplementedError, "minimum-image"):
-                namd._validate_odp_boundary_conditions(object(), True)
-            src = NAMD.read_text()
-            self.assertIn(
-                "_validate_odp_boundary_conditions(self.odp, self.periodic)",
-                src,
-            )
-        finally:
-            cleanup()
-
     def test_soc_nve_gate_and_restart_are_enabled(self):
         src = NAMD.read_text()
 
@@ -820,13 +851,17 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
                 driver._pending_nve_gate_error = None
                 driver._electronic_config_identity = (
                     namd._electronic_config_identity(mol.config))
+                driver._signature_config_sections = (
+                    namd._signature_config_sections(mol.config))
                 frozen_signature = driver._restart_signature()
                 mol.config["md"]["econs"] = True
                 self.assertNotEqual(
                     driver._restart_signature(), frozen_signature)
                 mol.config["md"]["econs"] = False
+                # SOC propagation switches the live response manifold on
+                # every step; the signature must keep the run's model.
                 mol.config["tdhf"]["multiplicity"] = 1
-                self.assertNotEqual(
+                self.assertEqual(
                     driver._restart_signature(), frozen_signature)
                 mol.config["tdhf"]["multiplicity"] = 3
                 self.assertEqual(
@@ -857,6 +892,198 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
                 self.assertEqual(int(records["tracking_valid"][0]), 0)
         finally:
             cleanup()
+
+    def test_trajectory_appends_after_a_singlet_to_triplet_hop(self):
+        """A triplet active-state gradient must not invalidate the trajectory.
+
+        Formaldehyde SOC-MCH-NAMD hopped S1 -> T0(ms=-1) at step 58 and the
+        next append raised "schema/model mismatch" because the signature
+        read the live [tdhf] multiplicity that the triplet gradient set.
+        """
+        namd, _logs, cleanup = load_namd_with_stubs()
+
+        class _Excitation:
+            def __init__(self, mol):
+                self.mol = mol
+
+            def excitation(self, ref):
+                return [ref[0], ref[0] + 0.15]
+
+        class _TripletGradient:
+            def __init__(self, mol):
+                self.mol = mol
+
+            def gradient(self):
+                for state in self.mol.config["properties"]["grad"]:
+                    self.mol.grads[state] = np.full(6, 0.01)
+
+        namd.SinglePoint = _Excitation
+        namd.Gradient = _TripletGradient
+        try:
+            for cls, representation in (
+                    (namd.NAMD_SOC_MCH, "soc_mch"),
+                    (namd.NAMD_SOC, "soc_adiabatic")):
+                with self.subTest(representation=representation), \
+                        tempfile.TemporaryDirectory() as tmpdir:
+                    driver, mol, selected = self._soc_driver_after_s1_gradient(
+                        namd, cls, representation, tmpdir)
+                    driver._write_md_trajectory(
+                        0, np.zeros((2, 3)), -1.0, 0.1, False)
+
+                    # Hop to the first triplet Ms member (MCH basis 3 of 4).
+                    driver.active = 3
+                    driver.coef[:] = 0.0
+                    driver.coef[2] = 1.0
+                    if cls is namd.NAMD_SOC_MCH:
+                        driver._mch_exact_gradient(driver.active)
+                    else:
+                        namd._select_response_manifold(mol, 3)
+                    self.assertEqual(mol.config["tdhf"]["multiplicity"], 3)
+                    self.assertEqual(selected[-1], 3)
+                    driver._write_md_trajectory(
+                        1, np.zeros((2, 3)), -1.0, 0.1, True)
+                    # Back to the singlet manifold: still the same model.
+                    namd._select_response_manifold(mol, 1)
+                    driver._write_md_trajectory(
+                        2, np.zeros((2, 3)), -1.0, 0.1, False)
+
+                    header, records = namd.read_namd_trajectory(
+                        driver.trajectory_file)
+                    self.assertEqual(len(records), 3)
+                    self.assertEqual(
+                        json.loads(header["signature"])["tdhf_multiplicity"], 1)
+        finally:
+            cleanup()
+
+    def test_signature_still_binds_the_multiplicity_each_run_starts_with(self):
+        """Two runs started with different [tdhf] input keep distinct signatures."""
+        namd, _logs, cleanup = load_namd_with_stubs()
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                first, mol, _selected = self._soc_driver_after_s1_gradient(
+                    namd, namd.NAMD_SOC_MCH, "soc_mch", tmpdir)
+                second, other, _selected = self._soc_driver_after_s1_gradient(
+                    namd, namd.NAMD_SOC_MCH, "soc_mch", tmpdir)
+                other.config["tdhf"]["multiplicity"] = 3
+                second._signature_config_sections = (
+                    namd._signature_config_sections(other.config))
+                second._electronic_config_identity = (
+                    namd._electronic_config_identity(other.config))
+                self.assertNotEqual(
+                    first._restart_signature(), second._restart_signature())
+                # Within one run the live switch leaves the signature alone.
+                frozen = second._restart_signature()
+                namd._select_response_manifold(other, 1)
+                self.assertEqual(second._restart_signature(), frozen)
+        finally:
+            cleanup()
+
+    def test_tight_binding_identity_ignores_live_target_multiplicity(self):
+        """The TB target_multiplicity written by the manifold switch is not model input."""
+        namd, _logs, cleanup = load_namd_with_stubs()
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                driver, mol, _selected = self._soc_driver_after_s1_gradient(
+                    namd, namd.NAMD_SOC_MCH, "soc_mch", tmpdir)
+                mol.config["input"]["method"] = "xtb"
+                mol.config["xtb"] = {"gfn": 2, "target_multiplicity": 1}
+                driver._signature_config_sections = (
+                    namd._signature_config_sections(mol.config))
+                # _select_response_manifold writes this key for TB methods.
+                mol.config["xtb"]["target_multiplicity"] = 3
+                method, settings = driver._effective_tight_binding_settings()
+                self.assertEqual(method, "xtb")
+                self.assertEqual(settings["target_multiplicity"], 1)
+        finally:
+            cleanup()
+
+    @staticmethod
+    def _soc_driver_after_s1_gradient(namd, cls, representation, tmpdir):
+        """SOC driver with ns = nt = 1 whose live manifold is the singlet."""
+        selected = []
+
+        class _Data(dict):
+            def set_tdhf_multiplicity(self, mult):
+                selected.append(int(mult))
+
+        mol = types.SimpleNamespace(
+            config={
+                "input": {
+                    "method": "tdhf", "functional": "bhhlyp",
+                    "basis": "sto-3g", "charge": 0,
+                },
+                "scf": {"type": "rohf", "multiplicity": 3},
+                "tdhf": {
+                    "type": "mrsf", "multiplicity": 1,
+                    "nstate": 1, "tlf": 2,
+                },
+                "md": {
+                    "soc": True, "soc_basis": representation[4:],
+                    "econs": False,
+                },
+                "properties": {},
+            },
+            data=_Data({"OQP::td_energies": np.array([-1.0])}),
+            get_state_tracking=lambda: {
+                "order": [0], "phase_step": [1.0],
+                "matched_overlap": [1.0], "margin": [1.0],
+            },
+        )
+        mol.grads = {1: np.zeros(6)}
+        driver = cls.__new__(cls)
+        driver.mol = mol
+        driver._electronic_config_identity = (
+            namd._electronic_config_identity(mol.config))
+        driver._signature_config_sections = (
+            namd._signature_config_sections(mol.config))
+        driver.natom = 2
+        driver.ns = driver.nt = 1
+        driver.nstate = driver.nstate_soc = 4
+        driver.sing_energies = np.array([-1.1, -1.0])
+        driver.trip_energies = np.array([-1.1, -0.95])
+        driver.e_ref = -1.1
+        driver.coef = np.array([1.0, 0.0, 0.0, 0.0], dtype=complex)
+        driver._trajectory_state_energies = np.array([-1.0, -0.9, -0.9, -0.9])
+        driver._trajectory_representation = representation
+        driver.econs = False
+        driver._restart_system_identity = {"kind": "test", "sha256": "soc"}
+        driver._restart_molecular_identity = {"kind": "test", "sha256": "mol"}
+        driver.trajectory_file = str(Path(tmpdir) / "soc.namd.trj")
+        driver.trajectory_interval = 1
+        driver.dt_fs = 0.5
+        driver.dt_adaptive = False
+        driver._t_fs = 0.0
+        driver.seed = 1
+        driver.rng_stream = 0
+        driver.init_temp = 300.0
+        driver.active = 1
+        driver.vel = np.zeros((2, 3))
+        driver.odp = None
+        driver._last_hop_random = np.nan
+        driver._unbiased_potential_energy = -1.0
+        driver._last_state_overlap = None
+        driver._last_overlap_tdc = None
+        driver._nacme_reference_tdc = None
+        driver._nacme_reference_mask = None
+        driver._nacme_reference_source = 0
+        driver._nacme_gate_last = None
+        driver._nve_gate_last = None
+        driver._pending_nve_gate_error = None
+        return driver, mol, selected
+
+    def test_namd_init_freezes_signature_sections_before_propagation(self):
+        src = NAMD.read_text()
+        init = re.search(
+            r"class NAMD:.*?    def __init__\(self, mol\):(.*?)\n    def ",
+            src, re.S)
+        self.assertIsNotNone(init)
+        self.assertIn(
+            "self._signature_config_sections = _signature_config_sections(cfg)",
+            init.group(1))
+        signature = re.search(
+            r"    def _restart_signature\(self\):\n(.*?)\n    def ", src, re.S)
+        self.assertIn("cfg = self._signature_config()", signature.group(1))
+        self.assertNotIn("self.mol.config", signature.group(1))
 
     def test_all_soc_run_paths_prepare_and_write_dense_trajectories(self):
         src = NAMD.read_text()
@@ -889,10 +1116,15 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
         self.assertIn("gradient.mol.symmetrize_gradient(gqm)", src)
         self.assertIn("gradient.mol.set_grad(gqm)", src)
 
+        # The native post-SCF energy/gradient block is shared by the mol and
+        # config modes (_native_embedded_energy_gradient); it ends at the next
+        # method definition.
         native_start = src.index("# --- Gradients: pure QM + ESPF contribution")
-        native_end = src.index("self.op.mol.save_data()", native_start)
+        native_end = src.index("\n    def ", native_start)
         native_path = src[native_start:native_end]
-        self.assertNotIn("oqp.hf_gradient(self.op.mol)", native_path)
+        self.assertNotIn("oqp.hf_gradient(", native_path)
+        self.assertIn("def _native_embedded_energy_gradient(self, mol, sp, potmm, potqm)", src)
+        self.assertEqual(src.count("self._native_embedded_energy_gradient("), 2)   # mol + config modes
 
     def test_trivial_crossing_active_state_updates_are_applied(self):
         src = NAMD.read_text()

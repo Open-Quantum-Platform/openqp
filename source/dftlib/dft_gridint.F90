@@ -10,6 +10,7 @@ module mod_dft_gridint
   use oqp_linalg
   use blas_wrap, only: oqp_ddot => oqp_ddot_i64
   use parallel, only: par_env_t
+  use mod_dft_gridint_response_cache, only: response_cache_t, cache_hash
   use mod_dft_gridint_phi_cache, only: g_phi_cache, phi_cache_geom_hash
   implicit none
 
@@ -35,7 +36,7 @@ module mod_dft_gridint
   integer, parameter, public :: &
       XXX = 1, YYY = 2, ZZZ = 3, &
       XXY = 4, XXZ = 5, YYX = 6, YYZ = 7, &
-      ZZX = 8, ZZY = 9, XYZ = 10
+      ZZX = 8, ZZY = 9, XYZ3 = 10
 
 ! Convert 'square' XYZ indices to triangular,
 ! needed in hessian code
@@ -74,6 +75,10 @@ module mod_dft_gridint
     logical :: hasBeta = .false.
     !< .T./.F.  - wfA and wfB are MO vectors/densities
     logical :: isWFVecs = .true.
+    !< Density-driven (isWFVecs=.F.) LDA/GGA consumers that read only
+    !< D*phi (moV), never D*grad(phi) (moG1), may set this to skip the
+    !< gradient part of the AO->"MO" transform. Ignored for meta-GGA.
+    logical :: valueOnlyMOs = .false.
 
     integer :: numAOs = 0
     integer :: maxPts = 0
@@ -94,6 +99,7 @@ module mod_dft_gridint
     !< Opt-in to the cross-iteration collocation-Phi cache (Opt 1). Only the
     !< repeated SCF energy/Fock build sets this; gated further by env at runtime.
     logical :: use_phi_cache = .false.
+    type(response_cache_t), pointer :: response_cache => null()
 
     !< alpha spin wavefunction
     real(KIND=fp), contiguous, pointer :: wfAlpha(:, :) => null()
@@ -139,6 +145,7 @@ module mod_dft_gridint
       , moVB(:, :) => null() & !< MO values (beta)
       , aoG1(:, :, :) => null() & !< AO gradient
       , aoG2(:, :, :) => null() & !< AO 2nd der.
+      , aoG3(:, :, :) => null() & !< AO 3rd der.
       , moG1A(:, :, :) => null() & !< MO gradient (alpha)
       , moG2A(:, :, :) => null() & !< MO 2nd der. (alpha)
       , moG1B(:, :, :) => null() & !< MO gradient (beta)
@@ -154,6 +161,7 @@ module mod_dft_gridint
     logical :: hasBeta = .false.
     logical :: isWFVecs = .true.   !< .TRUE.  - wfA and wfB are MO vectors
                                    !< .FALSE. - wfA and wfB are densities
+    logical :: valueOnlyMOs = .false. !< compMOs transforms AO values only
     integer :: numAOs = 0 !< number of AOs
     integer :: numAOs_p = 0 !< number of pruned AOs
     integer :: numShells_p = 0 !< number of shells in shells_p
@@ -167,6 +175,10 @@ module mod_dft_gridint
     !< consumer update so consumers can associate points with their owning
     !< atom (e.g. PCM per-atom multipole projection). 0 when not in a slice.
     integer :: currAtom = 0
+    ! Atom owning the current atom-centred grid slice.  run_xc uses a
+    ! thread-private engine, so consumers may safely use this as slice
+    ! context (e.g. for fuzzy-cell weight derivatives).
+    integer :: gridOrigin = 0
     integer :: maxPts = 0
     integer :: maxAngMom = 0
     integer :: nAODer = 0
@@ -472,6 +484,10 @@ contains
 !   Manage density/MO vectors
     self%isWFVecs = xco%isWFVecs
     self%wfAlpha => xco%wfAlpha
+    ! compRhoAO/compDRhoAO use D*phi only; compTauAO and every MO-driven
+    ! density routine also need the transformed AO gradients.
+    self%valueOnlyMOs = xco%valueOnlyMOs .and. .not. xco%isWFVecs &
+                        .and. self%funTyp /= OQP_FUNTYP_MGGA
 
     self%numOccAlpha = xco%numOccAlpha
 
@@ -591,6 +607,19 @@ contains
         self%moVB => self%moMemB(:, :, 1)
         self%moG1B => self%moMemB(:, :, 2:4)
         self%moG2B => self%moMemB(:, :, 5:10)
+      end if
+    case (3)
+      self%aoV => self%aoMem(:, :, 1)
+      self%aoG1 => self%aoMem(:, :, 2:4)
+      self%aoG2 => self%aoMem(:, :, 5:10)
+      self%aoG3 => self%aoMem(:, :, 11:20)
+
+      ! Existing density paths transform only values and first derivatives.
+      self%moVA => self%moMemA(:, :, 1)
+      self%moG1A => self%moMemA(:, :, 2:4)
+      if (self%hasBeta) then
+        self%moVB => self%moMemB(:, :, 1)
+        self%moG1B => self%moMemB(:, :, 2:4)
       end if
     end select
 
@@ -716,6 +745,32 @@ contains
                        self%aoG2(:, iPt, YZ_), &
                        self%aoG2(:, iPt, XZ_), shells=shells)
 
+      end do
+    case (3)
+      do iPt = 1, ubound(xyz,1)
+        ptxyz = xyz(iPt,1:3)
+
+        call basis%aoval(ptxyz, nnz, &
+                       self%aoV(:, iPt), &
+                       self%aoG1(:, iPt, X__), &
+                       self%aoG1(:, iPt, Y__), &
+                       self%aoG1(:, iPt, Z__), &
+                       self%aoG2(:, iPt, XX_), &
+                       self%aoG2(:, iPt, YY_), &
+                       self%aoG2(:, iPt, ZZ_), &
+                       self%aoG2(:, iPt, XY_), &
+                       self%aoG2(:, iPt, YZ_), &
+                       self%aoG2(:, iPt, XZ_), &
+                       self%aoG3(:, iPt, XXX), &
+                       self%aoG3(:, iPt, YYY), &
+                       self%aoG3(:, iPt, ZZZ), &
+                       self%aoG3(:, iPt, XXY), &
+                       self%aoG3(:, iPt, XXZ), &
+                       self%aoG3(:, iPt, YYX), &
+                       self%aoG3(:, iPt, YYZ), &
+                       self%aoG3(:, iPt, ZZX), &
+                       self%aoG3(:, iPt, ZZY), &
+                       self%aoG3(:, iPt, XYZ3), shells=shells)
       end do
     case default
       write (*,'("Invalid grad level=",I2," in xc_engine_t % COMPAOS")') nDer
@@ -918,6 +973,21 @@ contains
           self%moG1B => self%moMemB(:, :, 2:4)
           self%moG2B => self%moMemB(:, :, 5:10)
         end if
+
+      case (3)
+        if (do_gather) &
+          self%aoMem(1:numAOs_p, :, 1:20) = reorderable_data(indices(1:numAOs_p), :, 1:20)
+
+        self%aoV => self%aoMem(:, :, 1)
+        self%aoG1 => self%aoMem(:, :, 2:4)
+        self%aoG2 => self%aoMem(:, :, 5:10)
+        self%aoG3 => self%aoMem(:, :, 11:20)
+        self%moVA => self%moMemA(:, :, 1)
+        self%moG1A => self%moMemA(:, :, 2:4)
+        if (hasBeta) then
+          self%moVB => self%moMemB(:, :, 1)
+          self%moG1B => self%moMemB(:, :, 2:4)
+        end if
       end select
 
     end associate
@@ -935,6 +1005,7 @@ contains
     integer :: nVecs, nPts
 
     nVecs = min(self%numAOVecs, 4) ! Don't transform second derivatives
+    if (self%valueOnlyMOs) nVecs = 1
     nPts  = ubound(self%aoMem,2)
 
     associate( nAlpha   => self%numOccAlpha &
@@ -2135,9 +2206,9 @@ contains
                 + xc%d3rt2(ids%ratatb, i) * dt(1)*dt(2) &
                 + xc%d3rt2(ids%ratbtb, i) * dt(2)*dt(2)
 
-          cr(2) = xc%d3rt2(ids%ratatb, i) * dt(1)*dt(1) &
+          cr(2) = xc%d3rt2(ids%rbtata, i) * dt(1)*dt(1) &
                 + xc%d3rt2(ids%rbtatb, i) * dt(2)*dt(1) &
-                + xc%d3rt2(ids%ratbtb, i) * dt(1)*dt(2) &
+                + xc%d3rt2(ids%rbtatb, i) * dt(1)*dt(2) &
                 + xc%d3rt2(ids%rbtbtb, i) * dt(2)*dt(2)
 
           g_r = g_r + cr
@@ -2315,6 +2386,93 @@ contains
 
 !###############################################################################
 
+  ! Hash the actual basis, reference orbitals, quadrature and screening inputs.
+  ! Trial density is deliberately excluded: it is contracted on every call.
+  subroutine prepare_response_cache(opts,basis,wcutoff,dftthr,kernel_on)
+    type(xc_options_t), intent(in) :: opts
+    type(basis_set), intent(in) :: basis
+    real(fp), intent(in) :: wcutoff,dftthr
+    logical, intent(in) :: kernel_on
+    integer(i8b) :: h, ah
+    real(fp), allocatable :: points(:,:)
+    integer :: i,np
+    if(opts%response_cache%budget()==0) then
+      call opts%response_cache%free()
+      return
+    end if
+    h=-3750763034362895579_i8b
+    call cache_hash(h,[opts%numAOs,opts%numAtoms,opts%nDer, &
+      merge(1,0,opts%isGGA.or.opts%needTau)])
+    call cache_hash(h,[wcutoff,dftthr,opts%ao_threshold,opts%ao_sparsity_ratio])
+    call cache_hash(h,basis%atoms%xyz)
+    call cache_hash(h,basis%ex); call cache_hash(h,basis%cc)
+    call cache_hash(h,basis%bfnrm)
+    call cache_hash(h,basis%g_offset); call cache_hash(h,basis%origin)
+    call cache_hash(h,basis%am); call cache_hash(h,basis%ncontr)
+    call cache_hash(h,basis%ao_offset); call cache_hash(h,basis%naos)
+    if(allocated(basis%harmonic)) call cache_hash(h,basis%harmonic)
+    if(allocated(basis%shell_centers)) call cache_hash(h,basis%shell_centers)
+    if(allocated(basis%shell_mx_dist2)) call cache_hash(h,basis%shell_mx_dist2)
+    if(allocated(basis%prim_mx_dist2)) call cache_hash(h,basis%prim_mx_dist2)
+    if(allocated(basis%at_mx_dist2)) call cache_hash(h,basis%at_mx_dist2)
+    if(associated(opts%symAtomWeight)) call cache_hash(h,opts%symAtomWeight)
+    allocate(points(opts%limPts,4))
+    do i=1,opts%molGrid%nSlices
+      call opts%molGrid%getSliceNonZero(wcutoff,i,points,np)
+      call cache_hash(h,[i,opts%molGrid%idOrigin(i),np])
+      call cache_hash(h,points(:np,:))
+    end do
+    ah=h
+    call cache_hash(h,[opts%nXCDer,opts%numOccAlpha,opts%numOccBeta, &
+      merge(1,0,opts%isWFVecs),merge(1,0,opts%hasBeta)])
+    h=ieor(h,opts%functional%cache_revision)
+    call cache_hash(h,opts%wfAlpha)
+    if(opts%hasBeta) call cache_hash(h,opts%wfBeta)
+    call opts%response_cache%prepare(h,opts%molGrid%nSlices,opts%molGrid%nMolPts, &
+      ao_key=ah,kernel_values=merge(32,0,kernel_on))
+  end subroutine prepare_response_cache
+
+  subroutine response_comp_xc(xce,cache,islice,functional,skip)
+    type(xc_engine_t), intent(inout) :: xce
+    type(response_cache_t), intent(inout) :: cache
+    integer, intent(in) :: islice
+    type(functional_t), intent(inout) :: functional
+    logical, intent(out) :: skip
+    real(fp), allocatable :: data(:,:)
+    real(fp) :: stats(5), before(5)
+    associate(s=>cache%slices(islice),xc=>xce%XCLib)
+      if(s%kernel_ready) then
+!$omp atomic update
+        cache%kernel_hits=cache%kernel_hits+1
+        skip=s%kernel_skip
+        if(skip) return
+        xc%lib_output=0.0_fp
+        xc%rho=s%kernel(1:2,:); xc%drho=s%kernel(3:8,:)
+        xc%sig=s%kernel(9:11,:); xc%exc=s%kernel(12,:)
+        xc%d1dr=s%kernel(13:14,:); xc%d1ds=s%kernel(15:17,:)
+        xc%d2r2=s%kernel(18:20,:); xc%d2rs=s%kernel(21:26,:)
+        xc%d2s2=s%kernel(27:32,:)
+        xc%E_xc=xc%E_xc+s%stats(1)
+        xce%N_elec=xce%N_elec+s%stats(2)
+        xce%G_total=xce%G_total+s%stats(3:5)
+        return
+      end if
+      before=[xc%E_xc,xce%N_elec,xce%G_total]
+      call xce%compXC(functional,skip)
+      stats=[xc%E_xc,xce%N_elec,xce%G_total]-before
+      allocate(data(32,xce%numPts),source=0.0_fp)
+      if(.not.skip) then
+        data(1:2,:)=xc%rho; data(12,:)=xc%exc
+        data(13:14,:)=xc%d1dr; data(18:20,:)=xc%d2r2
+        if(xce%funTyp==OQP_FUNTYP_GGA) then
+          data(3:8,:)=xc%drho; data(9:11,:)=xc%sig
+          data(15:17,:)=xc%d1ds; data(21:26,:)=xc%d2rs; data(27:32,:)=xc%d2s2
+        end if
+      end if
+      call cache%store_kernel(islice,skip,data,stats)
+    end associate
+  end subroutine response_comp_xc
+
   subroutine run_xc(xc_opts, xc_dat, basis)
     use basis_tools, only: basis_set
     use blas_thread, only: blas_thread_count, blas_thread_set
@@ -2355,7 +2513,8 @@ contains
 
     ! Opt 1: collocation-Phi cache (geometry-only reuse across SCF iterations)
     integer, parameter :: nAOVecs_tbl(0:3) = [1, 4, 10, 20]
-    logical :: cache_on, cache_replay
+    logical :: cache_on, cache_replay, response_on, kernel_on
+    type(response_cache_t), pointer :: rcache
     integer :: nAODer_c, numAOVecs_c, naop_c
     logical :: skip_p_c
     integer(i8b) :: ghash
@@ -2429,6 +2588,19 @@ contains
              numAOVecs_c, xc_opts%numAtoms, ghash, dftthr)
     cache_replay = g_phi_cache%active .and. g_phi_cache%replay
 
+    response_on=.false.
+    kernel_on=.false.
+    if(associated(xc_opts%response_cache)) then
+      rcache=>xc_opts%response_cache
+      ! AO values and spatial derivatives are reusable for all consumers.
+      ! Compact XC data is currently restricted to LDA/GGA second derivatives.
+      kernel_on=xc_opts%nDer==0.and.xc_opts%nXCDer==2.and. &
+        .not.xc_opts%needTau.and..not.xc_opts%functional%needlapl
+      call prepare_response_cache(xc_opts,basis,wcutoff,dftthr,kernel_on)
+      response_on=rcache%enabled
+      kernel_on=kernel_on.and.response_on
+    end if
+
     ! --- Env-gated per-build phase timing ------------------------------------
     call get_environment_variable('OQP_XC_TIMING', tenv, length=tln, status=tst)
     do_timing = (tst == 0 .and. tln > 0 .and. &
@@ -2436,9 +2608,21 @@ contains
          tenv(1:1) == 'y' .or. tenv(1:1) == 'Y' .or. &
          tenv(1:1) == 'o' .or. tenv(1:1) == 'O'))
 
+    ! The slice chunks are dealt to the ranks by chunk index, so every rank
+    ! must use the same chunkSize. It used to be computed inside the parallel
+    ! region from each rank's own thread count; ranks with different
+    ! OMP_NUM_THREADS then cut the grid differently and some slices were
+    ! integrated twice or not at all (ROKS CH2O, mpiexec with 1 and 3 threads:
+    ! 16.76 instead of 16 electrons). Rank 0's value is used everywhere.
+    chunkSize = max(1, xc_opts%molGrid%nSlices/(xc_dat%pe%size*4))
+    if (chunkSize/nOmpThreads > 40) then
+      chunkSize = 40*nOmpThreads
+    end if
+    call xc_dat%pe%bcast(chunkSize, 1)
+
 !$omp parallel &
 !$omp   num_threads(nOmpThreads) &
-!$omp   private(iChunk, chunkSize, numThreads, done) &
+!$omp   private(iChunk, numThreads, done) &
 !$omp   private(iSlice, numNzPts, xce) &
 !$omp   private(myThread), &
 !$omp   private(i), &
@@ -2451,10 +2635,6 @@ contains
     myThread = 1
 !$  numThreads = omp_get_num_threads()
 !$  myThread = omp_get_thread_num()+1
-    chunkSize = max(1, xc_opts%molGrid%nSlices/(xc_dat%pe%size*4))
-    if (chunkSize/numThreads > 40) then
-      chunkSize = 40*numThreads
-    end if
     allocate (xce)
     call xce%init(xc_opts)
 
@@ -2474,6 +2654,7 @@ contains
 !$      if (do_timing) tic = omp_get_wtime()
 
         iAtom = xc_opts%molGrid%idOrigin(iSlice)
+        xce%gridOrigin = iAtom
 
         ! Symmetry reduction: integrate only unique atoms' slices, with
         ! quadrature weights scaled by the atom-orbit size. Geometry-only, so
@@ -2485,7 +2666,35 @@ contains
           if (symw == 0.0_fp) CYCLE
         end if
 
-        if (cache_replay) then
+        skip=.false.
+        if(response_on) then
+          skip=rcache%slices(iSlice)%ao_ready
+        end if
+        if(skip) then
+!$omp atomic update
+          rcache%ao_hits=rcache%ao_hits+1
+          associate(s=>rcache%slices(iSlice))
+            if(s%ao_skip) cycle
+            ! Gradient consumers need absolute positions for moving-grid terms.
+            if(xc_opts%nDer>0) then
+              call xc_opts%molGrid%getSliceNonZero(wcutoff,iSlice,xce%xyzw,numNzPts)
+              do i=1,numNzPts
+                xce%xyzw(i,:3)=xce%xyzw(i,:3)+basis%atoms%xyz(:3,iAtom)
+              end do
+            end if
+            call xce%resetPointers(s%npts)
+            xce%numAOs_p=s%naos; xce%skip_p=s%dense
+            xce%aoMem_(:size(s%ao))=s%ao
+            xce%xyzw(:s%npts,4)=s%weights
+            if(s%dense) then
+              xce%wfAlpha_p=>xce%wfAlpha
+              if(xce%hasBeta) xce%wfBeta_p=>xce%wfBeta
+            else
+              xce%indices_p(:s%naos)=s%indices
+              call xce%resetPrunedPointers(gather=.false.)
+            end if
+          end associate
+        else if (cache_replay) then
           ! ---- Opt 1 REPLAY: restore the cached geometry-only Phi block -----
           call g_phi_cache%get_meta(iSlice, skip, numNzPts, naop_c, skip_p_c)
           if (skip) CYCLE
@@ -2506,6 +2715,8 @@ contains
           ! ---- BUILD: compute Phi as usual (and store it when caching) ------
           call xc_opts%molgrid%getSliceNonZero(wcutoff, iSlice, xce%xyzw, numNzPts)
           if (numNzPts==0) then
+            if(response_on) call rcache%store_ao(iSlice,.true.,0,0,.true.,numAOVecs_c, &
+                 xce%indices_p,xce%aoMem_,xce%xyzw(:,4))
             if (cache_on) call g_phi_cache%store(iSlice, .true., 0, 0, .true., &
                               xce%indices_p, xce%aoMem_, xce%xyzw(:,4))
             CYCLE
@@ -2525,11 +2736,15 @@ contains
           call xce%pruneAOs(skip)
 
           IF (skip) then
+            if(response_on) call rcache%store_ao(iSlice,.true.,0,0,.true.,numAOVecs_c, &
+                 xce%indices_p,xce%aoMem_,xce%xyzw(:,4))
             if (cache_on) call g_phi_cache%store(iSlice, .true., 0, 0, .true., &
                               xce%indices_p, xce%aoMem_, xce%xyzw(:,4))
             CYCLE
           end if
 
+          if(response_on) call rcache%store_ao(iSlice,.false.,xce%numPts,xce%numAOs_p, &
+               xce%skip_p,numAOVecs_c,xce%indices_p,xce%aoMem_,xce%xyzw(:,4))
           if (cache_on) call g_phi_cache%store(iSlice, .false., xce%numPts, &
                             xce%numAOs_p, xce%skip_p, xce%indices_p, &
                             xce%aoMem_, xce%xyzw(:,4))
@@ -2542,7 +2757,11 @@ contains
 
         xce%currAtom = iAtom
 
-        call xce%compXC(xc_opts%functional, skip)
+        if(kernel_on) then
+          call response_comp_xc(xce,rcache,iSlice,xc_opts%functional,skip)
+        else
+          call xce%compXC(xc_opts%functional, skip)
+        end if
 
         IF (skip) CYCLE
 
@@ -2568,6 +2787,10 @@ contains
     ! Finalize the Phi cache build pass (mark ready, tally footprint).
     call g_phi_cache%finish_run()
 
+    if(do_timing.and.response_on) then
+      write(iw,'(a,i0,a,i0,a,i0)') '[XCCACHE] bytes=',rcache%bytes, &
+        ' AO_hits=',rcache%ao_hits,' kernel_hits=',rcache%kernel_hits
+    end if
     if (do_timing) then
       ! Phase times below are aggregate THREAD-seconds (summed over threads),
       ! used to show the geomPhi(build)->geomPhi(replay) drop and the
@@ -2651,9 +2874,21 @@ contains
     wcutoff = 1.0d-15
     if (dftthr > 1.1d-15) wcutoff = 1.0d-08/npt
 
+    ! The slice chunks are dealt to the ranks by chunk index, so every rank
+    ! must use the same chunkSize. It used to be computed inside the parallel
+    ! region from each rank's own thread count; ranks with different
+    ! OMP_NUM_THREADS then cut the grid differently and some slices were
+    ! integrated twice or not at all (ROKS CH2O, mpiexec with 1 and 3 threads:
+    ! 16.76 instead of 16 electrons). Rank 0's value is used everywhere.
+    chunkSize = max(1, xc_opts%molGrid%nSlices/(xc_dat%pe%size*4))
+    if (chunkSize/nOmpThreads > 40) then
+      chunkSize = 40*nOmpThreads
+    end if
+    call xc_dat%pe%bcast(chunkSize, 1)
+
 !$omp parallel &
 !$omp   num_threads(nOmpThreads) &
-!$omp   private(iChunk, chunkSize, numThreads) &
+!$omp   private(iChunk, numThreads) &
 !$omp   private(iSlice, numNzPts, xce) &
 !$omp   private(myThread), &
 !$omp   private(i), &
@@ -2664,10 +2899,6 @@ contains
     myThread = 1
 !$  numThreads = omp_get_num_threads()
 !$  myThread = omp_get_thread_num()+1
-    chunkSize = max(1, xc_opts%molGrid%nSlices/(xc_dat%pe%size*4))
-    if (chunkSize/numThreads > 40) then
-      chunkSize = 40*numThreads
-    end if
     allocate (xce)
     call xce%init(xc_opts)
 

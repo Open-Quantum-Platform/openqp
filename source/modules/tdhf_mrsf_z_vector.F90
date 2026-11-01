@@ -5,7 +5,10 @@ module tdhf_mrsf_z_vector_mod
   use types, only: information
   use basis_tools, only: basis_set
   use int2_compute, only: int2_compute_t
+  use mod_dft_gridint_response_cache, only: response_cache_t
+  use tdhf_lib, only: int2_tdgrd_data_t
   use mod_dft_molgrid, only: dft_grid_t
+
   use, intrinsic :: ieee_arithmetic, only: ieee_is_finite, ieee_value, ieee_quiet_nan
   use zvector_common, only: sanitize_zvector_preconditioner
   implicit none
@@ -18,6 +21,8 @@ module tdhf_mrsf_z_vector_mod
   real(kind=8), allocatable :: gmres_wrk1(:,:), gmres_wrk2(:,:), gmres_wrk3(:,:)
   real(kind=8), allocatable, target :: gmres_pa(:,:,:)
   real(kind=8), allocatable :: gmres_ab1_mo_a(:,:), gmres_ab1_mo_b(:,:)
+  type(response_cache_t), target :: z_xc_cache
+  type(int2_tdgrd_data_t), target :: gmres_int2_data
   logical :: gmres_work_allocated = .false.
   integer :: gmres_nbf = 0
   integer :: gmres_nocca = 0
@@ -295,11 +300,11 @@ contains
       end do
     end do
   end subroutine zv_sfrogen_gather
-
   ! Initialize GMRES work arrays
   subroutine init_gmres_work(nbf, nocca, noccb)
     use messages, only: show_message, with_abort
     implicit none
+
     integer, intent(in) :: nbf, nocca, noccb
     integer :: nvira, nvirb, ok
     
@@ -361,6 +366,8 @@ contains
   subroutine cleanup_gmres_work()
     implicit none
     
+    call z_xc_cache%free()
+    call gmres_int2_data%clean()
     if (allocated(gmres_wrk1)) deallocate(gmres_wrk1)
     if (allocated(gmres_wrk2)) deallocate(gmres_wrk2)
     if (allocated(gmres_wrk3)) deallocate(gmres_wrk3)
@@ -489,13 +496,15 @@ contains
     unstable = .false.
     happy_breakdown = .false.
     
-    write(iw,'(/," GMRES Solver Parameters:")')
-    write(iw,'("   Problem size        : ", I8)') n
-    write(iw,'("   Restart dimension   : ", I4)') m
-    write(iw,'("   Max iterations      : ", I4)') max_iter
-    write(iw,'("   Convergence tol     : ", 1p,e10.3)') tol
-    write(iw,'(/," Iteration   Inner  Residual Norm   Reduction")')
-    write(iw,'(" ---------   -----  -------------   ---------")')
+    if (infos%control%verbose >= 1) then
+      write(iw,'(/," GMRES Solver Parameters:")')
+      write(iw,'("   Problem size        : ", I8)') n
+      write(iw,'("   Restart dimension   : ", I4)') m
+      write(iw,'("   Max iterations      : ", I4)') max_iter
+      write(iw,'("   Convergence tol     : ", 1p,e10.3)') tol
+      write(iw,'(/," Iteration   Inner  Residual Norm   Reduction")')
+      write(iw,'(" ---------   -----  -------------   ---------")')
+    end if
     call flush(iw)
     
     ! Compute initial residual
@@ -593,7 +602,8 @@ contains
       ! Report the true residual; beta is only the preconditioned Arnoldi seed norm.
       error = true_residual
       if (iter == 1) then
-        write(iw,'(I6,8x,"  0",2x,1p,F13.8,1x,F13.8)') &
+        if (infos%control%verbose >= 1) &
+          write(iw,'(I6,8x,"  0",2x,1p,F13.8,1x,F13.8)') &
               restart_count, error, error/error_initial
       end if
       
@@ -722,7 +732,8 @@ contains
         
         ! Print progress every 5 inner iterations or at convergence
         if (mod(j, 5) == 0 .or. error < tol .or. j == m) then
-          write(iw,'(I6,8x,I3,2x,1p,F13.8,1x,F13.8)') &
+          if (infos%control%verbose >= 1) &
+            write(iw,'(I6,8x,I3,2x,1p,F13.8,1x,F13.8)') &
                 restart_count, j, error, error/error_initial
           call flush(iw)
         end if
@@ -956,7 +967,7 @@ contains
     
     ! Local variables
     real(kind=dp), pointer :: ab1(:,:,:)
-    type(int2_tdgrd_data_t), allocatable, target :: int2_data
+    type(int2_tdgrd_data_t), pointer :: int2_data
     integer :: nvira, nvirb
     real(kind=dp) :: t0_op
 
@@ -977,6 +988,8 @@ contains
       call init_gmres_work(nbf, nocca, noccb)
     end if
     
+    int2_data => gmres_int2_data
+
     ! Clear work arrays
     gmres_wrk1 = 0.0_dp
     gmres_wrk2 = 0.0_dp
@@ -997,14 +1010,13 @@ contains
     call orthogonal_transform('t', nbf, mo_b, gmres_wrk2, gmres_pa(:,:,2), gmres_wrk3)
     if (zv_tmr_on) zv_t_trans = zv_t_trans + (zv_wtime() - t0_op)
 
-    ! Initialize ERI calculation with proper allocation
-    allocate(int2_data)
-    int2_data = int2_tdgrd_data_t( &
-        d2 = gmres_pa, &
-        int_apb = .true., &
-        int_amb = .false., &
-        tamm_dancoff = .false., &
-        scale_exchange = scale_exch)
+    ! The solve owns the accumulator. Rebind the trial density after any
+    ! workspace resize; parallel_start clears it on the first operator pass.
+    int2_data%d2 => gmres_pa
+    int2_data%int_apb = .true.
+    int2_data%int_amb = .false.
+    int2_data%tamm_dancoff = .false.
+    int2_data%scale_exchange = scale_exch
 
     if (zv_tmr_on) t0_op = zv_wtime()
     call int2_driver%run(int2_data, &
@@ -1032,7 +1044,7 @@ contains
           dxb = gmres_pa(:,:,2:2), &
           nmtx = 1, &
           threshold = 1.0d-15, &
-          infos = infos)
+          infos = infos, cache=z_xc_cache)
       if (zv_tmr_on) zv_t_xc = zv_t_xc + (zv_wtime() - t0_op)
     end if
 
@@ -1040,7 +1052,6 @@ contains
       x_out = ieee_value(0.0_dp, ieee_quiet_nan)
       write(*,'(" MRSF z-vector operator rejected non-finite response")')
       call int2_data%clean()
-      deallocate(int2_data)
       return
     end if
     
@@ -1054,8 +1065,6 @@ contains
                  nocca, noccb)
     if (zv_tmr_on) zv_t_trans = zv_t_trans + (zv_wtime() - t0_op)
 
-    call int2_data%clean()
-    deallocate(int2_data)
     
   end subroutine apply_z_operator
 
@@ -1172,6 +1181,7 @@ contains
     use precision, only: dp
     use io_constants, only: iw
     use oqp_tagarray_driver
+    use, intrinsic :: iso_c_binding, only: c_int32_t
 
     use types, only: information
     use strings, only: Cstring, fstring
@@ -1196,7 +1206,8 @@ contains
 
     use tdhf_mrsf_lib, only: &
       mrinivec, mrsfcbc, mrsfxvec, mrsfsp, mrsfrowcal, &
-      mrsfqrorhs, mrsfqropcal, mrsfqrowcal
+      mrsfqrorhs, mrsfqropcal, mrsfqrowcal, &
+      mrsf_interstate_tden, get_mrsf_transition_density
     use oqp_linalg
     use printing, only: print_module_info
     use minres_mod, only: minres_t, MINRES_OK, MINRES_CONVERGED
@@ -1232,7 +1243,7 @@ contains
     integer :: minres_iter
     integer, target :: minres_dummy
     real(kind=dp) :: cnvtol, scale_exch, scale_exch2
-    logical :: roref = .false.
+    logical :: roref
     integer :: mrst
 
     type(int2_compute_t), target :: int2_driver
@@ -1263,7 +1274,7 @@ contains
     character(len=12) :: target_label
     character(len=16) :: method_name
 
-    logical :: dft, mrsf_zvector_breakdown
+    logical :: dft, mrsf_zvector_breakdown, log_was_open
     integer :: scf_type, mol_mult, target_state
 
     ! tagarray
@@ -1290,7 +1301,7 @@ contains
             'MRSF requires a triplet ROHF/UHF internal reference (mult=3).', with_abort)
 
     scf_type = infos%control%scftype
-    if (scf_type==3) roref = .true.
+    roref = scf_type == 3
 
     mrsf_zvector_breakdown = .false.
 
@@ -1301,7 +1312,9 @@ contains
 
   ! Files open
   ! 3. LOG: Write: Main output file
-    open (unit=iw, file=infos%log_filename, position="append")
+    inquire(unit=iw, opened=log_was_open)
+    if (.not. log_was_open) &
+      open(unit=iw, file=infos%log_filename, position='append')
   !
     call print_module_info('MRSF_TDHF_Z_Vector','Solving Z-Vector for '//trim(method_name))
 
@@ -1535,7 +1548,7 @@ contains
        if (dft) call dftclean(infos)
        call measure_time(print_total=1, log_unit=iw)
        call cleanup_gmres_work()
-       close(iw)
+       if (.not. log_was_open) close(iw)
        return
     end if
 
@@ -1584,7 +1597,7 @@ contains
     ! Clean up GMRES work arrays
     call cleanup_gmres_work()
 
-    close(iw)
+    if (.not. log_was_open) close(iw)
 
   contains
 
@@ -1758,7 +1771,7 @@ contains
           dxb = pa(:,:,2:2), &
           nmtx = 1, &
           threshold = 1.0d-15, &
-          infos = infos)
+          infos = infos, cache=z_xc_cache)
       if (zv_tmr_on) zv_t_xc = zv_t_xc + (zv_wtime() - t0)
 
       if (zv_tmr_on) t0 = zv_wtime()
@@ -1795,8 +1808,14 @@ contains
         error = huge(1.0_dp)
       end if
 
-      write(iw,'(" Initial error =",3x,1p,e10.3,1x,"/",1p,e10.3)') error, cnvtol
+      if (infos%control%verbose >= 1) &
+        write(iw,'(" Initial error =",3x,1p,e10.3,1x,"/",1p,e10.3)') error, cnvtol
       call flush(iw)
+
+      ! Do not form p^T A p for an already converged initial residual (p=0
+      ! for an exact solution), or continue after an invalid initial state.
+      ! Progressive screening has not changed the cutoff at this point.
+      if (mrsf_zvector_breakdown .or. error < cnvtol) return
 
       ! -----------------------------------------------
 
@@ -1852,7 +1871,7 @@ contains
             dxb = pa(:,:,2:2), &
             nmtx = 1, &
             threshold = 1.0d-15, &
-            infos = infos)
+            infos = infos, cache=z_xc_cache)
         if (zv_tmr_on) zv_t_xc = zv_t_xc + (zv_wtime() - t0)
 
         if (zv_tmr_on) t0 = zv_wtime()
@@ -1905,7 +1924,8 @@ contains
           error = huge(1.0_dp)
           exit
         end if
-        write(iw,'(" Iter#",I2," Error =",&
+        if (infos%control%verbose >= 1) &
+          write(iw,'(" Iter#",I2," Error =",&
               &3x,1p,e10.3,1x,"/",1p,e10.3)') &
                 iter, error, cnvtol
         call flush(iw)
@@ -2067,7 +2087,7 @@ contains
           dxb = pa(:,:,2:2), &
           nmtx = 1, &
           threshold = 1.0d-15, &
-          infos = infos)
+          infos = infos, cache=z_xc_cache)
 
   !   ALPHA AO(M,N) -> MO(I-,J-) ... LPPIJA
       call dgemm('n', 'n', nbf, nocca, nbf,  &
@@ -2145,20 +2165,25 @@ contains
 
       if (mrst==1 .or. mrst==3 ) then
 
-        int2_data_st = int2_mrsf_data_t( &
+        ! Sourced allocation for the same reason as apply_z_operator above:
+        ! this is intrinsic assignment onto an allocatable derived type, and
+        ! it relies on automatic (re)allocation across Davidson iterations.
+        if (allocated(int2_data_st)) deallocate(int2_data_st)
+        allocate(int2_data_st, source=int2_mrsf_data_t( &
             d3 = fmrst1, &
             tamm_dancoff = .true., &
             scale_exchange = scale_exch2, &
-            scale_coulomb = scale_exch2)
+            scale_coulomb = scale_exch2))
 
       else if( mrst==5  )then
 
-        int2_data_q = int2_td_data_t( &
+        if (allocated(int2_data_q)) deallocate(int2_data_q)
+        allocate(int2_data_q, source=int2_td_data_t( &
             d2=bvec, &
             int_apb = .false., &
             int_amb = .false., &
             tamm_dancoff = .true., &
-            scale_exchange = scale_exch2)
+            scale_exchange = scale_exch2))
 
       end if
 
@@ -2190,7 +2215,7 @@ contains
           dxb = pa(:,:,2:2), &
           nmtx = 1, &
           threshold = 1.0d-15, &
-          infos = infos)
+          infos = infos, cache=z_xc_cache)
 
   !   ALPHA: AO(M,N) -> MO(IA+)
       call mntoia(ab1(:,:,1), ab1_mo_a, mo_a, mo_a, nocca, nocca)
@@ -2202,6 +2227,10 @@ contains
         call iatogen(bvec_mo(:,target_state), wrk1, nocca, noccb)
         call mrsfcbc(infos, mo_a, mo_a, wrk1, fmrst1(1,:,:,:))
 
+        ! NOTE (NAC audit 2026-06-13): mrsfcbc's own channel-7 `ball` density
+        ! is numerically IDENTICAL to sfdmat's td_abxc (verified, 1e-15), so
+        ! this overwrite is a no-op kept for clarity; the ground-configuration
+        ! cross-bilinear deficiency does NOT originate here.
         fmrst1(1,7,:,:) = td_abxc
 
         td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
@@ -2245,18 +2274,11 @@ contains
      ! spin pair ov-ov, co-co, co-ov coupling
         call mrsfsp(hxa, hxb, mo_a, mo_a, wrk3, fmrst2(1,:,:,:), nocca, noccb)
 
-     !  Unrelaxed difference density matries T_ij and T_ab
+     !  Unrelaxed difference density matrices T_ij and T_ab
      !  Ta(i+,j+):= -X(i+,a-)*X(j+,a-) for singlet and triplet
-        call dgemm('n', 't', nocca, nocca, nvirb, &
-                  -1.0_dp, bvec_mo_d, nocca, &
-                           bvec_mo_d, nocca, &
-                   0.0_dp, tij, nocca)
-
      !  Tb(a-,b-):= X(i+,a-)*X(i+,b-) for singlet and triplet
-        call dgemm('t', 'n', nvirb, nvirb, nocca, &
-                   1.0_dp, bvec_mo_d, nocca, &
-                           bvec_mo_d, nocca, &
-                   0.0_dp, tab, nvirb)
+        call mrsf_interstate_tden(infos, bvec_mo, target_state, target_state, &
+                                  tij, tab)
 
         call sfrorhs(rhs, hxa, hxb, ab1_mo_a, ab1_mo_b, &
                      Tij, Tab, Fa, Fb, nocca, noccb)

@@ -68,10 +68,11 @@ module basis_tools
     procedure, pass(basis) :: reserve => omp_sp_reserve
     procedure, pass(basis) :: destroy => omp_sp_destroy
 
-    generic :: aoval => compAOv, compAOVg, compAOVgg
+    generic :: aoval => compAOv, compAOVg, compAOVgg, compAOVggg
     procedure, pass(basis) :: compAOv
     procedure, pass(basis) :: compAOvg
     procedure, pass(basis) :: compAOvgg
+    procedure, pass(basis) :: compAOvggg
 
     procedure, pass(basis) :: init_shell_centers
 
@@ -1231,6 +1232,178 @@ contains
     end do
 
   end subroutine
+
+!-------------------------------------------------------------------------------
+
+!> @brief Compute AO values and their derivatives through third order.
+!> @details The component ordering is value; X,Y,Z; XX,YY,ZZ,XY,YZ,XZ;
+!>          XXX,YYY,ZZZ,XXY,XXZ,YYX,YYZ,ZZX,ZZY,XYZ.  A generic
+!>          primitive-Gaussian recursion is used here because third AO
+!>          derivatives are needed only by high-order grid consumers; the
+!>          optimized value/gradient/Hessian entry points remain unchanged.
+  subroutine compAOvggg(basis, ptxyz, naos, &
+                        aov, aogx, aogy, aogz, &
+                        aog2xx, aog2yy, aog2zz, aog2xy, aog2yz, aog2xz, &
+                        aog3xxx, aog3yyy, aog3zzz, aog3xxy, aog3xxz, &
+                        aog3yyx, aog3yyz, aog3zzx, aog3zzy, aog3xyz, shells)
+
+    use precision, only: fp
+    implicit none
+
+    class(basis_set) :: basis
+    real(kind=fp), intent(in) :: ptxyz(3)
+    integer, intent(out) :: naos
+    real(kind=fp), contiguous, intent(out) :: aov(:)
+    real(kind=fp), contiguous, intent(out) :: aogx(:), aogy(:), aogz(:)
+    real(kind=fp), contiguous, intent(out) :: &
+      aog2xx(:), aog2yy(:), aog2zz(:), aog2xy(:), aog2yz(:), aog2xz(:)
+    real(kind=fp), contiguous, intent(out) :: &
+      aog3xxx(:), aog3yyy(:), aog3zzz(:), aog3xxy(:), aog3xxz(:), &
+      aog3yyx(:), aog3yyz(:), aog3zzx(:), aog3zzy(:), aog3xyz(:)
+    integer, optional, intent(in) :: shells(:)
+
+    integer, parameter :: nvec = 20
+    integer :: ishell, ishl, nshl, ityp, iprim, k1, k2, offset
+    integer :: ix, iy, iz, iv, ns
+    integer, parameter :: deriv_order(3,nvec) = reshape([ &
+      0,0,0,  1,0,0,  0,1,0,  0,0,1, &
+      2,0,0,  0,2,0,  0,0,2,  1,1,0,  0,1,1,  1,0,1, &
+      3,0,0,  0,3,0,  0,0,3,  2,1,0,  2,0,1, &
+      1,2,0,  0,2,1,  1,0,2,  0,1,2,  1,1,1], [3,nvec])
+    real(kind=fp) :: r(3), rsqrd, alpha, radial
+    real(kind=fp) :: cartbuf(NUM_CART_BF(BAS_MXANG),nvec)
+    real(kind=fp) :: sphbuf(NUM_SPH_BF(BAS_MXANG))
+    logical :: use_list
+
+    use_list = present(shells)
+    nshl = basis%nshell
+    if (use_list) nshl = size(shells)
+    naos = 0
+
+    do ishl = 1, nshl
+      if (use_list) then
+        ishell = shells(ishl)
+      else
+        ishell = ishl
+      end if
+      associate(iatm => basis%origin(ishell), am => basis%am(ishell), &
+                maxi => basis%naos(ishell))
+        offset = basis%ao_offset(ishell)
+        r = ptxyz - basis%atoms%xyz(:3,iatm)
+        rsqrd = sum(r*r)
+        if (rsqrd > basis%shell_mx_dist2(ishell)) then
+          call zero_shell(offset, maxi)
+          cycle
+        end if
+        naos = naos + 1
+        cartbuf = 0.0_fp
+        k1 = basis%g_offset(ishell)
+        k2 = k1 + basis%ncontr(ishell) - 1
+        do iprim = k1, k2
+          if (rsqrd > basis%prim_mx_dist2(iprim)) cycle
+          alpha = basis%ex(iprim)
+          radial = basis%cc(iprim)*exp(-alpha*rsqrd)
+          do ityp = 1, NUM_CART_BF(am)
+            ix = cart_x(ityp,am)
+            iy = cart_y(ityp,am)
+            iz = cart_z(ityp,am)
+            do iv = 1, nvec
+              cartbuf(ityp,iv) = cartbuf(ityp,iv) + radial &
+                * gaussian_polynomial_derivative(ix,deriv_order(1,iv),r(1),alpha) &
+                * gaussian_polynomial_derivative(iy,deriv_order(2,iv),r(2),alpha) &
+                * gaussian_polynomial_derivative(iz,deriv_order(3,iv),r(3),alpha)
+            end do
+          end do
+        end do
+
+        if (HARMONIC_ACTIVE .and. basis%harmonic(ishell) == 1) then
+          ns = NUM_SPH_BF(am)
+          do iv = 1, nvec
+            call cart2sph_vec(cartbuf(1:NUM_CART_BF(am),iv), sphbuf(1:ns), am)
+            call store_component(iv, offset, ns, sphbuf(1:ns))
+          end do
+        else
+          do iv = 1, nvec
+            call store_component(iv, offset, maxi, cartbuf(1:maxi,iv))
+          end do
+        end if
+      end associate
+    end do
+
+  contains
+
+    pure function gaussian_polynomial_derivative(l, n, x, a) result(v)
+      integer, intent(in) :: l, n
+      real(kind=fp), intent(in) :: x, a
+      real(kind=fp) :: v
+      select case (n)
+      case (0)
+        v = nonnegative_power(x,l)
+      case (1)
+        v = l*nonnegative_power(x,l-1) - 2.0_fp*a*nonnegative_power(x,l+1)
+      case (2)
+        v = l*(l-1)*nonnegative_power(x,l-2) &
+          - 2.0_fp*a*(2*l+1)*nonnegative_power(x,l) &
+          + 4.0_fp*a*a*nonnegative_power(x,l+2)
+      case (3)
+        v = l*(l-1)*(l-2)*nonnegative_power(x,l-3) &
+          - 6.0_fp*a*l*l*nonnegative_power(x,l-1) &
+          + 12.0_fp*a*a*(l+1)*nonnegative_power(x,l+1) &
+          - 8.0_fp*a*a*a*nonnegative_power(x,l+3)
+      case default
+        v = 0.0_fp
+      end select
+    end function gaussian_polynomial_derivative
+
+    pure function nonnegative_power(x, n) result(v)
+      real(kind=fp), intent(in) :: x
+      integer, intent(in) :: n
+      real(kind=fp) :: v
+      if (n < 0) then
+        v = 0.0_fp
+      else
+        v = x**n
+      end if
+    end function nonnegative_power
+
+    subroutine store_component(iv, first, count, values)
+      integer, intent(in) :: iv, first, count
+      real(kind=fp), intent(in) :: values(count)
+      select case (iv)
+      case (1);  aov(first:first+count-1) = values
+      case (2);  aogx(first:first+count-1) = values
+      case (3);  aogy(first:first+count-1) = values
+      case (4);  aogz(first:first+count-1) = values
+      case (5);  aog2xx(first:first+count-1) = values
+      case (6);  aog2yy(first:first+count-1) = values
+      case (7);  aog2zz(first:first+count-1) = values
+      case (8);  aog2xy(first:first+count-1) = values
+      case (9);  aog2yz(first:first+count-1) = values
+      case (10); aog2xz(first:first+count-1) = values
+      case (11); aog3xxx(first:first+count-1) = values
+      case (12); aog3yyy(first:first+count-1) = values
+      case (13); aog3zzz(first:first+count-1) = values
+      case (14); aog3xxy(first:first+count-1) = values
+      case (15); aog3xxz(first:first+count-1) = values
+      case (16); aog3yyx(first:first+count-1) = values
+      case (17); aog3yyz(first:first+count-1) = values
+      case (18); aog3zzx(first:first+count-1) = values
+      case (19); aog3zzy(first:first+count-1) = values
+      case (20); aog3xyz(first:first+count-1) = values
+      end select
+    end subroutine store_component
+
+    subroutine zero_shell(first, count)
+      integer, intent(in) :: first, count
+      integer :: iv
+      real(kind=fp) :: zeros(count)
+      zeros = 0.0_fp
+      do iv = 1, nvec
+        call store_component(iv, first, count, zeros)
+      end do
+    end subroutine zero_shell
+
+  end subroutine compAOvggg
 
 !-------------------------------------------------------------------------------
 

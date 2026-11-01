@@ -49,7 +49,7 @@ contains
     real(kind=dp) :: t(6,6,4)
     integer :: jtype
     integer :: ids(4), am(4), nin(4)
-    integer :: s
+    integer :: s, previous, j
 
     call genr22_core(basis, ppairs, grotspd, shell_ids, flips, cutoffs, prot, jtype, emu2)
 
@@ -58,7 +58,24 @@ contains
 
     do s = 1, 4
       nin(s) = NUM_CART_BF(am(s))
-      call build_pure_rotation(am(s), basis%harmonic(ids(s)), prot, t(:,:,s), nbf(s))
+      if (am(s) == 0) then
+        nbf(s) = 1
+        cycle
+      end if
+      ! Equal angular momenta and harmonic flags share the same rotation.
+      previous = 0
+      do j = 1, s-1
+        if (am(j) /= am(s)) cycle
+        if (am(s) == 2 .and. basis%harmonic(ids(j)) /= basis%harmonic(ids(s))) cycle
+        previous = j
+        exit
+      end do
+      if (previous > 0) then
+        nbf(s) = nbf(previous)
+        t(:nbf(s),:nin(s),s) = t(:nbf(s),:nin(s),previous)
+      else
+        call build_pure_rotation(am(s), basis%harmonic(ids(s)), prot, t(:,:,s), nbf(s))
+      end if
     end do
 
     call apply_index_transforms(grotspd, am, nin, nbf, t)
@@ -212,16 +229,63 @@ contains
     real(kind=dp), intent(out) :: dst(nleft, no, nright)
     real(kind=dp), intent(in) :: tmat(6,6)
 
-    integer :: b, o, i
+    integer :: a, b, o
 
-    do b = 1, nright
-      do o = 1, no
-        dst(:,o,b) = tmat(o,1) * src(:,1,b)
-        do i = 2, ni
-          dst(:,o,b) = dst(:,o,b) + tmat(o,i) * src(:,i,b)
+    ! Fixed three- and six-component sums keep each destination in registers
+    ! until the contraction is complete. The left index remains contiguous.
+    if (nleft == 1) then
+      select case (ni)
+      case (3)
+        do b = 1, nright
+          do o = 1, no
+              dst(1,o,b) = tmat(o,1) * src(1,1,b) + &
+                tmat(o,2) * src(1,2,b) + &
+                tmat(o,3) * src(1,3,b)
+          end do
         end do
-      end do
-    end do
+      case (6)
+        do b = 1, nright
+          do o = 1, no
+              dst(1,o,b) = tmat(o,1) * src(1,1,b) + &
+                tmat(o,2) * src(1,2,b) + &
+                tmat(o,3) * src(1,3,b) + &
+                tmat(o,4) * src(1,4,b) + &
+                tmat(o,5) * src(1,5,b) + &
+                tmat(o,6) * src(1,6,b)
+          end do
+        end do
+      case default
+        error stop 'transform_one_dim: expected a p or d shell'
+      end select
+    else
+      select case (ni)
+      case (3)
+        do b = 1, nright
+          do o = 1, no
+            do a = 1, nleft
+              dst(a,o,b) = tmat(o,1) * src(a,1,b) + &
+                tmat(o,2) * src(a,2,b) + &
+                tmat(o,3) * src(a,3,b)
+            end do
+          end do
+        end do
+      case (6)
+        do b = 1, nright
+          do o = 1, no
+            do a = 1, nleft
+              dst(a,o,b) = tmat(o,1) * src(a,1,b) + &
+                tmat(o,2) * src(a,2,b) + &
+                tmat(o,3) * src(a,3,b) + &
+                tmat(o,4) * src(a,4,b) + &
+                tmat(o,5) * src(a,5,b) + &
+                tmat(o,6) * src(a,6,b)
+            end do
+          end do
+        end do
+      case default
+        error stop 'transform_one_dim: expected a p or d shell'
+      end select
+    end if
 
   end subroutine transform_one_dim
 

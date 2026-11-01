@@ -1,16 +1,15 @@
 include(ExternalProject)
 
+# Preserve the aggregate namespace of unchanged dependencies. Removed projects
+# remain only as historical key fragments; they are never fetched or linked.
 set(_OQP_EXTERNALS_CACHE_REVISION "2")
-set(_OQP_LIBINT2_VERSION "2.7.1.1-am4")
-# NLopt is no longer built or linked. Keep its former aggregate-key fragment
-# verbatim so this removal does not select a fresh cache namespace and rebuild
-# otherwise ABI-compatible Libxc/libecpint/TagArray artifacts.
 set(_OQP_LEGACY_NLOPT_CACHE_TOKEN "nlopt2.9.1")
+set(_OQP_LEGACY_ECP_CACHE_TOKEN "ecp1.0.7")
+set(_OQP_LEGACY_OTR_CACHE_TOKEN "otr2.0.0")
+set(_OQP_LIBINT2_VERSION "2.7.1.1-am4")
 set(_OQP_LIBXC_VERSION "7.0.0")
 set(_OQP_TAGARRAY_VERSION "1.0.0")
-set(_OQP_LIBECPINT_VERSION "1.0.7")
 set(_OQP_LAPACK_VERSION "3.10.0")
-set(_OQP_OPENTRUSTREGION_VERSION "2.0.0")
 set(_OQP_FPRETTIFY_VERSION "0.3.7")
 set(_OQP_DDX_VERSION "0.8.0")
 set(_OQP_MCTC_LIB_VERSION "0.4.2")
@@ -72,11 +71,11 @@ endif()
 endif()  # ENABLE_DFTD4 (source-transformation prerequisites + cache key)
 
 set(_OQP_EXTERNALS_VERSION_KEY
-    "ext${_OQP_EXTERNALS_CACHE_REVISION}-libint${_OQP_LIBINT2_VERSION}-${_OQP_LEGACY_NLOPT_CACHE_TOKEN}-libxc${_OQP_LIBXC_VERSION}-tag${_OQP_TAGARRAY_VERSION}-ecp${_OQP_LIBECPINT_VERSION}-lapack${_OQP_LAPACK_VERSION}-otr${_OQP_OPENTRUSTREGION_VERSION}-fmt${_OQP_FPRETTIFY_VERSION}-ddx${_OQP_DDX_VERSION}")
+    "ext${_OQP_EXTERNALS_CACHE_REVISION}-libint${_OQP_LIBINT2_VERSION}-${_OQP_LEGACY_NLOPT_CACHE_TOKEN}-libxc${_OQP_LIBXC_VERSION}-tag${_OQP_TAGARRAY_VERSION}-${_OQP_LEGACY_ECP_CACHE_TOKEN}-lapack${_OQP_LAPACK_VERSION}-${_OQP_LEGACY_OTR_CACHE_TOKEN}-fmt${_OQP_FPRETTIFY_VERSION}-ddx${_OQP_DDX_VERSION}")
 
 # Give only the DFT-D4 stack a new nested cache namespace.  Putting these
 # tokens in _OQP_EXTERNALS_VERSION_KEY would invalidate unrelated heavy cached
-# libraries (Libxc, libecpint, and friends).  OpenMP changes the D4 ABI/runtime
+# libraries (Libxc, TagArray, and friends).  OpenMP changes the D4 ABI/runtime
 # dependencies and must be part of this subkey as well.
 set(_OQP_DFTD4_PLATFORM_KEY "")
 if(APPLE)
@@ -145,7 +144,7 @@ if(OQP_REUSE_EXTERNALS)
     # scikit-build-core / pip place ninja in a per-build temporary isolated env
     # (/tmp/build-env-XXXX/.../ninja), so the absolute path -- and thus an MD5 of
     # it -- changes on EVERY build. Hashing the path made the externals cache key
-    # unique per run, so the cached externals (libecpint, LAPACK, ...) never
+    # unique per run, so the cached externals (Libxc, LAPACK, ...) never
     # matched and were recompiled every single time. The basename still
     # distinguishes ninja vs make/gmake, which is all that affects the build.
     get_filename_component(_oqp_external_make_name "${CMAKE_MAKE_PROGRAM}" NAME_WE)
@@ -271,13 +270,59 @@ oqp_set_external_paths(LIBINT2 libint
     "${CMAKE_BINARY_DIR}/external/libint/build-${CMAKE_Fortran_COMPILER_ID}"
     "${CMAKE_BINARY_DIR}/external/libint/stamp-${CMAKE_Fortran_COMPILER_ID}"
     "${CMAKE_BINARY_DIR}/external/install/libint")
+# Retire the pre-fix Libint artifacts WITHOUT invalidating every other cached
+# external.  The CMAKE_BUILD_TYPE forwarding added below changes how Libint is
+# compiled but not the aggregate externals key, so oqp_reuse_or_build() would
+# keep serving the old -O0 libint2.a from "build-<id>" forever.  The externals
+# key is shared by all dependencies, so bumping it would also rebuild Libxc and
+# the rest; tagging only Libint's own build directory is the scoped equivalent.
+set(LIBINT2_BUILD_DIR "${LIBINT2_BUILD_DIR}-opt" CACHE INTERNAL "LIBINT2_BUILD_DIR" FORCE)
+set(LIBINT2_STAMP_DIR "${LIBINT2_STAMP_DIR}-opt" CACHE INTERNAL "LIBINT2_STAMP_DIR" FORCE)
 set(LIBINT2_LIBRARY "${LIBINT2_BUILD_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}int2${CMAKE_STATIC_LIBRARY_SUFFIX}" CACHE INTERNAL "LIBINT2_LIBRARY" FORCE)
 
 oqp_reuse_or_build(libint2 "${LIBINT2_LIBRARY}" "${LIBINT2_BUILD_DIR}/fortran" "${LIBINT2_BUILD_DIR}/include")
+# Forward the project's own compiler flags as well as the configuration name.
+# CMAKE_BUILD_TYPE alone only selects WHICH flag variable the child uses; the
+# child then fills it with ITS defaults, so a parent that overrides e.g.
+# CMAKE_CXX_FLAGS_RELEASE to -O1 (packaging) or -O0 (diagnostics) would still
+# get Libint at -O3.  The reusable-externals key already hashes these parent
+# flags, so the cache would report a match that does not hold.
+# Only non-empty values are forwarded: passing an empty
+# CMAKE_CXX_FLAGS_<CONFIG> would wipe the child's own -O3 -DNDEBUG and put us
+# back at the unoptimised build this block exists to prevent.
+set(_OQP_LIBINT_FLAG_ARGS)
+foreach(_oqp_libint_lang C CXX)
+  if(NOT "${CMAKE_${_oqp_libint_lang}_FLAGS}" STREQUAL "")
+    list(APPEND _OQP_LIBINT_FLAG_ARGS
+        "-DCMAKE_${_oqp_libint_lang}_FLAGS=${CMAKE_${_oqp_libint_lang}_FLAGS}")
+  endif()
+endforeach()
+# A multi-config generator (Xcode, Visual Studio, Ninja Multi-Config) leaves
+# CMAKE_BUILD_TYPE empty and lists the active configurations in
+# CMAKE_CONFIGURATION_TYPES, so keying only off CMAKE_BUILD_TYPE would skip
+# every CMAKE_<LANG>_FLAGS_<CONFIG> there and leave this forwarding ineffective
+# for exactly the builds whose flags the externals cache key already hashes.
+# Iterate the same way the cache-key block above does.
+set(_OQP_LIBINT_CFGS "${CMAKE_BUILD_TYPE}")
+if(CMAKE_CONFIGURATION_TYPES)
+  set(_OQP_LIBINT_CFGS "${CMAKE_CONFIGURATION_TYPES}")
+endif()
+foreach(_oqp_libint_cfg IN LISTS _OQP_LIBINT_CFGS)
+  string(TOUPPER "${_oqp_libint_cfg}" _OQP_LIBINT_CFG)
+  if(NOT "${_OQP_LIBINT_CFG}" STREQUAL "")
+    foreach(_oqp_libint_lang C CXX)
+      if(NOT "${CMAKE_${_oqp_libint_lang}_FLAGS_${_OQP_LIBINT_CFG}}" STREQUAL "")
+        list(APPEND _OQP_LIBINT_FLAG_ARGS
+            "-DCMAKE_${_oqp_libint_lang}_FLAGS_${_OQP_LIBINT_CFG}=${CMAKE_${_oqp_libint_lang}_FLAGS_${_OQP_LIBINT_CFG}}")
+      endif()
+    endforeach()
+  endif()
+endforeach()
+
 if(NOT TARGET libint2)
 ExternalProject_Add(libint2
     PREFIX ${LIBINT2_PREFIX}
-    URL https://qchemlab.knu.ac.kr/vmironov/oqp-libint/-/archive/v${_OQP_LIBINT2_VERSION}/oqp-libint-v${_OQP_LIBINT2_VERSION}.tar.gz
+    URL https://github.com/Open-Quantum-Platform/oqp-libint/archive/refs/tags/v${_OQP_LIBINT2_VERSION}.tar.gz
     TLS_VERIFY TRUE
     SOURCE_DIR ${LIBINT2_SOURCE_DIR}
     BINARY_DIR ${LIBINT2_BUILD_DIR}
@@ -285,7 +330,14 @@ ExternalProject_Add(libint2
     BUILD_BYPRODUCTS ${LIBINT2_LIBRARY}
     UPDATE_COMMAND ""
     INSTALL_COMMAND ""
-    CMAKE_ARGS -DENABLE_FORTRAN=ON
+    # Libint's own CMakeLists sets neither a default CMAKE_BUILD_TYPE nor any
+    # optimization flags, and ExternalProject does not inherit the outer one.
+    # Omitting it here compiled every generated ERI kernel at the compiler
+    # default -O0 (verified: build.ninja carried only "-arch <arch> -fPIC"),
+    # so a USE_LIBINT=ON build silently replaced the optimized native Rys path
+    # with an unoptimized engine.  Every other external here already forwards it.
+    CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+               -DENABLE_FORTRAN=ON
                -DREQUIRE_CXX_API=OFF
                -DENABLE_MPFR=OFF
                -DLIBINT2_SHGAUSS_ORDERING=standard
@@ -293,6 +345,7 @@ ExternalProject_Add(libint2
                -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
                -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
                -DLIBINT2_BUILD_SHARED_AND_STATIC_LIBS=${BUILD_SHARED_LIBS}
+               ${_OQP_LIBINT_FLAG_ARGS}
                ${OQP_EXTERNAL_GENERATOR_ARGS}
 )
 endif()
@@ -342,7 +395,9 @@ ExternalProject_Add(libxc
         )
 endif()
 
-oqp_set_external_paths(TAGARRAY libtagarray
+# TagArray 1.0.0 allocated at alignment 64 but deleted at alignment 32.
+# Rebuild only this dependency with the fix; retain all other cached libraries.
+oqp_set_external_paths(TAGARRAY libtagarray-aligned64-count64-v1
         "${CMAKE_SOURCE_DIR}/external/libtagarray"
         "${CMAKE_SOURCE_DIR}/external/libtagarray/src/libtagarray"
         "${CMAKE_BINARY_DIR}/external/libtagarray/src/libtagarray-build-${CMAKE_Fortran_COMPILER_ID}"
@@ -384,6 +439,8 @@ ExternalProject_Add(libtagarray
         # tagarray v1.0.0 ships a 144-char iso_c_binding USE line that its own
         # -std=f2018 build truncates under gfortran>=12; wrap it (idempotent).
         PATCH_COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/fix_tagarray_linelen.py ${TAGARRAY_SOURCE_DIR}
+              COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/fix_tagarray_alignment.py ${TAGARRAY_SOURCE_DIR}
+              COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/fix_tagarray_count64.py ${TAGARRAY_SOURCE_DIR}
         INSTALL_COMMAND ""
         CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
                     -DENABLE_FORTRAN=ON
@@ -397,43 +454,6 @@ ExternalProject_Add(libtagarray
         )
 endif()
 
-oqp_set_external_paths(LIBECPINT libecpint
-        "${CMAKE_SOURCE_DIR}/external/libecpint"
-        "${CMAKE_SOURCE_DIR}/external/libecpint/src/libecpint"
-        "${CMAKE_BINARY_DIR}/external/libecpint/src/libecpint-build-${CMAKE_Fortran_COMPILER_ID}"
-        "${CMAKE_BINARY_DIR}/external/libecpint/src/libecpint-stamp-${CMAKE_Fortran_COMPILER_ID}"
-        "${CMAKE_BINARY_DIR}/external/libecpint/install")
-set(LIBECPINT_LIBRARY_DIR "${LIBECPINT_BUILD_DIR}/src" CACHE INTERNAL "LIBECPINT_LIBRARY_DIR" FORCE)
-set(FADDEEVA_LIBRARY_DIR "${LIBECPINT_BUILD_DIR}/external/Faddeeva" CACHE INTERNAL "FADDEEVA_LIBRARY_DIR" FORCE)
-set(LIBECPINT_INCLUDE_DIRS
-    "${LIBECPINT_INSTALL_DIR}/include/libecpint;${LIBECPINT_INSTALL_DIR}/include"
-    CACHE INTERNAL "LIBECPINT_INCLUDE_DIRS" FORCE)
-oqp_reuse_or_build(libecpint
-        "${LIBECPINT_LIBRARY_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}ecpint${CMAKE_STATIC_LIBRARY_SUFFIX}"
-        "${FADDEEVA_LIBRARY_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}Faddeeva${CMAKE_STATIC_LIBRARY_SUFFIX}"
-        "${LIBECPINT_INSTALL_DIR}/include/libecpint")
-if(NOT TARGET libecpint)
-ExternalProject_Add(libecpint
-        PREFIX ${LIBECPINT_PREFIX}
-        URL https://github.com/robashaw/libecpint/archive/refs/tags/v${_OQP_LIBECPINT_VERSION}.tar.gz
-        URL_HASH SHA256=e9c60fddb2614f113ab59ec620799d961db73979845e6e637c4a6fb72aee51cc
-        SOURCE_DIR ${LIBECPINT_SOURCE_DIR}
-        BINARY_DIR ${LIBECPINT_BUILD_DIR}
-        STAMP_DIR  ${LIBECPINT_STAMP_DIR}
-	INSTALL_DIR ${LIBECPINT_INSTALL_DIR}
-        UPDATE_COMMAND ""
-        CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-                    -DLIBECPINT_BUILD_DOCS=OFF
-                   -DLIBECPINT_BUILD_TESTS=OFF
-		   -DLIBECPINT_USE_PUGIXML=OFF
-                   -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-                   -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-                   -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
-                   ${OQP_EXTERNAL_GENERATOR_ARGS}
-		   -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
-        INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target install
-        )
-endif()
 if(_LINALG_LIB_TYPE STREQUAL NetLib)
   set(BLA_LIB_SUFFIX "64")
   if(BUILD_SHARED_LIBS)
@@ -484,100 +504,7 @@ if(_LINALG_LIB_TYPE STREQUAL NetLib)
         )
   endif()
 endif()
-if(ENABLE_OPENTRAH)
-oqp_set_external_paths(OPENTRUSTREGION opentrustregion
-    "${CMAKE_SOURCE_DIR}/external/opentrustregion"
-    "${CMAKE_SOURCE_DIR}/external/opentrustregion/src/libopentrustregion"
-    "${CMAKE_BINARY_DIR}/external/opentrustregion/src/libopentrustregion-build-${CMAKE_Fortran_COMPILER_ID}"
-    "${CMAKE_BINARY_DIR}/external/opentrustregion/src/libopentrustregion-stamp-${CMAKE_Fortran_COMPILER_ID}"
-    "${CMAKE_BINARY_DIR}/external/install/opentrustregion")
-# ILP64-only: default integers are always 8 bytes.
-set(otr_integer_flags "")
-if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
-    set(otr_integer_flags "-fdefault-integer-8")
-elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
-    set(otr_integer_flags "-i8")
-endif()
-set(otr_fortran_flags "${CMAKE_Fortran_FLAGS} ${OTR_DEFS} ${otr_integer_flags}")
-if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" AND CMAKE_Fortran_COMPILER_VERSION VERSION_GREATER 10.0)
-    set(otr_fortran_flags "${otr_fortran_flags} -fallow-argument-mismatch")
-endif()
-set(OTR_CMAKE_ARGS
-        -DCMAKE_INSTALL_PREFIX=${OPENTRUSTREGION_INSTALL_DIR}
-        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-        -DBLA_SIZEOF_INTEGER=${BLA_SIZEOF_INTEGER}
-        -DINTEGER_SIZE=${BLA_SIZEOF_INTEGER}
-        -DBUILD_SHARED_LIBS=OFF
-        -DBUILD_TESTS=OFF
-        -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-        -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
-        -DCMAKE_Fortran_FLAGS=${otr_fortran_flags}
-        ${OQP_EXTERNAL_GENERATOR_ARGS}
-)
-if(CMAKE_PREFIX_PATH)
-    oqp_external_cmake_list_arg(_otr_prefix_path_arg CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH})
-    list(APPEND OTR_CMAKE_ARGS "${_otr_prefix_path_arg}")
-endif()
-if(_LINALG_LIB_TYPE STREQUAL NetLib)
-    oqp_external_cmake_list_arg(_otr_blas_arg BLAS_LIBRARIES ${LIBBLAS})
-    oqp_external_cmake_list_arg(_otr_lapack_arg LAPACK_LIBRARIES ${LIBLAPACK})
-    list(APPEND OTR_CMAKE_ARGS
-        "${_otr_blas_arg}"
-        "${_otr_lapack_arg}"
-    )
-elseif(DEFINED BLAS_LIBRARIES AND DEFINED LAPACK_LIBRARIES)
-    oqp_external_cmake_list_arg(_otr_blas_arg BLAS_LIBRARIES ${BLAS_LIBRARIES})
-    oqp_external_cmake_list_arg(_otr_lapack_arg LAPACK_LIBRARIES ${LAPACK_LIBRARIES})
-    list(APPEND OTR_CMAKE_ARGS
-        "${_otr_blas_arg}"
-        "${_otr_lapack_arg}"
-    )
-elseif(DEFINED BLA_VENDOR)
-    list(APPEND OTR_CMAKE_ARGS -DBLA_VENDOR=${BLA_VENDOR})
-    if(DEFINED BLA_PREFER_PKGCONFIG)
-        list(APPEND OTR_CMAKE_ARGS -DBLA_PREFER_PKGCONFIG=${BLA_PREFER_PKGCONFIG})
-    endif()
-    if(DEFINED BLA_PKGCONFIG_BLAS)
-        list(APPEND OTR_CMAKE_ARGS -DBLA_PKGCONFIG_BLAS=${BLA_PKGCONFIG_BLAS})
-    endif()
-    if(DEFINED BLA_PKGCONFIG_LAPACK)
-        list(APPEND OTR_CMAKE_ARGS -DBLA_PKGCONFIG_LAPACK=${BLA_PKGCONFIG_LAPACK})
-    endif()
-endif()
 
-# Portability: the bundled OpenTrustRegion hardcodes -march=native/-xHost in its
-# own CMakeLists (CMAKE_Fortran_FLAGS_RELEASE). Two problems with leaving it:
-#   * -march=native on an AVX-512 build host emits AVX-512 into level_shifted_davidson,
-#     which SIGILLs (exit 132) on AVX2-only compute nodes (the original bug report);
-#   * a newer gfortran driver resolves -march=native to a microarch *level* name
-#     (e.g. x86-64-v3) that an OLDER backend rejects -- "bad value ('x86-64-v3') for
-#     '-march=' switch" -- breaking the Docker build.
-# Strip the host-tuning flags entirely so OTR builds with a generic -O2: portable
-# across toolchains (old/new gfortran, x86, aarch64) and free of the SIGILL. OTR is a
-# small solver, so losing -march tuning is negligible; main OpenQP uses no -march.
-set(_OTR_ARCH_SED "s/-march=native//g; s/-xHost//g")
-oqp_reuse_or_build(libopentrustregion
-    "${OPENTRUSTREGION_BUILD_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}opentrustregion${OTR_SUFFIX}${CMAKE_STATIC_LIBRARY_SUFFIX}")
-if(NOT TARGET libopentrustregion)
-ExternalProject_Add(libopentrustregion
-    PREFIX ${OPENTRUSTREGION_PREFIX}
-    URL https://github.com/eriksen-lab/opentrustregion/archive/refs/tags/v${_OQP_OPENTRUSTREGION_VERSION}.tar.gz
-    URL_HASH SHA256=682201cc9cc850a892d132e5e5fc11f6d87f8cd843fdbad88dafbf7277407f1c
-    SOURCE_DIR ${OPENTRUSTREGION_SOURCE_DIR}
-    UPDATE_COMMAND ""
-    PATCH_COMMAND /usr/bin/perl -0pi -e "${_OTR_ARCH_SED}" <SOURCE_DIR>/CMakeLists.txt
-    LIST_SEPARATOR ${OQP_EXTERNAL_LIST_SEPARATOR}
-    CMAKE_ARGS ${OTR_CMAKE_ARGS}
-    BINARY_DIR ${OPENTRUSTREGION_BUILD_DIR}
-    STAMP_DIR  ${OPENTRUSTREGION_STAMP_DIR}
-)
-endif()
-if(_LINALG_LIB_TYPE STREQUAL NetLib)
-  add_dependencies(libopentrustregion LAPACK)
-endif()
-endif() # ENABLE_OPENTRAH
-
-set(OTR_LIB_NAME "${CMAKE_STATIC_LIBRARY_PREFIX}opentrustregion${OTR_SUFFIX}${CMAKE_STATIC_LIBRARY_SUFFIX}")
 if(ENABLE_Formatter)
   find_package(Python3 REQUIRED)
   if(OQP_REUSE_EXTERNALS)

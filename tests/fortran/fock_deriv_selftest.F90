@@ -10,8 +10,9 @@ module fock_deriv_selftest_mod
 !>   involves no SCF iteration, its accuracy is truncation-limited (O(h^2)), so
 !>   this is a clean, reference-quality-independent check.
 !>
-!>   Results are written to /tmp/fockx_selftest.out.
+!>   Results are written to $OQP_SELFTEST_DIR/fockx_selftest.out.
 
+  use selftest_output, only: selftest_output_path
   implicit none
   character(len=*), parameter :: module_name = "fock_deriv_selftest_mod"
 
@@ -97,7 +98,7 @@ contains
     ! convention mismatch is visible rather than hidden.
     err = maxval(abs(gx_an - gx_fd))
 
-    open(newunit=u, file='/tmp/fockx_selftest.out', status='replace', action='write')
+    open(newunit=u, file=selftest_output_path('fockx_selftest.out'), status='replace', action='write')
     write(u,'(a,es12.4)') 'F^x trace-identity max|analytic - FD| = ', err
     write(u,'(a)') 'analytic   gx(:,1):'
     write(u,'(3es16.8)') gx_an(:,1)
@@ -155,7 +156,7 @@ contains
 !>   build).  The reference is a central finite difference of Tr[M . G^a] over
 !>   each nuclear coordinate at frozen densities -> truncation-limited (O(h^2)),
 !>   no SCF iteration.  Requires an open-shell (UHF/ROHF) reference.
-!>   Results in /tmp/fockx_os_selftest.out.
+!>   Results in $OQP_SELFTEST_DIR/fockx_os_selftest.out.
   subroutine fockx_os_selftest(infos)
     use precision, only: dp
     use types, only: information
@@ -225,7 +226,7 @@ contains
 
     err = maxval(abs(gx_an - gx_fd))
 
-    open(newunit=u, file='/tmp/fockx_os_selftest.out', status='replace', action='write')
+    open(newunit=u, file=selftest_output_path('fockx_os_selftest.out'), status='replace', action='write')
     write(u,'(a,i0)')     'scftype                       = ', infos%control%scftype
     write(u,'(a,es12.4)') 'open-shell F^x max|an - FD|   = ', err
     write(u,'(a)') 'analytic    gx(:,1):'

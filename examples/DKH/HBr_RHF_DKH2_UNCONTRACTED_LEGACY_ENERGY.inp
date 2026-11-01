@@ -1,0 +1,22 @@
+# DKH2/uncontracted x2c-TZVPall/RHF/ENERGY of HBr with scal_rel_decontract=0; must equal HBr_RHF_DKH2_UNCONTRACTED_ENERGY.
+# DKH2 scalar-relativistic RHF single point of HBr in the relativistically
+# contracted x2c-TZVPall basis (ispher=true).
+[input]
+system=
+   35   0.000000000   0.000000000   0.000000000
+   1    0.000000000   0.000000000   1.407611000
+charge=0
+runtype=energy
+basis=file:x2c-tzvpall_uncontracted_hbr.json
+method=hf
+ispher=true
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=1
+type=rhf
+scal_rel=2
+scal_rel_decontract=0
+conv=1.0e-8

@@ -8,6 +8,8 @@ module int2e_mod
   character(len=*), parameter :: module_name = "int2e_mod"
 
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: int2e_C
   public int2e
 
 !> @brief Consumer that scatters computed shell-quartet ERIs into a dense

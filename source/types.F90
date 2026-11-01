@@ -94,11 +94,15 @@ module types
     logical(c_bool) :: Z_Vector_converged = .false. !< Convergence checking Flag for Z-Vector Iteration
   end type energy_results
 
+  !> Origin of the current SCF orbitals. A second-order converger may retain
+  !> supplied orbitals, while model guesses require the initial diagonalisation.
+  integer(c_int64_t), parameter, public :: GUESS_COLD = 1, GUESS_SUPPLIED = 2
+
   type, public, bind(C) :: control_parameters
     integer(c_int64_t) :: hamilton = 10      !< The method of calculations: 10=HF, 20=DFT
     integer(c_int64_t) :: scftype  = 1       !< Refence wavefuction, 1= RHF 2= UHF 3= ROHF
     character(c_char)  :: runtype(20)  = ''  !<  Run type: energy, grad, etc.
-    integer(c_int64_t) :: guess    = 1       !< used guess
+    integer(c_int64_t) :: guess    = GUESS_COLD !< GUESS_COLD or GUESS_SUPPLIED
     integer(c_int64_t) :: active_basis = 0    !< Choose data basis: 0 -> info%basis, 1 -> info%alt_basis
     integer(c_int64_t) :: maxit    = 3       !< The maximum number of iterations
     integer(c_int64_t) :: maxit_dav = 50     !< The maximum number of iterations in Davidson eigensolver
@@ -154,12 +158,17 @@ module types
                                                      !< 0   - no DKH correction
                                                      !< 1   - first-order  DKH
                                                      !< 2   - second-order DKH
+    integer(c_int64_t) :: scal_rel_decontract = 1    !< DKH decoupling basis: 1 = decontracted
+                                                     !< (primitive) basis, correction projected back
+                                                     !< onto the contracted basis (default);
+                                                     !< 0 = directly in the contracted basis (legacy,
+                                                     !< non-variational for contracted basis sets)
     integer(c_int64_t) :: soc_2e   = 1               !< SOC 2e solution: 0=off (1e only), 1=on (1e+2e)
     ! SCF converger selection
     integer(c_int64_t) :: converger_type = 0       !< SCF converger: 0=DIIS, 1=SOSCF, 2=TRAH
     real(c_double) :: soscf_lvl_shift = 0.0_dp !< Level shifting parameter for SOSCF
     integer(c_int64_t) :: verbose = 1          !< Controls output verbosity: 0 for minimal, 1+ for detailed.
-    ! Opentrustregion Parameter
+    ! Trust-region augmented-Hessian (TRAH) parameters
     logical(c_bool)        :: trh_stab = .false.    !< Enable stability check before/at convergence
     logical(c_bool)        :: trh_ls   = .false.    !< Enable logarithmic line search on accepted steps
     integer(c_int64_t)     :: trh_sub_solver=0      !< subsystem solver. 0: "davidson", 1 :"jacobi-davidson",2: "tcg" 
@@ -169,7 +178,9 @@ module types
     integer(c_int64_t)     :: trh_nmic = 50         !< Max micro-iterations per macro step
     real(c_double)         :: trh_gred = 1.0d-3     !< Global trust-radius reduction factor (0<gred<1)
     real(c_double)         :: trh_lred = 1.0d-4     !< Local trust-radius reduction factor (0<lred<1)
-    integer(c_int64_t)     :: trh_impl = 1          !< TRAH solver: 1=native Fortran (default), 0=OpenTrustRegion (external)
+    integer(c_int64_t)     :: trh_impl = 1          !< Accepted for input/ABI compatibility; does not select a solver (native TRAH is the only one)
+    integer(c_int64_t)     :: trh_arh = -1          !< -1 (default): 20 for ROHF/ROKS and UHF/UKS, 0 for RHF; 0: exact response Hessian; n>0: augmented Roothaan-Hall model with n stored (D,F) pairs
+    logical(c_bool)        :: trh_arh_only = .false. !< converger_type=arh: the ARH model Hessian in every macro-iteration, no exact-Hessian retries
     ! SD parameters
     logical(c_bool) :: sd_scf = .true.           !< prevent running the first SD-SCF calculation
     ! PCM implicit solvent (energy-only, ddX backend; off by default)
@@ -195,6 +206,7 @@ module types
     integer(c_int64_t) :: cc_cholesky = 2        !< Cholesky-factorise the ladder integrals (0=off, 1=on, 2=auto on memory)
     real(c_double) :: cc_cholesky_tol = 1.0e-10_dp !< Cholesky truncation threshold
     integer(c_int64_t) :: cc_cholesky_direct = 0 !< 0=auto (on memory), 1=always, 2=never
+    integer(c_int64_t) :: mp2_transform = 0 !< 0=auto, 1=guarded direct-J, 2=required packed n5
   end type control_parameters
 
   type, public, bind(c) :: tddft_parameters

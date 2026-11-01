@@ -48,20 +48,6 @@
   "td_energies": [
     0
   ],
-  "grad": [
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0
-  ],
-  "nac": [],
-  "soc": [],
-  "hess": [],
   "json": {
     "scf_type": "rohf",
     "basis": "aug-cc-pvdz",

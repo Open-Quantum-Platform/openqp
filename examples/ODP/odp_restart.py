@@ -29,12 +29,10 @@ def run_example(workdir):
 
     command = [
         sys.executable, "-m", "oqp.pyoqp", "--nompi", "--omp", "1", "--silent"]
+    # The child is this interpreter, so it imports the same oqp as a plain
+    # `import oqp` here would.  Prepending the source pyoqp/ made it load the
+    # unbuilt tree (no liboqp) in any checkout next to an installed build.
     environment = os.environ.copy()
-    source_package = HERE.parents[1] / "pyoqp"
-    if source_package.is_dir():
-        current = environment.get("PYTHONPATH")
-        environment["PYTHONPATH"] = str(source_package) + (
-            os.pathsep + current if current else "")
     subprocess.run(
         [*command, str(source)], cwd=workdir, env=environment, check=True)
 

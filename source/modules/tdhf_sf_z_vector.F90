@@ -38,6 +38,7 @@ contains
       pcgb, sfropcal, sfrowcal, sfdmat
     use mod_dft, only: dft_initialize, dftclean
     use mod_dft_gridint_fxc, only: utddft_fxc
+    use mod_dft_gridint_response_cache, only: response_cache_t
     use mathlib, only: symmetrize_matrix, orthogonal_transform_sym, orthogonal_transform
     use mod_dft_molgrid, only: dft_grid_t
     use mathlib, only: pack_matrix, unpack_matrix
@@ -71,11 +72,12 @@ contains
     integer :: nbf, nbf_tri
     integer :: iter
     real(kind=dp) :: cnvtol, scale_exch, scale_exch2
-    logical :: roref = .false.
+    logical :: roref
 
     type(int2_compute_t) :: int2_driver
     class(int2_td_data_t), allocatable, target :: int2_data
     type(dft_grid_t) :: molGrid
+    type(response_cache_t), target :: xc_cache
 
   ! scr data
     real(kind=dp), allocatable, target :: wrk1(:,:), wrk2(:,:), wrk3(:,:)
@@ -114,7 +116,7 @@ contains
  !   end if 
 
     scf_type = infos%control%scftype
-    if (scf_type==3) roref = .true.
+    roref = scf_type == 3
 
     dft = infos%control%hamilton == 20
 
@@ -193,6 +195,15 @@ contains
     call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
     call tagarray_get_data(infos%dat, OQP_td_t, td_t)
     call tagarray_get_data(infos%dat, OQP_td_energies, sf_energies)
+
+    ! The energy stage clips nstate to the response-space size, so the target
+    ! must lie within the vectors actually solved.
+    if (infos%tddft%target_state > size(bvec_mo,2)) then
+      write(*,'(2x,a,i0,a,i0,a)') 'Requested gradient state ', infos%tddft%target_state, &
+        ' exceeds the ', size(bvec_mo,2), ' states solved in this response space.'
+      call show_message('SF-TDDFT gradient target state lies outside the solved response space; '// &
+                        'request a lower state or a larger basis.', with_abort)
+    end if
 
     ta          => td_t(:,1)
     tb          => td_t(:,2)
@@ -275,7 +286,7 @@ contains
            nmtx=1, &
            !threshold=1.0d-15, &
            threshold=0.0d0, &
-           infos=infos)
+           infos=infos, cache=xc_cache)
 
 !   ALPHA: AO(M,N) -> MO(IA+)
     call mntoia(ab1(:,:,1), ab1_mo_a, mo_a, mo_a, nocca, nocca)
@@ -403,7 +414,7 @@ contains
            nmtx=1, &
            !threshold=1.0d-15, &
            threshold=0.0d0, &
-           infos=infos)
+           infos=infos, cache=xc_cache)
 
 !   ALPHA AO(M,N) -> MO(I-,J-) ... LPPIJA
     call dgemm('n', 'n', nbf, nocca, nbf,  &
@@ -465,7 +476,8 @@ contains
               &/3x,24("-")/)')
       end if
 
-      write(*,'(" INITIAL ERROR =",3X,1P,E10.3,1X,"/",1P,E10.3)') error, cnvtol
+      if (infos%control%verbose >= 1) &
+        write(*,'(" INITIAL ERROR =",3X,1P,E10.3,1X,"/",1P,E10.3)') error, cnvtol
 
   ! -----------------------------------------------
 
@@ -514,7 +526,7 @@ contains
                nmtx=1, &
                !threshold=1.0d-15, &
                threshold=0.0d0, &
-               infos=infos)
+               infos=infos, cache=xc_cache)
 
   !     ALPHA: AO(M,N) -> MO(IA+) ... LPTMOA
         call mntoia(ab1(:,:,1), ab1_mo_a, mo_a, mo_a, nocca, nocca)
@@ -558,7 +570,8 @@ contains
           write(*,'(" Z-Vector breakdown: non-finite SF PCG residual at iter", I4)') iter
           exit
         end if
-        write(*,'(" ITER#",I2," ERROR =",3X,1P,E10.3,1X,"/",1P,E10.3)') &
+        if (infos%control%verbose >= 1) &
+          write(*,'(" ITER#",I2," ERROR =",3X,1P,E10.3,1X,"/",1P,E10.3)') &
           iter, error, cnvtol
         call flush(iw)
 

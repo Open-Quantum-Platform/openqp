@@ -1,0 +1,13 @@
+# QM/MM surface hopping started from an equilibrated phase-space point.
+#
+# md(snapshot=...) takes the positions, the velocities and the cell of EVERY
+# atom, QM and MM, from a snapshot written by ground-state QM/MM MD
+# (H2CO-water_RKS-QMMM-MD-SNAPSHOTS.oqp wrote this one).  No velocities are
+# drawn and none are rescaled to a temperature, so the trajectory inherits the
+# thermal state the equilibration reached; without snapshot= every QM/MM NAMD
+# run starts from fresh Maxwell-Boltzmann velocities at the PDB geometry.
+# velocity= and temperature= are therefore not given.  Requires OpenMM.
+mrsf(nstate=2)/bhhlyp/6-31g* namd(S1,scheme=Overlap)
+md(nstep=2,dt=0.5,snapshot="formaldehyde_water.snapshot.npz",trajectory_interval=1)
+qmmm(pdb_file="formaldehyde_water.pdb",forcefield_files="formaldehyde.xml tip3p.xml",qm_atoms="0-3",cutoff=NoCutoff)
+geom="../geometries/CH2O-2bc62dda4b8a.xyz"

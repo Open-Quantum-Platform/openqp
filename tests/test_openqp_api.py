@@ -25,6 +25,7 @@ SCHEMA = {
         "library": {"type": str, "default": ""},
         "ispher": {"type": _string, "default": "auto"},
         "omp_threads": {"type": int, "default": "0"},
+        "verbose": {"type": int, "default": "1"},
         "qmmm_flag": {"type": bool, "default": "False"},
         "d4": {"type": bool, "default": "False"},
     },
@@ -52,7 +53,8 @@ SCHEMA = {
         "cutoff": {"type": _string, "default": "NoCutoff"},
         "embedding": {"type": _string, "default": "electrostatic"},
         "rigidwater": {"type": bool, "default": "False"},
-        "frontier_scheme": {"type": _string, "default": "none"},
+        "frontier_scheme": {"type": _string, "default": "rcd"},
+        "constraints": {"type": str, "default": "None"},
     },
     "droplet": {
         "enabled": {"type": bool, "default": "False"},
@@ -78,27 +80,49 @@ SCHEMA = {
         "soc": {"type": bool, "default": "False"},
         "soc_basis": {"type": _string, "default": "adiabatic"},
         "init_state": {"type": _string, "default": ""},
-        "thrshe": {"type": float, "default": "0.1"},
+        "thrshe": {"type": float, "default": "0.367493"},
+        "tdc": {"type": _string, "default": "npi"},
+        "rescale": {"type": _string, "default": "auto"},
         "init_temp": {"type": float, "default": "300.0"},
+        "thermostat": {"type": _string, "default": "off"},
+        "ensemble": {"type": _string, "default": "nve"},
+        "thermostat_temperature": {"type": float, "default": "300.0"},
+        "thermostat_friction": {"type": float, "default": "0.001"},
+        "common_controls": {"type": bool, "default": "False"},
+        "common_control_keys": {"type": _string, "default": ""},
         "seed": {"type": int, "default": "0"},
         "rng_stream": {"type": int, "default": "1"},
         "first_hop_step": {"type": int, "default": "1"},
         "nacme_check": {"type": _string, "default": "baeck_an"},
         "ba_gap_max": {"type": float, "default": "0.0734986443513"},
-        "nacme_gate": {"type": _string, "default": "off"},
-        "nacme_gate_invariant_tol": {"type": float, "default": "1.0e-10"},
-        "nacme_gate_abs_tol": {"type": float, "default": "1.0e-4"},
-        "nacme_gate_rel_tol": {"type": float, "default": "1.0"},
-        "nacme_gate_consecutive": {"type": int, "default": "3"},
-        "nve_gate": {"type": _string, "default": "warn"},
-        "nve_gate_abs_tol": {"type": float, "default": "5.0e-3"},
-        "nve_gate_step_tol": {"type": float, "default": "1.0e-3"},
-        "nve_gate_transition_tol": {"type": float, "default": "1.0e-6"},
-        "nve_gate_consecutive": {"type": int, "default": "3"},
+        "nacme_policy": {"type": _string, "default": "off"},
+        "nacme_policy_invariant_tol": {"type": float, "default": "1.0e-10"},
+        "nacme_policy_abs_tol": {"type": float, "default": "1.0e-4"},
+        "nacme_policy_rel_tol": {"type": float, "default": "1.0"},
+        "nacme_policy_consecutive": {"type": int, "default": "3"},
+        "nve_policy": {"type": _string, "default": "warn"},
+        "nve_policy_abs_tol": {"type": float, "default": "5.0e-3"},
+        "nve_policy_step_tol": {"type": float, "default": "1.0e-3"},
+        "nve_policy_transition_tol": {"type": float, "default": "1.0e-6"},
+        "nve_policy_consecutive": {"type": int, "default": "3"},
         "trajectory_interval": {"type": int, "default": "0"},
         "restart_interval": {"type": int, "default": "0"},
         "trajectory_file": {"type": _string, "default": ""},
         "restart_file": {"type": _string, "default": ""},
+    },
+    "flexible": {
+        "enabled": {"type": bool, "default": "False"},
+        "alpha": {"type": float, "default": "0.0"},
+        "temperature": {"type": float, "default": "0.0"},
+        "center": {"type": _string, "default": "solute"},
+        "atoms": {"type": str, "default": ""},
+        "point": {"type": str, "default": "0.0,0.0,0.0"},
+        "anchor": {"type": str, "default": "O"},
+        "resnames": {"type": str, "default": "hoh,wat,sol,tip3,tip3p"},
+        "threshold": {"type": float, "default": "0.01"},
+        "scale": {"type": float, "default": "0.1"},
+        "max_iterations": {"type": int, "default": "20"},
+        "keep_below_threshold": {"type": bool, "default": "False"},
     },
     "odp": {
         "enabled": {"type": bool, "default": "False"},
@@ -121,6 +145,7 @@ SCHEMA = {
         "type": {"type": _string, "default": "rpa"},
         "nstate": {"type": int, "default": "1"},
         "multiplicity": {"type": int, "default": "1"},
+        "conv": {"type": float, "default": "1.0e-6"},
     },
     "dftb": {
         "backend": {"type": _string, "default": "native"},
@@ -138,6 +163,7 @@ SCHEMA = {
     },
     "mp2": {
         "variant": {"type": _string, "default": "mp2"},
+        "transform": {"type": _string, "default": "auto"},
         "same_spin_scale": {"type": float, "default": "1.0"},
         "opposite_spin_scale": {"type": float, "default": "1.0"},
     },
@@ -145,9 +171,11 @@ SCHEMA = {
         "grad": {"type": int, "default": "0"},
         "scf_prop": {"type": _string, "default": ""},
         "nmr_gauge": {"type": _string, "default": "cgo"},
+        "acid_spacing": {"type": float, "default": "0.2"},
+        "acid_padding": {"type": float, "default": "5.0"},
     },
     "hess": {
-        "type": {"type": _string, "default": "numerical"},
+        "type": {"type": _string, "default": "auto"},
         "state": {"type": int, "default": "0"},
     },
     "nac": {
@@ -177,10 +205,21 @@ SCHEMA = {
         "pen_jump": {"type": str, "default": "10,25"},
         "energy_gap": {"type": float, "default": "1e-5"},
         "maxit": {"type": int, "default": "30"},
+        "qmmm_radius": {"type": float, "default": "0.0"},
+        "qmmm_output": {"type": str, "default": ""},
     },
     "oqp": {
+        "model_hessian": {"type": _string, "default": "auto"},
+        "hessian_update": {"type": _string, "default": "auto"},
+        "gpr_history": {"type": int, "default": "8"},
+        "gpr_length_scale": {"type": float, "default": "0.5"},
+        "ts_search": {"type": _string, "default": "prfo"},
+        "ts_product": {"type": str, "default": ""},
+        "ts_guess": {"type": str, "default": ""},
+        "neb_interpolation": {"type": _string, "default": "linear"},
         "coordsys": {"type": _string, "default": "tric"},
         "trust": {"type": float, "default": "0.2"},
+        "auto_recovery": {"type": bool, "default": "True"},
     },
     "geometric": {
         "coordsys": {"type": _string, "default": "tric"},
@@ -237,8 +276,8 @@ SCHEMA = {
     },
     "pt2": {
         "variant": {"type": _string, "default": "auto"},
-        "h0": {"type": _string, "default": "fock"},
-        "contraction": {"type": _string, "default": "uncontracted"},
+        "h0": {"type": _string, "default": ""},
+        "contraction": {"type": _string, "default": ""},
         "gradient": {"type": _string, "default": "auto"},
         "ipea_shift": {"type": float, "default": "0.0"},
         "imaginary_shift": {"type": float, "default": "0.0"},
@@ -270,6 +309,7 @@ def load_openqp_module():
         "oqp.utils.geometry",
         "oqp.utils.input_parser",
         "oqp.utils.kword_map",
+        "oqp.utils.oqp_input",
         "oqp.utils.tb_backends",
         "oqp.utils.state_labels",
         "openqp_under_test",
@@ -300,6 +340,7 @@ def load_openqp_module():
         _load_module("oqp.utils.geometry", ROOT / "pyoqp/oqp/utils/geometry.py")
         _load_module("oqp.utils.input_parser", ROOT / "pyoqp/oqp/utils/input_parser.py")
         _load_module("oqp.utils.kword_map", ROOT / "pyoqp/oqp/utils/kword_map.py")
+        _load_module("oqp.utils.oqp_input", ROOT / "pyoqp/oqp/utils/oqp_input.py")
         _load_module("oqp.utils.tb_backends", ROOT / "pyoqp/oqp/utils/tb_backends.py")
         _load_module("oqp.utils.state_labels", ROOT / "pyoqp/oqp/utils/state_labels.py")
 
@@ -386,6 +427,23 @@ class TestOpenQPNativeAPI(unittest.TestCase):
         self.assertEqual(config["odp"]["scale"], "0.5,1.0")
         self.assertEqual(config["odp"]["window"], "7")
 
+    def test_flexible_section_is_exposed_through_settings_api(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="flexible_boundary")
+        job.settings.flexible(
+            enabled=True,
+            alpha=5.0,
+            temperature=300,
+            center="solute",
+            atoms="0-11",
+            anchor="O",
+        )
+        config = job.to_input_dict()
+        self.assertEqual(config["flexible"]["enabled"], "True")
+        self.assertEqual(config["flexible"]["alpha"], "5.0")
+        self.assertEqual(config["flexible"]["temperature"], "300")
+        self.assertEqual(config["flexible"]["atoms"], "0-11")
+
     def test_builtin_geometry_resolves_common_names(self):
         openqp = load_openqp_module()
 
@@ -393,6 +451,33 @@ class TestOpenQPNativeAPI(unittest.TestCase):
 
         self.assertIn("\nO ", geometry)
         self.assertEqual(len(geometry.strip().splitlines()), 3)
+
+    def test_transit_workflow_routes_endpoint_and_search_options(self):
+        job = load_openqp_module().OpenQP().workflow.ts(search="qst3", product="p.xyz", guess="g.xyz")
+        self.assertEqual(job.config_typed["input"]["runtype"], "ts")
+        self.assertEqual(job.config_typed["oqp"]["ts_search"], "qst3")
+        self.assertEqual(job.config_typed["oqp"]["ts_product"], "p.xyz")
+        self.assertEqual(job.config_typed["oqp"]["ts_guess"], "g.xyz")
+
+    def test_native_curvature_options_from_workflow_and_section_proxy(self):
+        openqp = load_openqp_module()
+        for workflow in ("optimize", "ts"):
+            with self.subTest(workflow=workflow):
+                job = openqp.OpenQP()
+                getattr(job.workflow, workflow)(model_hessian="lindh",
+                                               hessian_update="gpr",
+                                               gpr_history=12,
+                                               gpr_length_scale=0.3)
+                self.assertEqual(job.config_typed["oqp"]["model_hessian"], "lindh")
+                self.assertEqual(job.config_typed["oqp"]["hessian_update"], "gpr")
+                self.assertEqual(job.config_typed["oqp"]["gpr_history"], 12)
+                self.assertEqual(job.config_typed["oqp"]["gpr_length_scale"], 0.3)
+                job.settings.oqp(gpr_history=6)
+                self.assertEqual(job.config_typed["oqp"]["gpr_history"], 6)
+
+    def test_neb_workflow_routes_idpp_interpolation(self):
+        job = load_openqp_module().OpenQP().workflow.neb(interpolation="idpp")
+        self.assertEqual(job.config_typed["oqp"]["neb_interpolation"], "idpp")
 
     def test_molecule_accepts_named_geometry(self):
         openqp = load_openqp_module()
@@ -520,6 +605,86 @@ $$$$
             self.assertEqual(config["input"]["method"], "ccsd(t)")
             self.assertEqual(config["scf"]["type"], reference)
 
+    def _fake_ccpy_interop(self, calls):
+        interop = types.ModuleType("oqp.interop")
+        interop.__path__ = []
+        fake = types.ModuleType("oqp.interop.ccpy")
+
+        def driver_from_openqp(mol, **kwargs):
+            calls.append((mol, kwargs))
+            return "driver"
+
+        fake.driver_from_openqp = driver_from_openqp
+        return {"oqp.interop": interop, "oqp.interop.ccpy": fake}
+
+    def test_ccpy_helper_runs_the_hf_reference_then_returns_the_driver(self):
+        from unittest import mock
+        openqp = load_openqp_module()
+        runner_cls = openqp.Runner
+        runner_cls.instances.clear()
+        job = openqp.OpenQP(project="h2o_ccpy").molecule(geometry="water", basis="cc-pvdz")
+        calls = []
+        with mock.patch.dict(sys.modules, self._fake_ccpy_interop(calls)):
+            self.assertEqual(job.ccpy(nfrozen=1), "driver")
+            job.ccpy()                                    # unchanged: reuses the run
+        self.assertEqual(len(runner_cls.instances), 1)
+        self.assertTrue(runner_cls.instances[0].ran)
+        self.assertEqual(runner_cls.instances[0].input_dict["input"]["method"], "hf")
+        first_mol = runner_cls.instances[0].mol
+        self.assertEqual(calls, [(first_mol, {"nfrozen": 1, "ndelete": 0}),
+                                 (first_mol, {"nfrozen": 0, "ndelete": 0})])
+
+    def test_ccpy_helper_reruns_after_the_job_changes(self):
+        """job.run(); job.molecule(new); job.ccpy() must not reuse the old
+        molecule's integrals and orbitals."""
+        from unittest import mock
+        openqp = load_openqp_module()
+        runner_cls = openqp.Runner
+        runner_cls.instances.clear()
+        job = openqp.OpenQP(project="h2_ccpy").molecule("H 0 0 0; H 0 0 0.74", basis="sto-3g")
+        job.run()
+        job.molecule("H 0 0 0; H 0 0 1.40", basis="sto-3g")
+        calls = []
+        with mock.patch.dict(sys.modules, self._fake_ccpy_interop(calls)):
+            job.ccpy()
+        self.assertEqual(len(runner_cls.instances), 2)
+        self.assertIn("1.4", runner_cls.instances[1].input_dict["input"]["system"])
+        self.assertIs(calls[0][0], runner_cls.instances[1].mol)
+
+    def test_ccpy_helper_rejects_a_finished_non_hf_job(self):
+        """job.ccsd().run(); job.ccpy() must be refused, not reuse the run."""
+        from unittest import mock
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="h2o_ccsd").molecule(geometry="water", basis="sto-3g")
+        job.ccsd().run()
+        calls = []
+        with mock.patch.dict(sys.modules, self._fake_ccpy_interop(calls)):
+            with self.assertRaises(ValueError):
+                job.ccpy()
+        self.assertEqual(calls, [])
+
+    def test_workflow_namespace_exposes_ccpy(self):
+        from unittest import mock
+        openqp = load_openqp_module()
+        openqp.Runner.instances.clear()
+        job = openqp.OpenQP(project="h2o_wf").molecule(geometry="water", basis="sto-3g")
+        calls = []
+        with mock.patch.dict(sys.modules, self._fake_ccpy_interop(calls)):
+            self.assertEqual(job.workflow.ccpy(nfrozen=1), "driver")
+        self.assertEqual(calls, [(openqp.Runner.instances[0].mol,
+                                  {"nfrozen": 1, "ndelete": 0})])
+
+    def test_ccpy_helper_rejects_a_non_hf_job_before_running(self):
+        from unittest import mock
+        openqp = load_openqp_module()
+        for setup in (lambda j: j.ccsd(), lambda j: j.input(functional="bhhlyp")):
+            job = setup(openqp.OpenQP(project="bad").molecule(geometry="water",
+                                                              basis="sto-3g"))
+            job.run = lambda run_type=None: self.fail("ran a non-HF job")
+            with mock.patch.dict(sys.modules, self._fake_ccpy_interop([])):
+                with self.assertRaises(ValueError):
+                    job.ccpy()
+
     def test_ccsd_helper_rejects_a_dft_functional(self):
         openqp = load_openqp_module()
 
@@ -564,7 +729,7 @@ $$$$
         job = (
             openqp.OpenQP(project="h2o_mp2")
             .molecule(geometry="water", basis="6-31g", charge=0, multiplicity=1)
-            .mp2(reference="uhf", variant="scs-mp2", conv=1.0e-10)
+            .mp2(reference="uhf", variant="scs-mp2", transform=" N5 ", conv=1.0e-10)
         )
 
         config = job.to_input_dict()
@@ -575,6 +740,20 @@ $$$$
         self.assertEqual(config["scf"]["type"], "uhf")
         self.assertEqual(config["scf"]["conv"], "1e-10")
         self.assertEqual(config["mp2"]["variant"], "scs-mp2")
+        self.assertEqual(config["mp2"]["transform"], "n5")
+        self.assertNotIn("transform", config["scf"])
+
+    def test_mp2_transform_settings_and_invalid_helper_preserve_job(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="transform_settings").dft("pbe")
+        before = job.to_input_dict()
+        with self.assertRaisesRegex(ValueError, "mp2.transform"):
+            job.mp2(transform="unknown", basis="cc-pvtz", conv=1e-10)
+        self.assertEqual(job.to_input_dict(), before)
+        for transform in ("auto", "direct", "n5"):
+            with self.subTest(transform=transform):
+                job.settings.mp2(transform=transform)
+                self.assertEqual(job.to_input_dict()["mp2"]["transform"], transform)
 
     def test_mp2_helper_clears_prior_dft_and_sets_custom_scales(self):
         openqp = load_openqp_module()
@@ -731,6 +910,23 @@ $$$$
         self.assertEqual(config["input"]["method"], "tdhf")
         self.assertEqual(config["input"]["functional"], "b3lyp5")
         self.assertEqual(config["tdhf"]["nstate"], "2")
+        self.assertEqual(config["tdhf"]["multiplicity"], "1")
+
+        # Closed-shell triplet response: the excited-state multiplicity goes to
+        # [tdhf], the RHF reference stays a singlet.
+        for build in (
+            lambda j: j.theory.tddft(functional="b3lyp5", basis="6-31g*", nstate=2,
+                                     state_multiplicity=3),
+            lambda j: j.theory("tddft", functional="b3lyp5", basis="6-31g*", nstate=2,
+                               state_multiplicity=3),
+            lambda j: j.theory("tdhf", basis="6-31g*", nstate=2, state_multiplicity=3),
+        ):
+            job = build(openqp.OpenQP(project="h2o_tddft_triplet")
+                        .molecule(geometry="water", charge=0, multiplicity=1))
+            config = job.to_input_dict()
+            self.assertEqual(config["scf"]["type"], "rhf")
+            self.assertEqual(config["scf"]["multiplicity"], "1")
+            self.assertEqual(config["tdhf"]["multiplicity"], "3")
 
         with self.assertRaisesRegex(ValueError, "DFT theory requires"):
             openqp.OpenQP(project="bad_dft_namespace").theory.dft()
@@ -790,6 +986,18 @@ $$$$
         with self.assertRaisesRegex(ValueError, "SF-TDDFT theory requires"):
             openqp.OpenQP(project="bad_sf").theory("sf-tddft")
 
+    def test_control_sets_the_log_verbosity(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_quiet")
+            .molecule(geometry="water", charge=0, multiplicity=1)
+        )
+        job.control(verbose=0, omp_threads=4)
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["verbose"], "0")
+        self.assertEqual(config["input"]["omp_threads"], "4")
+
     def test_control_sets_runtype_threads_and_optimizer_options(self):
         openqp = load_openqp_module()
         job = (
@@ -814,6 +1022,33 @@ $$$$
         self.assertEqual(config["optimize"]["maxit"], "12")
         self.assertEqual(config["oqp"]["coordsys"], "dlc")
         self.assertEqual(config["oqp"]["trust"], "0.25")
+
+    def test_workflow_optimize_composes_with_qmmm(self):
+        # the QM/MM geometry optimisation through the Python API: job.qmmm(...)
+        # followed by job.workflow.optimize(...) builds the deck the QM/MM
+        # optimiser reads (runtype, flag, selection, movable shell, output,
+        # constraints, native engine controls)
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="ala_qmmm_opt")
+            .molecule("ala.pdb 9 10 17 18 19", basis="6-31g")
+            .qmmm(forcefield="amber14-all.xml", cutoff="NoCutoff", constraints="HBonds")
+        )
+        job.workflow.optimize(istate=0, maxit=6, qmmm_radius=3.0, qmmm_output="ala_held.pdb",
+                              coordsys="tric", auto_recovery=False)
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "optimize")
+        self.assertEqual(config["input"]["qmmm_flag"], "True")
+        self.assertEqual(config["qmmm"]["pdb_file"], "ala.pdb")
+        self.assertEqual(config["qmmm"]["qm_atoms"], "8 9 16 17 18")      # one-based selector, zero-based list
+        self.assertEqual(config["qmmm"]["forcefield_files"], "amber14-all.xml")
+        self.assertEqual(config["qmmm"]["constraints"], "HBonds")
+        self.assertEqual(config["optimize"]["istate"], "0")
+        self.assertEqual(config["optimize"]["maxit"], "6")
+        self.assertEqual(config["optimize"]["qmmm_radius"], "3.0")
+        self.assertEqual(config["optimize"]["qmmm_output"], "ala_held.pdb")
+        self.assertEqual(config["oqp"]["coordsys"], "tric")
+        self.assertEqual(config["oqp"]["auto_recovery"], "False")
 
     def test_control_meci_sets_crossing_runtype_and_options(self):
         openqp = load_openqp_module()
@@ -908,6 +1143,23 @@ $$$$
         self.assertEqual(config["pcm"]["enabled"], "True")
         self.assertEqual(config["pcm"]["epsilon"], "78.3553")
 
+    def test_workflow_hessian_type_defaults_to_auto(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_hess_auto")
+            .molecule(geometry="water", charge=0)
+            .theory("dft", functional="pbe0", basis="def2-svp")
+        )
+        job.workflow.hessian(state=0)
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "hess")
+        self.assertEqual(config["hess"]["type"], "auto")
+
+        job.workflow.hessian(type="auto", state=0)
+        self.assertEqual(job.to_input_dict()["hess"]["type"], "auto")
+        job.workflow.hessian(type="numerical", state=0)
+        self.assertEqual(job.to_input_dict()["hess"]["type"], "numerical")
+
     def test_workflow_pcm_requires_reference_scf_theory(self):
         openqp = load_openqp_module()
         job = (
@@ -973,6 +1225,78 @@ $$$$
         with self.assertRaisesRegex(ValueError, "CGO NMR"):
             open_shell.workflow.nmr(gauge="cgo")
         open_shell.workflow.nmr(gauge="giao")
+
+    def test_workflow_nmr_acid_flag(self):
+        """ACID rides on the shielding call, so the two have to agree.
+
+        The concise-input tests cover the .oqp spelling; this covers the Python
+        one, where the flag used to be read by plain truthiness and the gauge
+        default differed from the concise surface.
+        """
+        openqp = load_openqp_module()
+
+        def job(name):
+            return (
+                openqp.OpenQP(project=name)
+                .molecule(geometry="water", charge=0, multiplicity=1)
+                .theory("hf", basis="6-31g*")
+            )
+
+        # Asking for ACID without naming a gauge selects GIAO, as the concise
+        # surface does; ordering puts nmr first, which the driver relies on.
+        enabled = job("h2o_acid")
+        enabled.workflow.nmr(acid=True, acid_spacing=0.5, acid_padding=3.0)
+        config = enabled.to_input_dict()
+        self.assertEqual(config["properties"]["scf_prop"], "nmr,acid")
+        self.assertEqual(config["properties"]["nmr_gauge"], "giao")
+        self.assertEqual(str(config["properties"]["acid_spacing"]), "0.5")
+        self.assertEqual(str(config["properties"]["acid_padding"]), "3.0")
+
+        # A plain shielding call is untouched.
+        plain = job("h2o_plain")
+        plain.workflow.nmr(gauge="giao")
+        self.assertEqual(plain.to_input_dict()["properties"]["scf_prop"], "nmr")
+
+        # Config-style spellings are parsed, not trusted: "false" used to be
+        # truthy and silently wrote four cube files.
+        off = job("h2o_off")
+        off.workflow.nmr(gauge="giao", acid="false")
+        self.assertEqual(off.to_input_dict()["properties"]["scf_prop"], "nmr")
+        on = job("h2o_on")
+        on.workflow.nmr(gauge="giao", acid="yes")
+        self.assertEqual(on.to_input_dict()["properties"]["scf_prop"], "nmr,acid")
+        # The grid controls describe an ACID box, so they cannot be honoured
+        # without one; the .oqp modifier refuses the same combination, and
+        # accepting them here would store them, write no cubes and say nothing.
+        for kwargs in ({"acid_spacing": 0.5},
+                       {"acid_padding": 3.0},
+                       {"acid_spacing": 0.5, "acid_padding": 3.0}):
+            with self.assertRaisesRegex(ValueError, "require acid=true"):
+                job("h2o_grid").workflow.nmr(gauge="giao", acid=False, **kwargs)
+        # ...and they are accepted when ACID is actually asked for.
+        sized = job("h2o_sized")
+        sized.workflow.nmr(acid=True, acid_padding=2.5)
+        self.assertEqual(
+            str(sized.to_input_dict()["properties"]["acid_padding"]), "2.5")
+
+        # None is "not asked for"; an empty or unrecognised string is a typo,
+        # and both surfaces have to answer the same way (the .oqp modifier
+        # raises on exactly these).
+        none_given = job("h2o_none")
+        none_given.workflow.nmr(gauge="giao", acid=None)
+        self.assertEqual(
+            none_given.to_input_dict()["properties"]["scf_prop"], "nmr")
+        for typo in ("", "none", "maybe"):
+            with self.assertRaisesRegex(ValueError, "acid expects true or false"):
+                job("h2o_typo").workflow.nmr(gauge="giao", acid=typo)
+
+        with self.assertRaisesRegex(ValueError, "acid expects true or false"):
+            job("h2o_bad").workflow.nmr(gauge="giao", acid="2")
+
+        # ACID exists only on the GIAO path, and naming CGO is refused rather
+        # than quietly overridden.
+        with self.assertRaisesRegex(ValueError, "gauge='giao'"):
+            job("h2o_cgo").workflow.nmr(gauge="cgo", acid=True)
 
     def test_workflow_ekt_requires_mrsf_and_channel(self):
         openqp = load_openqp_module()
@@ -1093,7 +1417,21 @@ $$$$
         self.assertEqual(config["input"]["runtype"], "energy")
         self.assertEqual(config["qmmm"]["embedding"], "electrostatic")
         self.assertEqual(config["qmmm"]["pdb_file"], "ala.pdb")
-        self.assertEqual(config["qmmm"]["qm_atoms"], "9 10 17 18 19")
+        # the selector after the PDB path is one-based; [qmmm] qm_atoms is the
+        # zero-based OpenMM selection of the same atoms
+        self.assertEqual(config["qmmm"]["qm_atoms"], "8 9 16 17 18")
+
+    def test_qmmm_inferred_selector_is_shifted_to_zero_based_ranges_too(self):
+        openqp = load_openqp_module()
+        job = (openqp.OpenQP(project="qmmm_infer")
+               .molecule("ala.pdb 9-10 17 18-19", basis="6-31g")
+               .qmmm())
+        self.assertEqual(job.to_input_dict()["qmmm"]["qm_atoms"], "8-9 16 17-18")
+        # an explicit qm_atoms is taken as given (already zero-based)
+        job2 = (openqp.OpenQP(project="qmmm_explicit")
+                .molecule("ala.pdb 9 10 17 18 19", basis="6-31g")
+                .qmmm(qm_atoms=[8, 9, 16, 17, 18]))
+        self.assertEqual(job2.to_input_dict()["qmmm"]["qm_atoms"], "8 9 16 17 18")
 
     def test_qmmm_frontier_scheme_sets_section_key(self):
         openqp = load_openqp_module()
@@ -1130,11 +1468,12 @@ $$$$
         openqp = load_openqp_module()
         job = (
             openqp.OpenQP(project="socnamd_qmmm")
-            .molecule("chromo.pdb 0-4", basis="6-31g*")
+            .molecule("chromo.pdb 1-5", basis="6-31g*")
             .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
             .qmmm(cutoff="PME")
         )
         job.workflow.namd(
+            scheme="Overlap",
             soc=True,
             soc_basis="mch",
             nstep=200,
@@ -1148,7 +1487,7 @@ $$$$
         self.assertEqual(config["input"]["qmmm_flag"], "True")
         self.assertEqual(config["input"]["runtype"], "namd")
         self.assertEqual(config["qmmm"]["pdb_file"], "chromo.pdb")
-        self.assertEqual(config["qmmm"]["qm_atoms"], "0-4")
+        self.assertEqual(config["qmmm"]["qm_atoms"], "0-4")   # one-based 1-5 -> zero-based
         self.assertEqual(config["tdhf"]["type"], "mrsf")
         self.assertEqual(config["md"]["soc"], "True")
         self.assertEqual(config["md"]["soc_basis"], "mch")
@@ -1159,11 +1498,120 @@ $$$$
         self.assertEqual(config["md"]["first_hop_step"], "2")
         self.assertEqual(config["md"]["nacme_check"], "off")
 
+    def test_workflow_namd_scheme_expands_complete_table_1_treatment(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="namd_preset")
+            .molecule("h2co.xyz", basis="6-31g*")
+            .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
+        )
+        job.workflow.namd(scheme="Overlap", nstep=10)
+        config = job.to_input_dict()
+        self.assertEqual(config["md"]["tdc"], "npi")
+        self.assertEqual(config["md"]["rescale"], "isotropic")
+        self.assertEqual(config["md"]["thrshe"], "0.015936")
+
+        with self.assertRaisesRegex(ValueError, "already defines rescale"):
+            job.workflow.namd(scheme="Overlap", rescale="isotropic")
+
+    def test_workflow_md_composes_with_namd_in_either_call_order(self):
+        openqp = load_openqp_module()
+        for md_first in (True, False):
+            job = (
+                openqp.OpenQP(project="composed_namd")
+                .molecule("h2co.xyz", basis="6-31g*")
+                .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
+            )
+            if md_first:
+                job.workflow.md(nstep=20, dt=0.5, temperature=300.0)
+                job.workflow.namd(scheme="Overlap")
+            else:
+                job.workflow.namd(scheme="Overlap")
+                job.workflow.md(nstep=20, dt=0.5, temperature=300.0)
+            config = job.to_input_dict()
+            self.assertEqual(config["input"]["runtype"], "namd")
+            self.assertEqual(config["md"]["nstep"], "20")
+            self.assertEqual(config["md"]["dt"], "0.5")
+            self.assertEqual(config["md"]["init_temp"], "300.0")
+            self.assertEqual(config["md"]["common_controls"], "True")
+            self.assertEqual(
+                config["md"]["common_control_keys"],
+                "dt,nstep,temperature",
+            )
+
+    def test_md_schema_proxy_assignments_track_explicit_controls(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="md_proxy_provenance")
+
+        job.workflow.md()
+        job.workflow.md.dt = 0.1
+        self.assertEqual(
+            job.to_input_dict()["md"]["common_control_keys"], "dt"
+        )
+
+        job.settings.md(
+            thermostat="langevin",
+            thermostat_temperature=500.0,
+            thermostat_friction=2.0,
+        )
+        config = job.to_input_dict()
+        self.assertEqual(
+            config["md"]["common_control_keys"],
+            "dt,thermostat,thermostat_friction,thermostat_temperature",
+        )
+        self.assertEqual(config["md"]["common_controls"], "True")
+
+    def test_workflow_md_ensemble_is_canonical(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="md_ensemble")
+
+        job.workflow.md(ensemble="NVT", temperature=310.0, friction=1.5)
+        config = job.to_input_dict()
+        self.assertEqual(config["md"]["ensemble"], "nvt")
+        self.assertEqual(config["md"]["thermostat"], "langevin")
+        self.assertEqual(
+            config["md"]["common_control_keys"],
+            "ensemble,friction,temperature",
+        )
+
+        with self.assertRaisesRegex(ValueError, "barostat trial box"):
+            job.workflow.md(ensemble="npt")
+        with self.assertRaisesRegex(ValueError, "legacy thermostat"):
+            job.workflow.md(ensemble="nvt", thermostat="langevin")
+
+    def test_workflow_namd_policy_names_are_pythonic(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="namd_policy")
+            .molecule("h2co.xyz", basis="6-31g*")
+            .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
+        )
+        job.workflow.namd(
+            scheme="Overlap", nacme_policy="warn", nve_policy="error"
+        )
+        config = job.to_input_dict()
+        self.assertEqual(config["md"]["nacme_policy"], "warn")
+        self.assertEqual(config["md"]["nve_policy"], "error")
+
+    def test_legacy_namd_policy_names_work_through_all_python_setters(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="legacy_namd_policy")
+
+        job.settings.md(nve_gate="off")
+        self.assertEqual(job.to_input_dict()["md"]["nve_policy"], "off")
+
+        job.md.nve_gate = "warn"
+        self.assertEqual(job.to_input_dict()["md"]["nve_policy"], "warn")
+
+        job.set(**{"md.nve_gate": "error"})
+        self.assertEqual(job.to_input_dict()["md"]["nve_policy"], "error")
+        self.assertEqual(job.md.nve_gate, "error")
+
     def test_namd_droplet_restraint_controls_are_pythonic(self):
         openqp = load_openqp_module()
         job = (
             openqp.OpenQP(project="droplet_namd_qmmm")
-            .molecule("chromo.pdb 0-4", basis="6-31g*")
+            .molecule("chromo.pdb 1-5", basis="6-31g*")
             .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
             .qmmm(cutoff="NoCutoff")
             .droplet(
@@ -1198,8 +1646,11 @@ $$$$
             .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
         )
         with self.assertRaisesRegex(ValueError, "does not support nacme_check"):
-            job.workflow.namd(soc=True, nacme_check="baeck_an")
+            job.workflow.namd(
+                scheme="Overlap", soc=True, nacme_check="baeck_an"
+            )
         job.workflow.namd(
+            scheme="Overlap",
             soc=False,
             nacme_check="baeck_an",
             ba_gap_max=0.05,
@@ -1212,10 +1663,10 @@ $$$$
         self.assertEqual(config["md"]["soc"], "False")
         self.assertEqual(config["md"]["nacme_check"], "baeck_an")
         self.assertEqual(config["md"]["ba_gap_max"], "0.05")
-        self.assertEqual(config["md"]["nacme_gate"], "error")
-        self.assertEqual(config["md"]["nacme_gate_abs_tol"], "0.0002")
-        self.assertEqual(config["md"]["nacme_gate_rel_tol"], "0.5")
-        self.assertEqual(config["md"]["nacme_gate_consecutive"], "4")
+        self.assertEqual(config["md"]["nacme_policy"], "error")
+        self.assertEqual(config["md"]["nacme_policy_abs_tol"], "0.0002")
+        self.assertEqual(config["md"]["nacme_policy_rel_tol"], "0.5")
+        self.assertEqual(config["md"]["nacme_policy_consecutive"], "4")
 
     def test_workflow_namd_requires_mrsf_theory(self):
         openqp = load_openqp_module()
@@ -1225,7 +1676,7 @@ $$$$
             .theory("dft", functional="bhhlyp", basis="6-31g*")
         )
         with self.assertRaisesRegex(ValueError, "only with MRSF-TDDFT"):
-            job.workflow.namd(nstep=10)
+            job.workflow.namd(scheme="Overlap", nstep=10)
 
     def test_soc_helper_rejects_response_multiplicity(self):
         openqp = load_openqp_module()
@@ -1384,6 +1835,30 @@ $$$$
         self.assertIs(mol, runner.mol)
         self.assertTrue(runner.ran)
 
+
+    def test_legacy_wrapper_forwards_append_log_only_when_set(self):
+        # the ESPF QM/MM driver builds one OPENQP per geometry; the later ones
+        # append to the run's log instead of truncating it
+        openqp = load_openqp_module()
+        seen = []
+        base = openqp.Runner
+
+        class Capture(base):
+            def __init__(self, **kwargs):
+                seen.append(dict(kwargs))
+                kwargs.pop("append_log", None)
+                super().__init__(**kwargs)
+
+        openqp.Runner = Capture
+        try:
+            cfg = {"input.system": "H 0 0 0; H 0 0 0.74", "input.basis": "sto-3g",
+                   "input.method": "hf", "input.runtype": "energy", "scf.type": "rhf"}
+            openqp.OPENQP(cfg)
+            openqp.OPENQP(cfg, True, append_log=True)
+        finally:
+            openqp.Runner = base
+        self.assertNotIn("append_log", seen[0])
+        self.assertIs(seen[1]["append_log"], True)
 
     def test_dftb_helper_builds_mrsf_tddftb_input(self):
         openqp = load_openqp_module()

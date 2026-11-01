@@ -1,0 +1,4 @@
+casscf/6-31g guess(type=hcore) scf(maxit=100,forced_attempt=3,save_molden=false)
+cas(active_electrons=6,active_orbitals=6,frozen_core=2,max_det=500,max_memory=512)
+casscf(max_macro_iterations=50,converger=ah,hessian=analytic) ci(solver=dense)
+geom="../geometries/H2O-95fa99c614ed.xyz"

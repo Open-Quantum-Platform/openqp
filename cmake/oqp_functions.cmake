@@ -195,7 +195,7 @@ set(OQP_ACCELERATE_ILP64_SYMS
     caxpy ccopy cdotc cdotu cgbmv cgemm cgemv cgerc cgeru chbmv chemm chemv
     cher cher2 cher2k cherk chpmv chpr chpr2 cscal csrot csscal cswap csymm
     csyr2k csyrk ctbmv ctbsv ctpmv ctpsv ctrmm ctrmv ctrsm ctrsv
-    dasum daxpy dcopy ddot dgbmv dgemm dgemv dgeqrf dgels dger dgesv dgesvd dgetrf dgetri
+    dasum daxpy dcopy ddot dgbmv dgemm dgemv dgelss dgeqrf dgels dger dgesv dgesvd dgetrf dgetri
     dgglse dlamch dnrm2 dorgqr dormqr drot drotm dsbmv dscal dsdot dspev
     dspevx dspmv dspr dspr2 dswap dsyev dsyevd dsymm dsymv dsyr dsyr2 dsyr2k
     dsyrk dsysv dsytrf dsytri dsytrs dtbmv dtbsv dtpmv dtpsv dtpttr dtrmm
@@ -364,10 +364,10 @@ macro(findLinearAlgebra)
       # macOS: Accelerate's modern ILP64 interface via symbol interposition
       # (see findAccelerateILP64 above; OpenQP is ILP64-only).
       # FATALs internally if the SDK lacks $NEWLAPACK$ILP64 (macOS < 13.3).
-      # OpenTrustRegion is a STATIC library absorbed into liboqp, so its
-      # BLAS/LAPACK references resolve at the liboqp link where the alias list
-      # applies -- the interposition covers it, and the POST_BUILD guard fails
-      # the build naming any of its symbols missing from the alias list.
+      # STATIC externals absorbed into liboqp resolve their BLAS/LAPACK
+      # references at the liboqp link, where the alias list applies, so the
+      # interposition covers them and the POST_BUILD guard fails the build
+      # naming any of their symbols missing from the alias list.
       # ddX however builds a SHARED libddx that links BLAS itself and is NOT
       # wired for the interposition yet: refuse it (OFF by default) rather
       # than let it bind the classic LP64 symbols and silently corrupt.

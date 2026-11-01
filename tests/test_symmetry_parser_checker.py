@@ -5,13 +5,15 @@ import types
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import isolate_modules, stub_module
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def load_input_checker():
-    oqp_mod = sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-    utils_mod = sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+    oqp_mod = stub_module("oqp")
+    utils_mod = stub_module("oqp.utils")
     mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
 
     class MPIManager:
@@ -34,6 +36,7 @@ def load_input_checker():
 
 class TestSymmetryParserAndMetadataGates(unittest.TestCase):
     def setUp(self):
+        self.addCleanup(isolate_modules())
         self.input_checker = load_input_checker()
 
     def test_schema_file_declares_symmetry_section_with_safe_defaults(self):

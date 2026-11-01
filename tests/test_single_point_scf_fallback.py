@@ -4,6 +4,10 @@ import types
 import unittest
 from pathlib import Path
 
+import numpy as np
+
+from oqp_module_isolation import isolate_modules
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -93,6 +97,7 @@ def install_single_point_stubs():
     nac_utils = types.ModuleType("oqp.library.nac_utils")
     for name in (
         "canonical_state_overlap",
+        "normalize_retained_state_overlap",
         "hst_derivative_coupling",
         "interstate_coupling",
         "load_numerical_nac_cache",
@@ -118,11 +123,35 @@ def install_single_point_stubs():
 
 
 class FakeData(dict):
+    """Tag store with the failure behaviour of OQPData.
+
+    A missing tag raises AttributeError, as OQPData.__getitem__ does.  Tags in
+    ``fail_reads``/``fail_writes`` raise RuntimeError, to inject a failure
+    that is not the absence of a tag.
+    """
+
     def __init__(self):
         super().__init__()
         self.convergers = []
         self.diis_types = []
         self.sd_scf_flags = []
+        self.maxits = []
+        self.trah_arh = []
+        self.fail_reads = set()
+        self.fail_writes = set()
+
+    def __missing__(self, key):
+        raise AttributeError(f"Key `{key}` not found in QOP data")
+
+    def __getitem__(self, key):
+        if key in self.fail_reads:
+            raise RuntimeError(f"injected read failure for {key}")
+        return super().__getitem__(key)
+
+    def __setitem__(self, key, value):
+        if key in self.fail_writes:
+            raise RuntimeError(f"injected write failure for {key}")
+        super().__setitem__(key, value)
 
     def set_scf_converger_type(self, converger):
         self.convergers.append(converger)
@@ -132,6 +161,12 @@ class FakeData(dict):
 
     def set_sd_scf(self, flag):
         self.sd_scf_flags.append(flag)
+
+    def set_scf_maxit(self, maxit):
+        self.maxits.append(maxit)
+
+    def set_trah_arh(self, n):
+        self.trah_arh.append(n)
 
     def set_trah_stability(self, flag):
         self.trah_stability = flag
@@ -146,8 +181,15 @@ class FakeMol:
         self.mol_energy = types.SimpleNamespace(energy=-1.0, SCF_converged=False)
         self.energies = []
 
+    def get_atoms(self):
+        return np.array([8.0, 1.0, 1.0])
+
     def write_molden(self, filename):
         raise AssertionError("save_molden is disabled in this test")
+
+
+ALPHA_TAGS = ('OQP::VEC_MO_A', 'OQP::E_MO_A', 'OQP::DM_A', 'OQP::FOCK_A')
+BETA_TAGS = ('OQP::VEC_MO_B', 'OQP::E_MO_B', 'OQP::DM_B', 'OQP::FOCK_B')
 
 
 class SlottedMolEnergy:
@@ -160,6 +202,7 @@ class SlottedMolEnergy:
 
 class TestSinglePointScfFallback(unittest.TestCase):
     def setUp(self):
+        self.addCleanup(isolate_modules())
         install_single_point_stubs()
         self.single_point = load_module(
             "single_point_under_test",
@@ -169,6 +212,10 @@ class TestSinglePointScfFallback(unittest.TestCase):
     def make_calculator(self):
         calc = self.single_point.SinglePoint.__new__(self.single_point.SinglePoint)
         calc.mol = FakeMol()
+        # An SCF that ran has allocated the alpha solution tags (scf.F90
+        # tags_alpha); the stability safeguard snapshots them.
+        for n, tag in enumerate(ALPHA_TAGS):
+            calc.mol.data[tag] = np.array([1.0 + n, 2.0 + n])
         calc.method = "hf"
         calc.td = "rpa"
         calc.init_scf = "no"
@@ -322,10 +369,57 @@ class TestSinglePointScfFallback(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             calc.energy(do_init_scf=False)
 
-        # Full default ladder is walked (DIIS -> SOSCF -> TRAH) before giving up,
-        # then the primary converger is restored.
+        # Full default ladder is walked (DIIS -> SOSCF -> ARH -> TRAH) before
+        # giving up, then the primary converger is restored.
         self.assertEqual(
-            calc.mol.data.convergers, ["diis", "soscf", "trah", "diis", "diis"])
+            calc.mol.data.convergers, ["diis", "soscf", "arh", "trah", "diis", "diis"])
+        # The ARH stage ran with its own iteration floor; scf.maxit came back.
+        self.assertEqual(calc.mol.data.maxits,
+                         [self.single_point.ARH_STAGE_MAXIT, 30])
+        # TRAH after ARH finishes with the exact Hessian, then trh_arh=-1 again.
+        self.assertEqual(calc.mol.data.trah_arh, [0, -1])
+
+    def test_explicit_trh_arh_is_kept_for_trah_after_arh(self):
+        calc = self.make_calculator()
+        calc.mol.config["scf"]["trh_arh"] = 20
+
+        def scf_never_converges():
+            calc.scf_calls += 1
+            calc.mol.mol_energy.SCF_converged = False
+
+        calc.scf = scf_never_converges
+        self.assertFalse(calc._run_scf())
+        self.assertIn("trah", calc.mol.data.convergers)
+        self.assertEqual(calc.mol.data.trah_arh, [])
+
+    def test_failed_arh_primary_finishes_with_exact_trah(self):
+        # converger_type=arh is dropped from the ladder as the primary, but it
+        # still ran, so the TRAH stage must use the exact Hessian (trh_arh=0).
+        calc = self.make_calculator()
+        calc.converger_type = "arh"
+        calc.mol.config["scf"]["converger_type"] = "arh"
+
+        def scf_never_converges():
+            calc.scf_calls += 1
+            calc.mol.mol_energy.SCF_converged = False
+
+        calc.scf = scf_never_converges
+        self.assertFalse(calc._run_scf())
+        self.assertEqual(calc.mol.data.convergers[:3], ["arh", "soscf", "trah"])
+        self.assertEqual(calc.mol.data.trah_arh, [0, -1])
+
+    def test_trah_without_preceding_arh_keeps_the_default_hessian(self):
+        calc = self.make_calculator()
+        calc.mol.config["scf"]["escalation"] = "soscf,trah"
+
+        def scf_never_converges():
+            calc.scf_calls += 1
+            calc.mol.mol_energy.SCF_converged = False
+
+        calc.scf = scf_never_converges
+        self.assertFalse(calc._run_scf())
+        self.assertEqual(calc.mol.data.convergers[:3], ["diis", "soscf", "trah"])
+        self.assertEqual(calc.mol.data.trah_arh, [])
 
     def test_reference_restores_primary_converger_for_matching_gradient(self):
         calc = self.make_calculator()
@@ -340,9 +434,9 @@ class TestSinglePointScfFallback(unittest.TestCase):
 
         def scf_needs_trah():
             calc.scf_calls += 1
-            # Each geometry requires DIIS, SOSCF, then TRAH.
+            # Each geometry requires DIIS, SOSCF, ARH, then TRAH.
             calc.mol.mol_energy.energy = -1.0 - calc.scf_calls
-            calc.mol.mol_energy.SCF_converged = calc.scf_calls % 3 == 0
+            calc.mol.mol_energy.SCF_converged = calc.scf_calls % 4 == 0
 
         calc.scf = scf_needs_trah
 
@@ -352,8 +446,8 @@ class TestSinglePointScfFallback(unittest.TestCase):
         self.assertEqual(
             calc.mol.data.convergers,
             [
-                "diis", "soscf", "trah", "diis",
-                "diis", "soscf", "trah", "diis",
+                "diis", "soscf", "arh", "trah", "diis",
+                "diis", "soscf", "arh", "trah", "diis",
             ],
         )
 
@@ -399,6 +493,45 @@ class TestSinglePointScfFallback(unittest.TestCase):
 
         self.assertTrue(calc._run_scf())
         self.assertEqual(calc.mol.data.convergers, ["diis", "soscf", "diis"])
+
+    def test_mom_never_escalates_to_trah(self):
+        calc = self.make_calculator()
+        calc.mol.config["scf"]["mom"] = True
+
+        def scf_never_converges():
+            calc.scf_calls += 1
+            calc.mol.mol_energy.SCF_converged = False
+
+        calc.scf = scf_never_converges
+
+        self.assertFalse(calc._run_scf())
+        self.assertEqual(calc.mol.data.convergers, ["diis", "soscf", "diis"])
+
+    def test_mom_disables_requested_trah_stability_pass(self):
+        calc = self.make_calculator()
+        calc.mol.config["scf"]["mom"] = True
+        calc.stability = True
+
+        self.assertTrue(calc._run_scf())
+        self.assertEqual(calc.mol.data.convergers, ["diis", "soscf", "diis"])
+
+    def test_ml_selector_never_picks_trah_for_occupation_rule(self):
+        model = types.ModuleType("oqp.library.scf_selector_model")
+        setattr(model, "predict", lambda features: "trah")
+        previous = sys.modules.get("oqp.library.scf_selector_model")
+        sys.modules["oqp.library.scf_selector_model"] = model
+        self.addCleanup(
+            lambda: sys.modules.__setitem__("oqp.library.scf_selector_model", previous)
+            if previous is not None else sys.modules.pop("oqp.library.scf_selector_model", None))
+        for rule in ("mom", "rstctmo"):
+            calc = self.make_calculator()
+            calc.converger_type = "ml"
+            calc.mol.config["scf"]["converger_type"] = "ml"
+            calc.mol.config["scf"][rule] = True
+
+            self.assertTrue(calc._run_scf())
+            self.assertNotIn("trah", calc.mol.data.convergers, rule)
+            self.assertEqual(calc.mol.data.convergers[0], "diis", rule)
 
     def test_ml_selector_maps_diis_subtype_to_native_controls(self):
         # The distilled model labels DIIS variants, while native control uses a
@@ -500,6 +633,43 @@ class TestSinglePointScfFallback(unittest.TestCase):
         # ... and the lower (relaxed) solution was kept.
         self.assertEqual(calc.mol.mol_energy.energy, -2.5)
 
+    def test_stability_safeguard_runs_after_arh_primary(self):
+        # converger_type=arh does no stability check of its own, so the opt-in
+        # TRAH pass must run after it exactly as after DIIS.
+        calc = self.make_calculator()
+        calc.converger_type = "arh"
+        calc.mol.config["scf"]["converger_type"] = "arh"
+        calc.stability = True
+
+        def scf_unstable_then_relaxes():
+            calc.scf_calls += 1
+            calc.mol.mol_energy.energy = -2.0 if calc.scf_calls == 1 else -2.5
+            calc.mol.mol_energy.SCF_converged = True
+
+        calc.scf = scf_unstable_then_relaxes
+
+        self.assertTrue(calc._run_scf())
+        self.assertEqual(calc.mol.data.convergers[0], "arh")
+        self.assertIn("trah", calc.mol.data.convergers)
+        self.assertEqual(calc.mol.mol_energy.energy, -2.5)
+
+    def test_stability_safeguard_skips_trah_primary(self):
+        # TRAH checks stability at convergence itself; no second pass.
+        calc = self.make_calculator()
+        calc.converger_type = "trah"
+        calc.mol.config["scf"]["converger_type"] = "trah"
+        calc.stability = True
+
+        def scf_converges_once():
+            calc.scf_calls += 1
+            calc.mol.mol_energy.energy = -2.0
+            calc.mol.mol_energy.SCF_converged = True
+
+        calc.scf = scf_converges_once
+
+        self.assertTrue(calc._run_scf())
+        self.assertEqual(calc.scf_calls, 1)
+
     def test_stability_safeguard_skips_ordinary_tdhf_reference(self):
         # Ordinary closed-shell TDHF/TDA/RPA references should not run the extra
         # TRAH stability pass even when the user explicitly opts in for SCF
@@ -551,6 +721,281 @@ class TestSinglePointScfFallback(unittest.TestCase):
                 self.assertTrue(converged)
                 self.assertIn("trah", calc.mol.data.convergers)
                 self.assertEqual(calc.mol.mol_energy.energy, -2.5)
+
+
+class ReadOnlyDavidsonMolEnergy:
+    """mol_energy whose Davidson flag can be read but not written back."""
+    __slots__ = ("energy", "SCF_converged")
+
+    def __init__(self):
+        self.energy = -1.0
+        self.SCF_converged = False
+
+    @property
+    def Davidson_converged(self):
+        return False
+
+
+class UnreadableDavidsonMolEnergy:
+    """mol_energy whose Davidson flag passes hasattr() but fails the read.
+
+    hasattr() propagates any error other than AttributeError by itself, so
+    only the read that follows it was ever guarded by ``except Exception``.
+    """
+    __slots__ = ("energy", "SCF_converged", "reads")
+
+    def __init__(self):
+        self.energy = -1.0
+        self.SCF_converged = False
+        self.reads = 0
+
+    @property
+    def Davidson_converged(self):
+        self.reads += 1
+        if self.reads > 1:
+            raise RuntimeError("injected mol_energy read failure")
+        return False
+
+
+class TestScfStabilitySafeguardFailuresAreVisible(unittest.TestCase):
+    """Every failure inside the opt-in TRAH stability safeguard must raise.
+
+    Each of these used to be swallowed by ``except Exception: pass`` (or
+    ``return False``), so the run continued with a partially restored or
+    mis-flagged SCF state and no trace in the log.
+    """
+
+    setUp = TestSinglePointScfFallback.setUp
+    make_calculator = TestSinglePointScfFallback.make_calculator
+
+    def stability_calculator(self, scf_type="rhf", trah_lowers=False):
+        """Stability pass where TRAH rewrites every SCF tag.
+
+        With ``trah_lowers=False`` TRAH finds no lower solution, so the
+        safeguard must restore the pre-TRAH tags and energy.
+        """
+        calc = self.make_calculator()
+        calc.stability = True
+        calc.mol.config["scf"]["type"] = scf_type
+        if scf_type != "rhf":
+            for n, tag in enumerate(BETA_TAGS):
+                calc.mol.data[tag] = np.array([-1.0 - n, -2.0 - n])
+        self.pre_trah = {tag: np.array(value).copy()
+                         for tag, value in calc.mol.data.items()
+                         if tag.startswith("OQP::")}
+
+        def scf():
+            calc.scf_calls += 1
+            calc.mol.mol_energy.SCF_converged = True
+            if calc.scf_calls == 1:
+                calc.mol.mol_energy.energy = -2.0
+                return
+            calc.mol.mol_energy.energy = -2.5 if trah_lowers else -1.99999999
+            for tag in self.pre_trah:
+                calc.mol.data[tag] = np.array([99.0, 99.0])
+
+        calc.scf = scf
+        return calc
+
+    def test_noop_restores_every_tag_and_the_energy(self):
+        for scf_type in ("rhf", "uhf", "rohf"):
+            with self.subTest(scf_type=scf_type):
+                calc = self.stability_calculator(scf_type)
+                self.assertTrue(calc._run_scf())
+                self.assertIn("trah", calc.mol.data.convergers)
+                for tag, value in self.pre_trah.items():
+                    np.testing.assert_array_equal(calc.mol.data[tag], value, tag)
+                self.assertEqual(calc.mol.mol_energy.energy, -2.0)
+
+    def test_failed_tag_restore_raises(self):
+        # A partial restore paired TRAH orbitals with the pre-TRAH energy.
+        calc = self.stability_calculator()
+
+        def scf():
+            calc.scf_calls += 1
+            calc.mol.mol_energy.SCF_converged = True
+            calc.mol.mol_energy.energy = -2.0 if calc.scf_calls == 1 else -1.99999999
+            if calc.scf_calls == 2:
+                calc.mol.data["OQP::DM_A"] = np.array([99.0, 99.0])
+                calc.mol.data.fail_writes.add("OQP::DM_A")
+
+        calc.scf = scf
+        with self.assertRaisesRegex(RuntimeError, "injected write failure for OQP::DM_A"):
+            calc._run_scf()
+
+    def staged_petite(self, calc):
+        calc.mol.symmetry_metadata = {"integral_symmetry": {"status": "active"}}
+        calc.mol.data["OQP::sym_petite_enable"] = np.array([1], dtype=np.int64)
+        calc.mol.data.set_trah_stability(False)
+
+    def assert_temporary_flags_restored(self, calc, petite):
+        # The caller may catch the error and reuse the molecule: it must not
+        # inherit the TRAH stability flag, the TRAH converger, or a petite
+        # flag that the stage switched off.
+        self.assertIs(calc.mol.data.trah_stability, False)
+        self.assertEqual(calc.mol.data.convergers[-1], "diis")
+        np.testing.assert_array_equal(calc.mol.data["OQP::sym_petite_enable"], [petite])
+
+    def test_failed_tag_restore_still_resets_the_temporary_flags(self):
+        calc = self.stability_calculator()
+        self.staged_petite(calc)
+
+        def scf():
+            calc.scf_calls += 1
+            calc.mol.mol_energy.SCF_converged = True
+            calc.mol.mol_energy.energy = -2.0 if calc.scf_calls == 1 else -1.99999999
+            if calc.scf_calls == 2:
+                self.assertIs(calc.mol.data.trah_stability, True)
+                np.testing.assert_array_equal(
+                    calc.mol.data["OQP::sym_petite_enable"], [0])
+                calc.mol.data["OQP::DM_A"] = np.array([99.0, 99.0])
+                calc.mol.data.fail_writes.add("OQP::DM_A")
+
+        calc.scf = scf
+        with self.assertRaisesRegex(RuntimeError, "injected write failure for OQP::DM_A"):
+            calc._run_scf()
+        self.assert_temporary_flags_restored(calc, petite=1)
+
+    def test_failed_trah_stage_still_resets_the_temporary_flags(self):
+        calc = self.stability_calculator()
+        self.staged_petite(calc)
+
+        def scf():
+            calc.scf_calls += 1
+            if calc.scf_calls == 2:
+                raise RuntimeError("injected TRAH failure")
+            calc.mol.mol_energy.SCF_converged = True
+            calc.mol.mol_energy.energy = -2.0
+
+        calc.scf = scf
+        with self.assertRaisesRegex(RuntimeError, "injected TRAH failure"):
+            calc._run_scf()
+        self.assert_temporary_flags_restored(calc, petite=1)
+
+    def test_kept_lower_solution_leaves_petite_off_and_resets_trah_flags(self):
+        calc = self.stability_calculator(trah_lowers=True)
+        self.staged_petite(calc)
+        self.assertTrue(calc._run_scf())
+        self.assertEqual(calc.mol.mol_energy.energy, -2.5)
+        self.assertEqual(calc.mol.symmetry_metadata["integral_symmetry"]["status"],
+                         "disabled_symmetry_broken_scf")
+        self.assert_temporary_flags_restored(calc, petite=0)
+
+    def test_failed_primary_scf_restores_the_primary_converger(self):
+        calc = self.make_calculator()
+
+        def scf():
+            calc.scf_calls += 1
+            if calc.scf_calls == 2:
+                raise RuntimeError("injected escalation failure")
+            calc.mol.mol_energy.SCF_converged = False
+
+        calc.scf = scf
+        with self.assertRaisesRegex(RuntimeError, "injected escalation failure"):
+            calc._run_scf()
+        self.assertEqual(calc.mol.data.convergers, ["diis", "soscf", "diis"])
+
+    def test_rhf_snapshot_skips_only_the_unallocated_beta_tags(self):
+        calc = self.make_calculator()
+        calc.mol.config["scf"]["type"] = "rhf"
+        self.assertEqual(sorted(calc._snapshot_scf_state()), sorted(ALPHA_TAGS))
+
+    def test_open_shell_snapshot_requires_beta_tags(self):
+        for scf_type in ("uhf", "rohf"):
+            with self.subTest(scf_type=scf_type):
+                calc = self.make_calculator()
+                calc.mol.config["scf"]["type"] = scf_type
+                for tag in BETA_TAGS[:-1]:
+                    calc.mol.data[tag] = np.zeros(2)
+                with self.assertRaisesRegex(AttributeError, "OQP::FOCK_B"):
+                    calc._snapshot_scf_state()
+
+    def test_snapshot_requires_alpha_tags_even_for_rhf(self):
+        calc = self.make_calculator()
+        del calc.mol.data["OQP::FOCK_A"]
+        with self.assertRaisesRegex(AttributeError, "OQP::FOCK_A"):
+            calc._snapshot_scf_state()
+
+    def test_snapshot_read_failure_raises(self):
+        # Not an absent tag: dropping it would make the restore keep the
+        # TRAH value for that tag.
+        calc = self.make_calculator()
+        calc.mol.config["scf"]["type"] = "uhf"
+        for tag in BETA_TAGS:
+            calc.mol.data[tag] = np.zeros(2)
+        calc.mol.data.fail_reads.add("OQP::DM_B")
+        with self.assertRaisesRegex(RuntimeError, "injected read failure for OQP::DM_B"):
+            calc._snapshot_scf_state()
+
+    def test_failed_petite_disable_raises(self):
+        calc = self.make_calculator()
+        calc.mol.data.fail_writes.add("OQP::sym_petite_enable")
+        with self.assertRaisesRegex(RuntimeError, "sym_petite_enable"):
+            calc._set_petite_enabled(False)
+
+    def test_failed_petite_disable_stops_the_stability_stage(self):
+        # TRAH must not run with the petite reduction on symmetry-broken
+        # densities.
+        calc = self.stability_calculator()
+        calc.mol.symmetry_metadata = {"integral_symmetry": {"status": "active"}}
+        calc.mol.data["OQP::sym_petite_enable"] = np.array([1], dtype=np.int64)
+        calc.mol.data.fail_writes.add("OQP::sym_petite_enable")
+        with self.assertRaisesRegex(RuntimeError, "sym_petite_enable"):
+            calc._run_scf()
+        self.assertNotIn("trah", calc.mol.data.convergers)
+
+    def test_petite_state_absent_flag_is_off_but_unreadable_flag_raises(self):
+        calc = self.make_calculator()
+        calc.mol.symmetry_metadata = {"integral_symmetry": {"status": "active"}}
+        self.assertFalse(calc._petite_is_staged())
+
+        calc.mol.data["OQP::sym_petite_enable"] = np.array([1], dtype=np.int64)
+        calc.mol.data.fail_reads.add("OQP::sym_petite_enable")
+        with self.assertRaisesRegex(RuntimeError, "sym_petite_enable"):
+            calc._petite_is_staged()
+
+    def test_failed_mol_energy_restore_raises(self):
+        calc = self.stability_calculator()
+        calc.mol.mol_energy = ReadOnlyDavidsonMolEnergy()
+        with self.assertRaises(AttributeError):
+            calc._run_scf()
+
+    def test_failed_mol_energy_snapshot_raises(self):
+        calc = self.stability_calculator()
+        calc.mol.mol_energy = UnreadableDavidsonMolEnergy()
+        with self.assertRaisesRegex(RuntimeError, "injected mol_energy read failure"):
+            calc._run_scf()
+
+    def test_scf_features_do_not_hide_an_atom_read_failure(self):
+        calc = self.make_calculator()
+        calc.mol.config["input"] = {"functional": ""}
+
+        def broken_get_atoms():
+            raise RuntimeError("injected get_atoms failure")
+
+        calc.mol.get_atoms = broken_get_atoms
+        with self.assertRaisesRegex(RuntimeError, "injected get_atoms failure"):
+            calc._scf_features()
+
+    def test_ml_selector_falls_back_only_when_the_model_is_absent(self):
+        name = "oqp.library.scf_selector_model"
+        previous = sys.modules.pop(name, None)
+        self.addCleanup(
+            lambda: sys.modules.__setitem__(name, previous)
+            if previous is not None else sys.modules.pop(name, None))
+
+        calc = self.make_calculator()
+        self.assertEqual(calc._select_converger("ml", False), ("diis", False))
+
+        model = types.ModuleType(name)
+
+        def broken_predict(features):
+            raise RuntimeError("injected selector failure")
+
+        setattr(model, "predict", broken_predict)
+        sys.modules[name] = model
+        with self.assertRaisesRegex(RuntimeError, "injected selector failure"):
+            calc._select_converger("ml", False)
 
 
 if __name__ == "__main__":

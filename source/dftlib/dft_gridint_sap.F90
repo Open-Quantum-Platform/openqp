@@ -8,6 +8,15 @@
 !> AO-pruning machinery of mod_dft_gridint (run_grid_aos). The construction
 !> mirrors the Kohn-Sham matrix accumulation in mod_dft_gridint_energy.
 !>
+!> Z_val = Z - N_core is the nuclear charge left by an effective core potential
+!> (Z_val = Z without one).  For an ECP atom the tabulated all-electron Z_eff(r)
+!> is capped at Z_val,
+!>     V_A(r) = -min(Z_eff^A(r), Z_val^A)/r,
+!> so the potential is the all-electron SAP outside the core and the bare
+!> valence nucleus inside it, where the ECP itself (added by the caller) acts.
+!> An element beyond the tabulated range gets the bare -Z_val/r, i.e. its
+!> core-Hamiltonian attraction; without it the atom would attract nothing.
+!>
 !> Reference: S. Lehtola, "Assessment of Initial Guesses for Self-Consistent
 !> Field Calculations. Superposition of Atomic Potentials: Simple yet
 !> Efficient", J. Chem. Theory Comput. 15, 1593 (2019).
@@ -29,6 +38,8 @@ module mod_dft_gridint_sap
     ! SAP inputs (read-only during the grid loop)
     real(kind=fp), pointer :: atxyz(:,:) => null()  !< atom coordinates (3,nat), bohr
     integer, allocatable :: atz(:)                  !< nuclear charge per atom
+    real(kind=fp), allocatable :: atzval(:)         !< Z_val = Z - N_core per atom
+    logical, allocatable :: atecp(:)                !< atom carries an ECP
     type(sap_table_t), pointer :: sap => null()     !< radial Z_eff table
   contains
     procedure :: parallel_start
@@ -86,6 +97,8 @@ contains
     if (allocated(self%vmat_)) deallocate(self%vmat_)
     if (allocated(self%tmp_)) deallocate(self%tmp_)
     if (allocated(self%atz)) deallocate(self%atz)
+    if (allocated(self%atzval)) deallocate(self%atzval)
+    if (allocated(self%atecp)) deallocate(self%atecp)
   end subroutine
 
 !-------------------------------------------------------------------------------
@@ -119,7 +132,7 @@ contains
     integer :: mythread
 
     integer :: i, iat
-    real(kind=fp) :: vsap, dist, dx, dy, dz
+    real(kind=fp) :: vsap, va, dist, dx, dy, dz
     real(kind=fp), pointer :: vmat(:,:)
     real(kind=fp), pointer :: tmp(:,:)
 
@@ -138,7 +151,16 @@ contains
           dy = xyzw(i,2) - self%atxyz(2,iat)
           dz = xyzw(i,3) - self%atxyz(3,iat)
           dist = sqrt(dx*dx + dy*dy + dz*dz)
-          vsap = vsap + self%sap%potential(self%atz(iat), dist)
+          if (dist <= 0.0_fp) cycle
+          if (self%atz(iat) > self%sap%zmax) then
+            ! not tabulated: bare (ECP-screened) nucleus
+            va = -self%atzval(iat)/dist
+          else
+            va = self%sap%potential(self%atz(iat), dist)
+            ! ECP atom: -min(Z_eff, Z_val)/r, never below the valence nucleus
+            if (self%atecp(iat)) va = max(va, -self%atzval(iat)/dist)
+          end if
+          vsap = vsap + va
         end do
         ! factor 0.5: dsyr2k forms aoV*tmp^T + tmp*aoV^T
         tmp(:, i) = 0.5_fp * wts(i) * vsap * aoV(:, i)
@@ -232,9 +254,17 @@ contains
     ! SAP inputs
     dat%atxyz => infos%atoms%xyz
     dat%sap => sap
-    allocate(dat%atz(nat))
+    allocate(dat%atz(nat), dat%atzval(nat), dat%atecp(nat))
     do i = 1, nat
       dat%atz(i) = nint(infos%atoms%zn(i))
+      dat%atzval(i) = infos%atoms%zn(i)
+      dat%atecp(i) = .false.
+      if (basis%ecp_params%is_ecp .and. allocated(basis%ecp_zn_num)) then
+        if (basis%ecp_zn_num(i) > 0) then
+          dat%atzval(i) = infos%atoms%zn(i) - basis%ecp_zn_num(i)
+          dat%atecp(i) = .true.
+        end if
+      end if
     end do
 
     call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)

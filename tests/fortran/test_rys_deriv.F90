@@ -32,7 +32,7 @@ program test_rys_deriv
   real(dp) :: errprev, err, worst
   logical :: stable
 
-  open(newunit=u, file='/tmp/rys_deriv_selftest.out', status='replace', action='write')
+  open(newunit=u, file='rys_deriv_selftest.out', status='replace', action='write')
   write(u,'(a)') 'Rys root/weight derivative selftest (analytic complex-step vs central FD)'
   write(u,'(a)') 'nroots   maxabs(du/dX)   maxabs(dw/dX)   O(h2)_ok'
 

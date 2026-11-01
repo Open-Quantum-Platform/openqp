@@ -8,6 +8,7 @@ import math
 import os
 import re
 import warnings
+import zipfile
 
 import numpy as np
 
@@ -165,14 +166,81 @@ class ODPUmbrella:
                 f"[odp] CV atom {largest} is outside the {natom}-atom MD system"
             )
 
-    def evaluate(self, coordinates):
-        """Return native bias energy, force, CVs, and projection diagnostics."""
+    def periodic_cv_frame(self, coordinates, box):
+        """Coordinates in which every CV takes its own minimum-image value.
+
+        Each CV is measured through its own atom pairs (distance: i-j;
+        asymmetric distance: i-j and k-l; angle: both arms from the vertex),
+        and in a periodic cell each pair has its own minimum image.  Imaging
+        all CV atoms into one shared Cartesian embedding fails whenever CV
+        pairs form a ring that winds around the cell, although every CV is
+        unambiguous.  Instead every CV gets private copies of its atoms: the
+        first atom of each pair stays in place and its partner is moved by a
+        lattice vector to the minimum image (an angle is placed about its
+        vertex).  Returns ``(xyz, cv_atoms, owner)``: the copy coordinates,
+        the CV atom table indexing them, and the original atom of each copy.
+        A lattice translation does not change a force, so the force on an
+        original atom is the sum of the forces on its copies.  A pair whose
+        separation is exactly half the box length along an axis has two
+        minimum images and is refused.
+        """
+        source = np.asarray(coordinates, dtype=np.float64)
+        box = np.asarray(box, dtype=np.float64).reshape(-1)
+        if box.size != 3 or not np.all(np.isfinite(box)) or np.any(box <= 0.0):
+            raise ValueError("[odp] periodic box lengths must be three positive values")
+        rows = []
+        owner = []
+        table = np.full_like(self.cv_atoms, -1)
+
+        def copy(atom, position):
+            rows.append(position)
+            owner.append(int(atom))
+            return len(rows) - 1
+
+        def partner(first, first_row, atom):
+            shift = source[atom] - source[first]
+            image = shift - box*np.round(shift/box)
+            if np.any(np.abs(image) >= 0.5*box):
+                axis = int(np.argmax(np.abs(image)/box))
+                raise RuntimeError(
+                    f"[odp] CV atoms {first + 1} and {atom + 1} are exactly half "
+                    f"the box length apart along axis {'xyz'[axis]} "
+                    f"({0.5*box[axis]:.6g} bohr); the minimum image of the CV "
+                    "is ambiguous.")
+            return copy(atom, rows[first_row] + image)
+
+        for index, (cv_type, atoms) in enumerate(zip(self.cv_types, self.cv_atoms)):
+            atoms = [int(atom) for atom in atoms]
+            if cv_type == 3:                          # angle(i,j,k), vertex j
+                vertex = copy(atoms[1], source[atoms[1]])
+                table[index, :3] = (partner(atoms[1], vertex, atoms[0]), vertex,
+                                    partner(atoms[1], vertex, atoms[2]))
+            else:                                     # distance or r(i,j) - r(k,l)
+                for start in range(0, 2 if cv_type == 1 else 4, 2):
+                    first = copy(atoms[start], source[atoms[start]])
+                    table[index, start:start + 2] = (
+                        first, partner(atoms[start], first, atoms[start + 1]))
+        return (np.ascontiguousarray(rows, dtype=np.float64),
+                np.ascontiguousarray(table, dtype=np.int64),
+                np.asarray(owner, dtype=np.int64))
+
+    def evaluate(self, coordinates, box=None):
+        """Return native bias energy, force, CVs, and projection diagnostics.
+
+        ``box`` gives orthorhombic periodic box lengths in the units of
+        ``coordinates`` (bohr); ``None`` means a nonperiodic system.
+        """
         xyz = np.ascontiguousarray(coordinates, dtype=np.float64)
         if xyz.ndim != 2 or xyz.shape[1] != 3:
             raise ValueError("ODP coordinates must have shape (natom, 3)")
         self.validate_atom_count(len(xyz))
         if not np.all(np.isfinite(xyz)):
             raise RuntimeError("ODP refused non-finite MD coordinates")
+        natom = len(xyz)
+        cv_atoms = self.cv_atoms
+        owner = None
+        if box is not None:
+            xyz, cv_atoms, owner = self.periodic_cv_frame(xyz, box)
         energy = np.zeros(1, dtype=np.float64)
         force = np.zeros_like(xyz)
         xi = np.zeros(1, dtype=np.float64)
@@ -185,7 +253,7 @@ class ODPUmbrella:
         status = oqp.oqp_odp_umbrella_evaluate(
             len(xyz), self.ncv,
             oqp.ffi.cast("int *", self.cv_types.ctypes.data),
-            oqp.ffi.cast("int64_t *", self.cv_atoms.ctypes.data),
+            oqp.ffi.cast("int64_t *", cv_atoms.ctypes.data),
             oqp.ffi.cast("double *", self.scales.ctypes.data),
             oqp.ffi.cast("double *", self.reference_r.ctypes.data),
             oqp.ffi.cast("double *", self.reference_p.ctypes.data),
@@ -216,6 +284,10 @@ class ODPUmbrella:
                 f"native ODP evaluation failed ({status}: "
                 f"{meanings.get(status, 'unknown status')})"
             )
+        if owner is not None:
+            folded = np.zeros((natom, 3), dtype=np.float64)
+            np.add.at(folded, owner, force)
+            force = folded
         result = {
             "energy": float(energy[0]),
             "force": force,
@@ -314,10 +386,119 @@ def _same_odp_coordinate(left, right):
     )
 
 
+def _check_series_records(provenance, raw, scaled, xi, perpendicular,
+                          perpendicular_norm, bias_parallel, bias_perpendicular,
+                          bias, label):
+    """Refuse per-step ODP records that the stored bias definition does not
+    reproduce (the checks of the packed NAMD trajectory reader)."""
+    scale = np.asarray(provenance["scale"], dtype=np.float64).reshape(-1)
+    reference_r = np.asarray(provenance["reference_r"], dtype=np.float64).reshape(-1)
+    reference_p = np.asarray(provenance["reference_p"], dtype=np.float64).reshape(-1)
+    center = float(provenance["center"])
+    k_parallel = float(provenance["k_parallel_hartree"])
+    k_perpendicular = float(provenance["k_perpendicular_hartree"])
+    ncv = len(provenance["cv"])
+    if not (ncv > 0 and scale.size == reference_r.size == reference_p.size == ncv
+            and raw.ndim == 2 and raw.shape[1] == ncv
+            and np.all(scale > 0.0) and k_parallel > 0.0
+            and k_perpendicular >= 0.0
+            and provenance["cv_atom_indexing"] == "1-based"
+            and provenance["projection"]
+            == "signed_scaled_dot_over_path_norm_squared"):
+        raise ValueError(f"{label} ODP provenance has an invalid CV metric")
+    direction = scale*(reference_p - reference_r)
+    length2 = float(np.dot(direction, direction))
+    if not np.isclose(float(provenance["scaled_path_length"]), np.sqrt(length2),
+                      rtol=2.0e-12, atol=2.0e-12):
+        raise ValueError(f"{label} ODP scaled path length disagrees with its metric")
+    displacement = scaled - scale*reference_r
+    expected_xi = displacement @ direction/length2
+    expected_perpendicular = displacement - expected_xi[:, None]*direction
+    checks = (
+        (scaled, raw*scale, "scaled CV"),
+        (xi, expected_xi, "signed projection"),
+        (perpendicular, expected_perpendicular, "perpendicular CV"),
+        (perpendicular_norm, np.linalg.norm(expected_perpendicular, axis=1),
+         "perpendicular norm"),
+        (bias_parallel, 0.5*k_parallel*(xi - center)**2, "parallel bias energy"),
+        (bias_perpendicular, 0.5*k_perpendicular*perpendicular_norm**2,
+         "perpendicular bias energy"),
+        (bias, 0.5*k_parallel*(xi - center)**2
+         + 0.5*k_perpendicular*perpendicular_norm**2, "bias energy"),
+    )
+    for actual, expected, what in checks:
+        if (not np.all(np.isfinite(actual))
+                or not np.allclose(actual, expected, rtol=2.0e-12, atol=2.0e-12)):
+            raise ValueError(f"{label} ODP {what} records disagree with provenance")
+
+
+def read_qmmm_md_odp_series(path):
+    """Per-window ODP series from a ground-state QM/MM MD energy table (.npz)."""
+    with np.load(os.fspath(path), allow_pickle=False) as data:
+        if "bias_metadata_json" not in data.files:
+            raise ValueError(f"{path!r} is not a QM/MM MD table with ODP records")
+        meta = json.loads(str(np.asarray(data["bias_metadata_json"])[0]))
+        arrays = {key: np.array(data[key], copy=True) for key in data.files
+                  if key != "bias_metadata_json"}
+    if meta.get("format") != "openqp-qmmm-md-odp-series-1":
+        raise ValueError(f"{path!r} has an unknown ODP series format")
+    provenance = meta["controls"]["odp"]
+    if not provenance.get("enabled", False):
+        raise ValueError(f"{path!r} does not contain an enabled ODP umbrella")
+    windows = np.asarray(arrays["odp_window"], dtype=np.int64)
+    if np.any(windows != int(provenance["window"])):
+        raise ValueError(f"{path!r} ODP window records disagree with provenance")
+    raw = np.asarray(arrays["odp_cv_raw"], dtype=np.float64)
+    xi = np.asarray(arrays["odp_xi"], dtype=np.float64)
+    perpendicular_norm = np.asarray(arrays["odp_perpendicular_norm"], dtype=np.float64)
+    _check_series_records(
+        provenance, raw, np.asarray(arrays["odp_cv_scaled"], dtype=np.float64), xi,
+        np.asarray(arrays["odp_cv_perpendicular"], dtype=np.float64),
+        perpendicular_norm,
+        np.asarray(arrays["odp_bias_parallel_hartree"], dtype=np.float64),
+        np.asarray(arrays["odp_bias_perpendicular_hartree"], dtype=np.float64),
+        np.asarray(arrays["odp_bias_hartree"], dtype=np.float64), repr(path))
+    identity = dict(meta["system_identity"])
+    identity["conservative_restraints"] = {
+        name: meta["controls"][name] for name in ("droplet", "solute_com")}
+    return {
+        "provenance": provenance,
+        "system_identity": identity,
+        "ensemble": meta.get("ensemble"),
+        "thermostat_temperature_kelvin": (
+            meta["thermostat"]["temperature_kelvin"]
+            if meta.get("ensemble") == "NVT" else None),
+        "snapshot_bytes": os.path.getsize(os.fspath(path)),
+        "step": np.asarray(arrays["step"], dtype=np.int64),
+        "time_fs": np.asarray(arrays["time_ps"], dtype=np.float64)*1000.0,
+        "window": windows,
+        "xi": xi,
+        "cv_raw": raw,
+        "cv_scaled": np.asarray(arrays["odp_cv_scaled"], dtype=np.float64),
+        "perpendicular_norm": perpendicular_norm,
+        "bias_hartree": np.asarray(arrays["odp_bias_hartree"], dtype=np.float64),
+        "unbiased_potential_hartree": np.asarray(
+            arrays["e_unbiased_pot_hartree"], dtype=np.float64),
+        "total_conservative_hartree": np.asarray(
+            arrays["E_tot"], dtype=np.float64)/2625.499639,
+    }
+
+
+def read_odp_series(path):
+    """ODP series of one window: packed NAMD trajectory or QM/MM MD table."""
+    if zipfile.is_zipfile(os.fspath(path)):
+        return read_qmmm_md_odp_series(path)
+    from oqp.library.namd import read_odp_wham_series
+    return read_odp_wham_series(path)
+
+
 def odp_wham(trajectory_paths, temperature_kelvin, bins=100, *, discard=0,
              stride=1, tolerance=1.0e-10, max_iterations=10000,
              output=None):
-    """Recover a one-dimensional unbiased ODP PMF from packed window TRJs.
+    """Recover a one-dimensional unbiased ODP PMF from window records.
+
+    Each path is a packed NAMD trajectory (``*.namd.trj``) or the energy
+    table of a ground-state QM/MM MD window (``*.npz``).
 
     The fixed-point equations use every saved sample rather than evaluating a
     window bias only at histogram-bin centres.  This preserves optional
@@ -327,8 +508,6 @@ def odp_wham(trajectory_paths, temperature_kelvin, bins=100, *, discard=0,
     are concatenated in caller-supplied order before ``discard`` and ``stride``
     are applied.
     """
-    from oqp.library.namd import read_odp_wham_series
-
     paths = [os.fspath(path) for path in trajectory_paths]
     if not paths:
         raise ValueError("ODP WHAM requires at least one packed trajectory")
@@ -378,7 +557,7 @@ def odp_wham(trajectory_paths, temperature_kelvin, bins=100, *, discard=0,
     window_definitions = {}
     window_segments = {}
     for path in paths:
-        series = read_odp_wham_series(path)
+        series = read_odp_series(path)
         ensemble = str(series.get("ensemble") or "unknown").upper()
         sampled_temperature = series.get("thermostat_temperature_kelvin")
         if ensemble == "NVT":

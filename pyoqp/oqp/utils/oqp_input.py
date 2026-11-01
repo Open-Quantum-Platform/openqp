@@ -260,7 +260,7 @@ SECTION_NAMES = {
     "input", "d4", "mp2", "cc", "guess", "pcm", "dftb", "symmetry", "scf",
     "dftgrid", "tdhf", "ekt", "properties", "optimize", "geometric",
     "oqp", "neb", "hess", "nac", "md", "odp", "qmmm", "droplet",
-    "solute_com", "json", "tests",
+    "solute_com", "flexible", "json", "tests",
     # Native multiconfigurational wavefunction stack.
     "cas", "casscf", "ci", "fci", "pt2", "state_average",
 }
@@ -284,15 +284,21 @@ GENERIC_SCHEMA_KEYS = {
         temperature ensemble friction pressure barostat_interval
         trajectory_format trajectory_file log_file report_interval energy_file
         qm_atoms_xyz qm_list frontier_scheme
+        ewald_tol lj_switch h_lj mm_charge_width
+        active_atoms frozen_atoms active_radius active_from_pdb
     """),
     "droplet": _keys("""
         enabled center radius buffer force_constant target atoms water_resnames
         max_penetration
     """),
     "solute_com": _keys("enabled center force_constant atoms"),
-    "input": _keys("library perf ispher d4 qmmm_flag soc_2e omp_threads"),
+    "flexible": _keys("""
+        enabled alpha temperature center atoms point anchor resnames
+        threshold scale max_iterations keep_below_threshold
+    """),
+    "input": _keys("library perf ispher d4 qmmm_flag soc_2e omp_threads verbose"),
     "d4": _keys("s6 s8 s9 a1 a2 alp"),
-    "mp2": _keys("variant same_spin_scale opposite_spin_scale"),
+    "mp2": _keys("variant transform same_spin_scale opposite_spin_scale"),
     "cc": _keys("maxit conv ndiis nfzc cholesky cholesky_tol cholesky_direct"),
     "guess": _keys("type file file2 save_mol continue_geom swapmo"),
     "pcm": _keys("enabled backend mode model solvent epsilon radii"),
@@ -321,10 +327,10 @@ GENERIC_SCHEMA_KEYS = {
         pscreen_k pscreen_cap pscreen_tight pscreen_xc_dcut pscreen_xc_aocut
         pscreen_grid_rad pscreen_grid_ang xc_c2f xc_phi_cache xc_incdft
         grad_cutoff init_scf init_basis init_library init_it init_conv
-        init_converger save_molden rstctmo converger_type scal_rel stability
+        init_converger save_molden rstctmo converger_type scal_rel scal_rel_decontract stability
         soscf_lvl_shift alternative_scf escalation verbose trh_stab trh_ls
         trh_sub_solver trh_nrtv trh_r0 trh_jd_start trh_nmic trh_gred
-        trh_lred trh_impl
+        trh_lred trh_impl trh_arh
     """),
     "dftgrid": _keys("""
         hfscale cam_flag cam_alpha cam_beta cam_mu rad_type rad_npts ang_npts
@@ -336,7 +342,7 @@ GENERIC_SCHEMA_KEYS = {
         ixcore z_solver gmres_dim resp_cutoff fp32 zv_warmstart
     """),
     "ekt": frozenset(),
-    "properties": _keys("scf_prop nmr_gauge td_prop nac export title back_door"),
+    "properties": _keys("scf_prop nmr_gauge acid_spacing acid_padding td_prop grad_s grad_t nac soc export title back_door"),
     "optimize": frozenset(),
     "geometric": frozenset(),
     "oqp": frozenset(),
@@ -373,13 +379,13 @@ GENERIC_SCHEMA_KEYS = {
         nroot solver eig_tol davidson_maxiter davidson_subspace
         integral_backend integral_cutoff spin_adapted target_spin
         root_tracking print_ci_vectors ci_print_threshold save_ci_vectors
-        save_rdm
+        save_rdm irrep irrep_min_purity
     """),
     "fci": _keys("""
         nroot active_electrons active_orbitals frozen_core max_det max_memory
         eig_tol integral_backend integral_cutoff solver davidson_maxiter
         davidson_subspace print_ci_vectors ci_print_threshold save_ci_vectors
-        save_rdm target_spin
+        save_rdm target_spin irrep irrep_min_purity
     """),
     "pt2": _keys("""
         variant reference h0 contraction frozen multistate xms ipea_shift
@@ -409,11 +415,12 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
         lib maxit rmsd_grad rmsd_step max_grad max_step istate jstate kstate states
         imult jmult energy_shift energy_gap meci_search mecp_search gap_sigma
         pen_sigma pen_alpha pen_incre pen_delta pen_jump gap_weight init_scf
+        qmmm_radius qmmm_output qmmm_active qmmm_freeze
     """),
     "neb": _keys("product nimage"),
     "oqp": _keys("""
         coordsys trust trust_max auto_recovery recovery_maxit recovery_trust
-        freeze follow init_hessian spring climb fmax frms climb_fmax neb_dt
+        freeze follow init_hessian model_hessian hessian_update gpr_history gpr_length_scale ts_search ts_product ts_guess neb_interpolation spring climb fmax frms climb_fmax neb_dt
         maxmove align opt_ends end_fmax neb_output irc_step irc_direction
         mep_step path_gtol
     """),
@@ -423,17 +430,20 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
     "hess": _keys("type state dx nproc read restart temperature clean symmetry_unique"),
     "nac": _keys("type dt dx bp nproc restart clean states align"),
     "md": _keys("""
-        nstep dt active substep decoherence edc_c thrshe tdc trivial
+        nstep dt active substep decoherence edc_c thrshe tdc rescale trivial
         trivial_thresh init_temp velocity seed rng_stream first_hop_step
-        nacme_check ba_gap_max nacme_gate nacme_gate_invariant_tol
-        nacme_gate_abs_tol nacme_gate_rel_tol nacme_gate_consecutive
-        nve_gate nve_gate_abs_tol nve_gate_step_tol nve_gate_transition_tol
-        nve_gate_consecutive
+        nacme_check ba_gap_max nacme_policy nacme_policy_invariant_tol
+        nacme_policy_abs_tol nacme_policy_rel_tol nacme_policy_consecutive
+        nve_policy nve_policy_abs_tol nve_policy_step_tol nve_policy_transition_tol
+        nve_policy_consecutive continuity mo_reuse scf_fail scf_guess_retry ref_follow ref_switch_rescale somo_tol state_check state_tol disc_rescale disc_tol disc_substeps
         trajectory_interval restart_interval trajectory_file
-        restart_file restart ensemble thermostat thermostat_temperature
+        restart_file restart
+        snapshot snapshot_interval
+        ensemble thermostat thermostat_temperature
         thermostat_friction soc soc_basis
         soc_du_dt_corr soc_tdc_grad_corr grad_wthr init_state econs
-        dt_adaptive dt_min dx_max
+        dt_adaptive dt_min dx_max energy_file common_controls
+        common_control_keys
     """),
     "odp": _keys("enabled cv scale reference_r reference_p center k_parallel k_perpendicular window"),
 }
@@ -588,16 +598,25 @@ TOP_OPTION_ALIASES = {
     "qmmm_flag": "qmmm_flag",
     "omp_threads": "omp_threads",
     "threads": "omp_threads",
+    "verbose": "verbose",
 }
 
 # Public compact-input driver signatures. State selectors (positional S0/S1/T0 or
 # ``root=N`` for SF) are handled separately; the sets below are the concise
 # workflow options that may live directly in the primary call.
-_OPT_OPTIONS = {
+_GEOMETRY_CONVERGENCE_OPTIONS = {
     "maxit", "rmsd_grad", "rmsd_step", "max_grad", "max_step",
-    "energy_shift", "energy_gap", "meci_search", "pen_sigma",
-    "pen_alpha", "pen_incre", "pen_delta", "pen_jump", "gap_weight", "init_scf",
+    "energy_shift", "init_scf",
 }
+# QM/MM optimisation (qmmm_flag=true) only: the movable-shell radius and the
+# full-system output file.  Exposed on the plain optimize driver alone; the
+# crossing and reaction-path drivers do not consume them.
+_QMMM_OPT_OPTIONS = {"qmmm_radius", "qmmm_output", "qmmm_active", "qmmm_freeze"}
+_CROSSING_SEARCH_OPTIONS = {
+    "energy_gap", "meci_search", "pen_sigma",
+    "pen_alpha", "pen_incre", "pen_delta", "pen_jump", "gap_weight",
+}
+_OPT_OPTIONS = _GEOMETRY_CONVERGENCE_OPTIONS | _CROSSING_SEARCH_OPTIONS
 # gap_sigma tunes the auglag objective, so only the crossing drivers accept it;
 # mecp_search belongs to MECP alone.  Both are [optimize] schema keys, so the
 # route-driver manifest still owns them, but the driver option sets keep them
@@ -609,14 +628,10 @@ _NATIVE_ENGINE_OPTIONS = {
     "coordsys", "trust", "trust_max",
     "auto_recovery", "recovery_maxit", "recovery_trust",
 }
-_NATIVE_CONSTRAINT_OPTIONS = {"freeze"}
-_GEOMETRIC_ENGINE_OPTIONS = {
-    "coordsys", "trust", "tmax", "convergence_set", "hessian",
+_NATIVE_CURVATURE_OPTIONS = {
+    "model_hessian", "hessian_update", "gpr_history", "gpr_length_scale",
 }
-_OPTIMIZER_BACKEND_OPTIONS = (
-    {"lib"} | _NATIVE_ENGINE_OPTIONS | _NATIVE_CONSTRAINT_OPTIONS
-    | _GEOMETRIC_ENGINE_OPTIONS
-)
+_NATIVE_CONSTRAINT_OPTIONS = {"freeze"}
 _MECI_PUBLIC_OPTIONS = {
     "algorithm", "sigma", "alpha", "delta_beta", "beta_schedule", "gap",
 }
@@ -636,10 +651,30 @@ _MECP_OPTION_ALIASES = {
     "gap": "energy_gap",
 }
 _TCI_OPTIONS = set(_OPT_OPTIONS) - {"meci_search", "pen_delta", "pen_jump"}
+
+# Public md(...) owns controls that describe nuclear propagation, independent
+# of whether the electronic force is ground-state BOMD or excited-state NAMD.
+MD_COMMON_OPTIONS = {
+    "nstep", "dt", "velocity", "temperature", "ensemble", "thermostat",
+    "friction",
+    "seed", "rng_stream", "mo_reuse",
+    # Output controls belong with the nuclear propagation that produces them.
+    # Each driver honours the subset it supports: ground-state BOMD writes
+    # trajectory_file and energy_file, surface hopping writes the trajectory
+    # and checkpoint pair on their intervals.
+    "trajectory_file", "trajectory_interval",
+    "energy_file", "restart_file", "restart_interval", "restart",
+    # A full-system phase-space point to start from, and the cadence at which
+    # ground-state QM/MM MD writes numbered ones for later runs.
+    "snapshot", "snapshot_interval",
+}
 DRIVER_OPTIONS = {
     "energy": set(),
     "grad": {"td_prop", "export", "title"},
-    "optimize": set(_OPT_OPTIONS) | set(_OPTIMIZER_BACKEND_OPTIONS),
+    "optimize": (set(_GEOMETRY_CONVERGENCE_OPTIONS)
+                 | set(_NATIVE_ENGINE_OPTIONS)
+                 | set(_NATIVE_CURVATURE_OPTIONS) | set(_NATIVE_CONSTRAINT_OPTIONS)
+                 | set(_QMMM_OPT_OPTIONS)),
     "meci": set(_OPT_OPTIONS) | set(_MECI_PUBLIC_OPTIONS) | set(_CROSSING_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
     # MECP reads none of the MECI-only controls, and silently ignoring them
     # would run a different objective than the input asks for.
@@ -649,13 +684,14 @@ DRIVER_OPTIONS = {
              | set(_NATIVE_ENGINE_OPTIONS)),
     "tci": set(_TCI_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
     "mep": {"maxit", "points", "step", "mep_step", "gtol"},
-    "ts": set(_OPT_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS) | {"follow", "hessian"},
+    "ts": (set(_GEOMETRY_CONVERGENCE_OPTIONS)
+           | set(_NATIVE_ENGINE_OPTIONS) | set(_NATIVE_CURVATURE_OPTIONS) | {"follow", "hessian", "search", "product", "guess"}),
     "irc": {"maxit", "direction", "step", "irc_step", "hessian", "gtol"},
     "neb": {
         "maxit",
         "product", "images", "nimage", "spring", "climb", "fmax",
         "frms", "climb_fmax", "dt", "neb_dt", "maxmove", "align",
-        "opt_ends", "end_fmax", "output",
+        "opt_ends", "end_fmax", "output", "interpolation",
     },
     # symmetry_unique (#319) selects the symmetry-unique displacement set, so
     # it is a hess driver option like dx/nproc rather than a generic key.
@@ -665,17 +701,18 @@ DRIVER_OPTIONS = {
     "bp": {"type", "dx", "nproc", "restart", "clean", "align"},
     "nacme": {"dt", "align"},
     "soc": {"soc_2e", "ns", "nt"},
-    # QM/MM MD controls live in qmmm(...).  The similarly named [md]
-    # controls below belong to the nonadiabatic-dynamics driver only.
-    "md": set(),
-    "namd": {
+    "md": set(MD_COMMON_OPTIONS),
+    # Common options remain accepted here for compatibility with pre-split
+    # namd(...) inputs.  New inputs put them in the separate md(...) call.
+    "namd": set(MD_COMMON_OPTIONS) | {
         "nstep", "dt", "active", "substep", "decoherence", "edc_c",
-        "thrshe", "tdc", "trivial", "trivial_thresh", "init_temp",
+        "thrshe", "tdc", "rescale", "trivial", "trivial_thresh", "init_temp",
         "velocity", "seed", "rng_stream", "first_hop_step", "nacme_check",
-        "ba_gap_max", "nacme_gate", "nacme_gate_invariant_tol",
-        "nacme_gate_abs_tol", "nacme_gate_rel_tol", "nacme_gate_consecutive",
-        "nve_gate", "nve_gate_abs_tol", "nve_gate_step_tol",
-        "nve_gate_transition_tol", "nve_gate_consecutive",
+        "ba_gap_max", "nacme_policy", "nacme_policy_invariant_tol",
+        "nacme_policy_abs_tol", "nacme_policy_rel_tol", "nacme_policy_consecutive",
+        "nve_policy", "nve_policy_abs_tol", "nve_policy_step_tol",
+        "nve_policy_transition_tol", "nve_policy_consecutive", "continuity", "mo_reuse", "scf_fail", "scf_guess_retry",
+        "ref_follow", "ref_switch_rescale", "somo_tol", "state_check", "state_tol", "disc_rescale", "disc_tol", "disc_substeps",
         "trajectory_interval", "restart_interval", "trajectory_file",
         "restart_file", "restart", "soc", "soc_basis",
         "ensemble", "thermostat", "thermostat_temperature",
@@ -685,26 +722,158 @@ DRIVER_OPTIONS = {
     },
     "ekt": {"ip", "ea"},
     "thermo": {"type", "dx", "nproc", "read", "restart", "temperature", "clean"},
-    "prop": {"scf_prop", "nmr_gauge", "td_prop", "export", "title"},
-    "data": {"scf_prop", "nmr_gauge", "td_prop", "export", "title"},
+    "prop": {"scf_prop", "nmr_gauge", "td_prop", "soc", "export", "title"},
+    "data": {"scf_prop", "nmr_gauge", "td_prop", "soc", "export", "title"},
 }
 
-# Exact ``oqp(...)`` section calls are accepted only when every key is consumed
-# by the selected native workflow.  This prevents valid-looking but ignored
-# controls such as ``energy oqp(init_hessian=analytical)``.
+# ``oqp(...)`` was an early concise spelling for options consumed by the native
+# geometry engine. It remains a read-time compatibility alias only: parsing
+# folds it into the primary driver and canonical rendering never writes it.
 OQP_DRIVER_OPTIONS = {
-    "optimize": set(_NATIVE_ENGINE_OPTIONS) | set(_NATIVE_CONSTRAINT_OPTIONS),
+    "optimize": set(_NATIVE_ENGINE_OPTIONS) | set(_NATIVE_CURVATURE_OPTIONS) | set(_NATIVE_CONSTRAINT_OPTIONS),
     "meci": set(_NATIVE_ENGINE_OPTIONS),
     "mecp": set(_NATIVE_ENGINE_OPTIONS),
     "tci": set(_NATIVE_ENGINE_OPTIONS),
-    "ts": set(_NATIVE_ENGINE_OPTIONS) | {"follow", "init_hessian"},
+    "ts": set(_NATIVE_ENGINE_OPTIONS) | set(_NATIVE_CURVATURE_OPTIONS) | {"follow", "init_hessian", "ts_search", "ts_product", "ts_guess"},
     "mep": {"mep_step", "path_gtol"},
     "irc": {"irc_step", "irc_direction", "path_gtol"},
     "neb": {
         "spring", "climb", "fmax", "frms", "climb_fmax", "neb_dt",
-        "maxmove", "align", "opt_ends", "end_fmax", "neb_output",
+        "maxmove", "align", "opt_ends", "end_fmax", "neb_output", "neb_interpolation",
     },
 }
+
+
+# Complete surface-hopping schemes from Table 1 of the NAMD comparison.
+# ``scheme`` is a concise-driver pseudo-option rather than an [md] schema
+# keyword: lowering expands it to the established runtime controls below.
+NAMD_SCHEME_PRESETS = {
+    "baeckan": {
+        "tdc": "baeck_an",
+        "rescale": "isotropic",
+        "thrshe": 0.015936,
+    },
+    "overlap": {
+        "tdc": "npi",
+        "rescale": "isotropic",
+        "thrshe": 0.015936,
+    },
+}
+NAMD_SCHEME_NAMES = {
+    "baeckan": "BaeckAn",
+    "overlap": "Overlap",
+}
+
+NAMD_POLICY_ALIASES = {
+    "nacme_gate": "nacme_policy",
+    "nacme_gate_invariant_tol": "nacme_policy_invariant_tol",
+    "nacme_gate_abs_tol": "nacme_policy_abs_tol",
+    "nacme_gate_rel_tol": "nacme_policy_rel_tol",
+    "nacme_gate_consecutive": "nacme_policy_consecutive",
+    "nve_gate": "nve_policy",
+    "nve_gate_abs_tol": "nve_policy_abs_tol",
+    "nve_gate_step_tol": "nve_policy_step_tol",
+    "nve_gate_transition_tol": "nve_policy_transition_tol",
+    "nve_gate_consecutive": "nve_policy_consecutive",
+}
+
+
+def normalize_namd_policy_options(options: Mapping[str, Any]) -> Dict[str, Any]:
+    """Lower legacy NAMD ``gate`` names to public ``policy`` names."""
+
+    normalized = dict(options)
+    for legacy, public in NAMD_POLICY_ALIASES.items():
+        if legacy not in normalized:
+            continue
+        if public in normalized:
+            raise OQPInputError(
+                "namd options %s and legacy %s specify the same policy; use %s"
+                % (public, legacy, public)
+            )
+        normalized[public] = normalized.pop(legacy)
+    return normalized
+
+
+def expand_namd_scheme(options: Mapping[str, Any]) -> Dict[str, Any]:
+    """Expand one complete NAMD scheme into existing [md] controls."""
+
+    expanded = dict(options)
+    if "scheme" not in expanded:
+        raise OQPInputError(
+            "namd requires scheme=BaeckAn, Overlap, or custom"
+        )
+
+    requested = str(expanded.pop("scheme")).strip()
+    normalized = re.sub(r"[\s_-]+", "", requested).lower()
+    controls = {"tdc", "rescale", "thrshe"}
+    if normalized == "custom":
+        missing = sorted(controls.difference(expanded))
+        if missing:
+            raise OQPInputError(
+                "namd scheme=custom requires explicit %s"
+                % ", ".join(missing)
+            )
+        return expanded
+    if normalized not in NAMD_SCHEME_PRESETS:
+        raise OQPInputError(
+            "namd scheme must be BaeckAn, Overlap, or custom"
+        )
+
+    preset = NAMD_SCHEME_PRESETS[normalized]
+    conflicts = sorted(set(preset).intersection(expanded))
+    if conflicts:
+        raise OQPInputError(
+            "namd scheme=%s already defines %s; use scheme=custom for an "
+            "advanced combination"
+            % (NAMD_SCHEME_NAMES[normalized], ", ".join(conflicts))
+        )
+    expanded.update(preset)
+    return expanded
+
+
+def _fold_native_section_into_driver(
+    driver: CallSpec, modifiers: Sequence[CallSpec],
+) -> Tuple[CallSpec, Tuple[CallSpec, ...]]:
+    """Convert an old ``oqp(...)`` call into its public driver spelling."""
+
+    native_calls = [call for call in modifiers if call.name == "oqp"]
+    if not native_calls:
+        return driver, tuple(modifiers)
+    if len(native_calls) > 1:
+        raise OQPInputError("Duplicate modifier/section call: oqp")
+
+    native = native_calls[0]
+    if native.args:
+        raise OQPInputError("Section call oqp accepts keyword arguments only")
+    allowed = OQP_DRIVER_OPTIONS.get(driver.name, set())
+    unsupported = set(native.kwargs) - allowed
+    if unsupported:
+        key = sorted(unsupported)[0]
+        raise OQPInputError(
+            "oqp.%s is not used by the native %s workflow; place only "
+            "workflow options in %s(...)" % (key, driver.name, driver.name)
+        )
+
+    rename = {
+        "init_hessian": "hessian",
+        "ts_search": "search", "ts_product": "product", "ts_guess": "guess",
+        "neb_interpolation": "interpolation",
+        "path_gtol": "gtol",
+        "irc_direction": "direction",
+        "neb_dt": "dt",
+        "neb_output": "output",
+    }
+    options = dict(driver.kwargs)
+    for key, value in native.kwargs.items():
+        public_key = rename.get(key, key)
+        if public_key in options:
+            raise OQPInputError(
+                "Option '%s' is specified in both %s(...) and oqp(...)"
+                % (public_key, driver.name)
+            )
+        options[public_key] = value
+    retained = tuple(call for call in modifiers if call.name != "oqp")
+    return CallSpec(driver.name, driver.args, options, driver.explicit), retained
 
 # Route parentheses describe the electronic model, not an alternate spelling
 # for every legacy section.  Keeping this surface deliberately small prevents
@@ -712,7 +881,7 @@ OQP_DRIVER_OPTIONS = {
 # settings remain available through exact calls such as ``tdhf(nvdav=30)``.
 RESPONSE_MODEL_OPTIONS = {"nstate"}
 MP2_MODEL_OPTIONS = {
-    "reference", "variant", "same_spin_scale", "opposite_spin_scale",
+    "reference", "variant", "transform", "same_spin_scale", "opposite_spin_scale",
 }
 # Coupled cluster takes the reference plus the [cc] solver controls inline,
 # the same shape MP2 uses for its spin-scaling knobs.
@@ -728,7 +897,7 @@ SF_STATE_AWARE_DRIVERS = {
     "md", "namd", "data",
 }
 
-ACTIVE_QMMM_DRIVERS = {"energy", "md", "namd"}
+ACTIVE_QMMM_DRIVERS = {"energy", "md", "namd", "optimize"}
 
 _STATE_RE = re.compile(r"^([STQ])(\d+)$", re.IGNORECASE)
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*$")
@@ -972,8 +1141,36 @@ def _normalize_basis_value(value: str) -> str:
     return value.lower()
 
 
-def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
-    parts = _split_top_level(route, "/")
+def _split_route_token(token: str) -> List[str]:
+    """Split route separators while preserving slash-bearing component names."""
+
+    raw_parts = _split_top_level(token, "/")
+    parts: List[str] = []
+    index = 0
+    while index < len(raw_parts):
+        if (
+            index + 1 < len(raw_parts)
+            and raw_parts[index].lower() == "pbe-3"
+            and raw_parts[index + 1].lower() == "8"
+        ):
+            parts.append(raw_parts[index] + "/" + raw_parts[index + 1])
+            index += 2
+        else:
+            parts.append(raw_parts[index])
+            index += 1
+    return parts
+
+
+def _parse_route_components(
+    parts: Sequence[str], route: str
+) -> Tuple[str, Dict[str, Any], str, str]:
+    """Parse already-separated route components.
+
+    Keeping this separate from the slash spelling is important for functional
+    names such as ``PBE-3/8``: whitespace supplies an unambiguous component
+    boundary that must not be lost by joining the tokens with ``/`` first.
+    """
+
     if not parts or len(parts) > 3:
         raise OQPInputError(
             "Route must be model[/functional][/basis], got: %s" % route
@@ -1023,6 +1220,10 @@ def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
             "%s is not a route option for %s; use the exact section call %s(%s=...)"
             % (key, alias, section, key)
         )
+    component_values: List[str] = []
+    for part in parts[1:]:
+        parsed = _parse_value(part)
+        component_values.append(parsed if isinstance(parsed, str) else part)
     functional = ""
     basis = ""
     if model in {
@@ -1040,15 +1241,128 @@ def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
             "mrsf-hf", "umrsf-hf", "sf-hf", "tda-hf", "dftb", "dftb0", "tddftb",
             "tda-dftb", "sf-dftb", "mrsf-dftb",
         } | WF_MODELS:
-            basis = parts[1]
+            basis = component_values[0]
         else:
-            functional = parts[1]
+            functional = component_values[0]
     elif len(parts) == 3:
-        functional, basis = parts[1], parts[2]
+        functional, basis = component_values
     if model in {"dft", "rks", "uks", "roks", "tddft", "tda", "mrsf", "umrsf", "sf"} and not functional:
         raise OQPInputError("%s requires a functional in the route" % model)
     normalized_basis = _normalize_basis_value(basis)
     return model, model_options, functional.lower(), normalized_basis
+
+
+def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
+    return _parse_route_components(_split_route_token(route), route)
+
+
+def _starts_post_route_syntax(token: str) -> bool:
+    """Return whether *token* cannot be another route component."""
+
+    if "=" in token:
+        return True
+    token_value = _parse_value(token)
+    if (
+        isinstance(token_value, str)
+        and Path(token_value).suffix.lower() in {".xyz", ".pdb"}
+    ):
+        return True
+    raw_name = token.split("(", 1)[0].lower()
+    name = raw_name.replace("-", "_")
+    known_call = (
+        name in PRIMARY_ALIASES
+        or name in BARE_MODIFIER_CALLS
+        or name in SECTION_NAMES
+        or name in {"nmr", "ir", "raman", "d4"}
+    )
+    if known_call:
+        return True
+    call_shape = re.fullmatch(
+        r"[A-Za-z_][A-Za-z0-9_-]*(?:\(.*\))?", token, re.DOTALL
+    )
+    if call_shape:
+        call_names = (
+            list(PRIMARY_ALIASES)
+            + list(SECTION_NAMES)
+            + ["nmr", "ir", "raman", "d4"]
+        )
+        if "(" not in token:
+            return (
+                len(name) > 1
+                and name[-1] == name[-2]
+                and name[:-1] in call_names
+            )
+        # Parenthesized route components have a digit or hyphen in their family
+        # name (for example CAM-QTP(00), 6-31g(2df,p), and
+        # def2-svp(jkfit)). Other identifier-shaped calls must reach normal
+        # call validation even when their name is not close enough for a
+        # spelling suggestion.
+        probable_route_component = any(
+            char.isdigit() or char == "-" for char in raw_name
+        )
+        if probable_route_component:
+            return False
+        return True
+    return False
+
+
+def _route_component_variants(tokens: Sequence[str]) -> List[List[str]]:
+    """Return route-component interpretations without losing token boundaries."""
+
+    variants: List[List[str]] = [[]]
+    for token in tokens:
+        choices = [[token]]
+        split = _split_route_token(token)
+        if len(split) > 1:
+            choices.append(split)
+        variants = [
+            prefix + choice
+            for prefix in variants
+            for choice in choices
+            if len(prefix) + len(choice) <= 3
+        ]
+    # Prefer interpretations that fill all route components.  For equal
+    # lengths, the construction order preserves whitespace-delimited tokens.
+    return sorted(variants, key=len, reverse=True)
+
+
+def _parse_route_prefix(
+    tokens: Sequence[str],
+) -> Tuple[str, Dict[str, Any], str, str, int]:
+    """Parse a slash- or whitespace-separated route at the token prefix.
+
+    A route contains at most three components.  Joining only the leading
+    non-driver tokens lets ``mrsf bhhlyp 6-31g*`` and mixed spellings denote
+    the same calculation as ``mrsf/bhhlyp/6-31g*`` without consuming a bare
+    driver, a geometry file, or an explicit ``basis=...`` option.
+    """
+
+    candidates: List[Tuple[int, List[str], str]] = []
+    for count in range(1, min(len(tokens), 3) + 1):
+        if count > 1 and _starts_post_route_syntax(tokens[count - 1]):
+            break
+        display = " ".join(tokens[:count])
+        for parts in _route_component_variants(tokens[:count]):
+            candidates.append((count, parts, display))
+
+    errors: List[OQPInputError] = []
+    for count, parts, display in sorted(
+        candidates, key=lambda candidate: candidate[0], reverse=True
+    ):
+        try:
+            model, model_options, functional, basis = _parse_route_components(
+                parts, display
+            )
+        except OQPInputError as exc:
+            errors.append(exc)
+            continue
+        return model, model_options, functional, basis, count
+
+    if errors:
+        # Candidates are ordered from the most complete interpretation to the
+        # least.  Preserve the diagnostic from that best interpretation.
+        raise errors[0]
+    raise OQPInputError("Missing electronic-structure route")
 
 
 def looks_canonical(text: str) -> bool:
@@ -1110,12 +1424,20 @@ def parse_canonical_oqp(text: str) -> CalculationSpec:
             "geom=\"h2o.xyz\" on one or more lines."
         )
     tokens = _split_top_level(cleaned)
-    model, model_options, functional, basis = _parse_route(tokens[0])
+    model, model_options, functional, basis, route_token_count = (
+        _parse_route_prefix(tokens)
+    )
     options: Dict[str, Any] = {}
     calls: List[CallSpec] = []
-    for token_index, token in enumerate(tokens[1:], start=1):
+    for token_index, token in enumerate(
+        tokens[route_token_count:], start=route_token_count
+    ):
         assignment = _split_assignment(token)
-        if token_index == 1 and assignment is None and "(" not in token:
+        if (
+            token_index == route_token_count
+            and assignment is None
+            and "(" not in token
+        ):
             positional_geom = _parse_value(token)
             if (
                 isinstance(positional_geom, str)
@@ -1196,6 +1518,13 @@ def parse_canonical_oqp(text: str) -> CalculationSpec:
             close = difflib.get_close_matches(normalized, choices, n=1, cutoff=0.6)
             hint = " Did you mean '%s(...)'?" % close[0] if close else ""
             raise OQPInputError("Unknown .oqp call: %s.%s" % (call.name, hint))
+    # Excited-state dynamics is the composition namd(...) md(...): namd owns
+    # the electronic transition model and md owns nuclear propagation.  Keep
+    # md as an ordinary primary driver when namd is absent.
+    if len(primary) == 2 and {call.name for call in primary} == {"md", "namd"}:
+        md_call = next(call for call in primary if call.name == "md")
+        primary = [next(call for call in primary if call.name == "namd")]
+        modifiers.append(md_call)
     if len(primary) > 1:
         names = ", ".join(call.name for call in primary)
         raise OQPInputError(
@@ -1206,6 +1535,7 @@ def parse_canonical_oqp(text: str) -> CalculationSpec:
         )
     driver = primary[0] if primary else CallSpec("energy", explicit=False)
     driver = _normalize_driver_defaults(model, driver)
+    driver, modifiers = _fold_native_section_into_driver(driver, modifiers)
     spec = CalculationSpec(
         model=model,
         functional=functional,
@@ -1213,7 +1543,7 @@ def parse_canonical_oqp(text: str) -> CalculationSpec:
         model_options=model_options,
         options=options,
         driver=driver,
-        modifiers=tuple(modifiers),
+        modifiers=modifiers,
         source_text=text,
     )
     _validate_semantics(spec)
@@ -1374,6 +1704,12 @@ def _validate_semantics(spec: CalculationSpec) -> None:
         "mrsf", "mrsf-hf", "mrsf-dftb"
     }:
         raise OQPInputError("%s currently requires an MRSF route" % driver.name)
+    if driver.name == "md" and model in RESPONSE_MODELS:
+        raise OQPInputError(
+            "md(...) is ground-state Born-Oppenheimer dynamics and requires a "
+            "ground-state model route; use namd(...) md(...) for excited-state "
+            "nonadiabatic dynamics"
+        )
 
     expected_counts = {"mecp": 2, "tci": 3, "nac": 2, "bp": 2, "nacme": 2}
     if driver.name == "meci" and len(states) < 2:
@@ -1409,6 +1745,9 @@ def _validate_semantics(spec: CalculationSpec) -> None:
         options = _normalized_mecp_options(driver)
     else:
         options = _driver_options(driver)
+    if driver.name == "namd":
+        options = normalize_namd_policy_options(options)
+        options = expand_namd_scheme(options)
     if driver.name == "mecp":
         algorithm = str(options.get("mecp_search", "auto")).strip().lower()
         if algorithm not in {"auto", "auglag", "sqp", "penalty", "quad"}:
@@ -1509,15 +1848,21 @@ def _validate_semantics(spec: CalculationSpec) -> None:
                 "algorithm=auto or algorithm=baeka"
             )
     legacy_backend_options = {
+        "lib",
         "optimizer", "step_size", "step_tol", "mep_maxit",
         "k", "maxg", "avgg", "optep",
     }.intersection(options)
     if legacy_backend_options:
         key = sorted(legacy_backend_options)[0]
+        if key == "lib":
+            raise OQPInputError(
+                "lib is available only in traditional sectioned .inp files; "
+                "concise .oqp geometry drivers always use the native OpenQP engine"
+            )
         if key in {"optimizer", "step_size", "step_tol", "mep_maxit"}:
             raise OQPInputError(
                 "%s is a legacy SciPy-backend option. Concise .oqp workflows "
-                "support lib=oqp or lib=geometric." % key
+                "always use the native OpenQP engine." % key
             )
         replacement = {
             "k": "spring", "maxg": "fmax", "avgg": "frms", "optep": "opt_ends",
@@ -1531,35 +1876,9 @@ def _validate_semantics(spec: CalculationSpec) -> None:
     if unknown_driver_options:
         key = sorted(unknown_driver_options)[0]
         raise OQPInputError(
-            "%s does not define option '%s'; use the exact legacy section call for advanced options"
+            "%s does not define option '%s'; use the concise section that owns advanced options"
             % (driver.name, key)
         )
-    backend = str(options.get("lib", "oqp")).strip().lower()
-    if driver.name == "optimize":
-        if backend not in {"oqp", "geometric"}:
-            raise OQPInputError(
-                "opt lib must be oqp or geometric in concise .oqp input"
-            )
-        if backend == "geometric":
-            native_only = {
-                "trust_max", "auto_recovery", "recovery_maxit",
-                "recovery_trust", "freeze",
-            }.intersection(options)
-            if native_only:
-                raise OQPInputError(
-                    "%s is a native lib=oqp option; use geomeTRIC tmax or a "
-                    "traditional constraints file as appropriate"
-                    % sorted(native_only)[0]
-                )
-        else:
-            geometric_only = {
-                "tmax", "convergence_set", "hessian",
-            }.intersection(options)
-            if geometric_only:
-                raise OQPInputError(
-                    "%s is available only with opt(...,lib=geometric)"
-                    % sorted(geometric_only)[0]
-                )
     if driver.name in {"optimize", "meci", "mecp", "tci", "mep", "ts", "irc", "neb"}:
         if "maxit" in options:
             if not _is_positive_integer(options["maxit"]):
@@ -1571,20 +1890,7 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             raise OQPInputError(
                 "coordsys must be auto, tric, dlc, ric, internal, cart, or cartesian"
             )
-        if driver.name == "optimize" and backend == "geometric":
-            try:
-                trust = float(options.get("trust", 0.1))
-                tmax = float(options.get("tmax", 0.3))
-            except (TypeError, ValueError) as exc:
-                raise OQPInputError(
-                    "geomeTRIC trust and tmax must be positive numbers"
-                ) from exc
-            if (not math.isfinite(trust) or not math.isfinite(tmax)
-                    or trust <= 0 or tmax <= 0 or trust > tmax):
-                raise OQPInputError(
-                    "geomeTRIC trust and tmax require 0 < trust <= tmax"
-                )
-        elif {"trust", "trust_max"}.intersection(options):
+        if {"trust", "trust_max"}.intersection(options):
             try:
                 trust = float(options.get("trust", 0.2))
                 trust_max = float(options.get("trust_max", 0.5))
@@ -1719,13 +2025,13 @@ def _validate_semantics(spec: CalculationSpec) -> None:
                     raise OQPInputError("soc %s must be a positive integer" % key)
     if driver.name in {"hess", "thermo"} and "type" in driver.kwargs:
         hess_type = str(driver.kwargs["type"]).strip().lower()
-        if hess_type not in {"numerical", "analytical"}:
-            raise OQPInputError("%s type must be numerical or analytical" % driver.name)
-    if driver.name in {"nac", "bp", "nacme"} and "type" in driver.kwargs:
+        if hess_type not in {"auto", "numerical", "analytical"}:
+            raise OQPInputError("%s type must be auto, numerical or analytical" % driver.name)
+    if driver.name in {"nac", "bp"} and "type" in driver.kwargs:
         nac_type = str(driver.kwargs["type"]).strip().lower()
         if nac_type != "numerical":
             raise OQPInputError(
-                "%s currently supports type=numerical only; analytical NAC is unavailable"
+                "%s type must be numerical; analytical NAC is not available"
                 % driver.name
             )
     qmmm_section = next(
@@ -1734,16 +2040,22 @@ def _validate_semantics(spec: CalculationSpec) -> None:
     odp_section = next(
         (call for call in spec.modifiers if call.name == "odp"), None
     )
-    for independent_control in ("droplet", "solute_com"):
+    qmmm_md_driver = driver.name == "md" and qmmm_section is not None
+    for independent_control in ("droplet", "solute_com", "flexible"):
         control = next(
             (call for call in spec.modifiers if call.name == independent_control),
             None,
         )
-        if control is not None and driver.name != "namd":
-            raise OQPInputError(
-                "%s(...) is currently connected only to namd(...)" %
-                independent_control
-            )
+        if control is None or driver.name == "namd":
+            continue
+        if independent_control != "flexible" and qmmm_md_driver:
+            continue
+        raise OQPInputError(
+            "%s(...) is currently connected only to namd(...)%s" % (
+                independent_control,
+                "" if independent_control == "flexible"
+                else " and QM/MM md(...) qmmm(...)")
+        )
     input_section = next(
         (call for call in spec.modifiers if call.name == "input"), None
     )
@@ -1769,29 +2081,20 @@ def _validate_semantics(spec: CalculationSpec) -> None:
     has_qmmm = qmmm_section is not None or any(
         requested(value) for _, value in qmmm_flag_sources
     )
-    if driver.name == "md":
-        if not has_qmmm:
-            raise OQPInputError("md(...) is the QM/MM molecular-dynamics driver and requires qmmm(...)")
     if has_qmmm and driver.name not in ACTIVE_QMMM_DRIVERS:
         raise OQPInputError(
-            "The active QM/MM backend supports energy, md, and namd. "
+            "The active QM/MM backend supports energy, optimize, md, and namd. "
             "%s is not connected and would otherwise run without the requested QM/MM forces."
             % driver.name
         )
     if odp_section is not None:
         if odp_section.args:
             raise OQPInputError("odp accepts keyword arguments only")
-        if (driver.name != "namd"
+        if (driver.name != "namd" and not qmmm_md_driver
                 and requested(odp_section.kwargs.get("enabled", False))):
             raise OQPInputError(
-                "odp(...) currently requires the NVE namd(...) workflow"
-            )
-        if (driver.name == "namd"
-                and requested(odp_section.kwargs.get("enabled", False))
-                and str(options.get("ensemble", "nve")).strip().lower()
-                != "nve"):
-            raise OQPInputError(
-                "odp(...) currently requires ensemble=nve in namd(...)"
+                "odp(...) currently requires the namd(...) workflow or "
+                "QM/MM md(...) qmmm(...)"
             )
     if states and set(_driver_options(driver)).intersection({"active", "init_state"}):
         key = sorted(set(_driver_options(driver)).intersection({"active", "init_state"}))[0]
@@ -1835,9 +2138,23 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             raise OQPInputError("%s only supports the ground-state label S0" % model)
         if model in {
             "tddft", "tda", "tda-hf", "tdhf", "tddftb", "tda-dftb"
-        } and state.label:
-            if state.label.startswith("Q"):
-                raise OQPInputError("Conventional TD calculations accept singlet or triplet labels")
+        } and state.label and not state.label.startswith("S"):
+            # The closed-shell RPA/TDA response has a triplet path (no
+            # Coulomb term, f_aa - f_ab kernel) for energies, gradients and
+            # geometry optimizations: energy(T0), grad(Tn), opt(Tn).  Triplet
+            # Hessians, NACs and dynamics do not exist and stay rejected.
+            triplet_ok = (
+                model in {"tddft", "tda", "tda-hf", "tdhf"}
+                and state.label.startswith("T")
+                and driver.name in {"energy", "grad", "optimize"}
+            )
+            if not triplet_ok:
+                raise OQPInputError(
+                    "Conventional TD calculations support singlet labels only, "
+                    "apart from closed-shell triplet energies, gradients and "
+                    "optimizations (energy(T0), grad(Tn), opt(Tn)); "
+                    "use mrsf or sf for other triplet-state workflows"
+                )
         if model == "mrsf-dftb" and state.label and state.label.startswith("Q"):
             raise OQPInputError("MRSF-TDDFTB supports singlet or triplet labels, not quintet")
 
@@ -1971,7 +2288,12 @@ def _validate_semantics(spec: CalculationSpec) -> None:
                 "automatically." % (call.name, key_text)
             )
         if call.name in SECTION_NAMES:
-            unknown = set(call.kwargs) - OQP_SCHEMA_KEYS[call.name]
+            allowed_section_options = (
+                DRIVER_OPTIONS["md"]
+                if call.name == "md" and driver.name == "namd"
+                else OQP_SCHEMA_KEYS[call.name]
+            )
+            unknown = set(call.kwargs) - allowed_section_options
             if unknown:
                 key = sorted(unknown)[0]
                 close = difflib.get_close_matches(
@@ -2001,6 +2323,38 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             raise OQPInputError(
                 "qmmm nsteps and n_steps specify the same QM/MM MD step count; use one"
             )
+        if call.name == "qmmm" and driver.name in {"md", "namd"}:
+            common_md = dict(driver.kwargs) if driver.name == "md" else {}
+            if driver.name == "namd":
+                common_md.update({
+                    key: value for key, value in driver.kwargs.items()
+                    if key in MD_COMMON_OPTIONS
+                })
+                md_modifier = modifier_by_name.get("md")
+                if md_modifier is not None:
+                    common_md.update(md_modifier.kwargs)
+            qmmm_aliases = {
+                "nstep": {"nsteps", "n_steps"},
+                "dt": {"timestep"},
+                "temperature": {"temperature"},
+                "ensemble": {"ensemble"},
+                "thermostat": {"ensemble"},
+                "friction": {"friction"},
+                "trajectory_file": {"trajectory_file"},
+            }
+            duplicate = next((
+                (md_key, qmmm_key)
+                for md_key, qmmm_keys in qmmm_aliases.items()
+                if md_key in common_md
+                for qmmm_key in sorted(qmmm_keys)
+                if qmmm_key in call.kwargs
+            ), None)
+            if duplicate is not None:
+                raise OQPInputError(
+                    "Dynamics control %s is specified in both md(%s=...) and "
+                    "qmmm(%s=...); keep nuclear propagation in md(...)"
+                    % (duplicate[0], duplicate[0], duplicate[1])
+                )
         if call.name == "pcm" and call.args and "solvent" in call.kwargs:
             raise OQPInputError("PCM solvent is specified twice; use pcm(water) or pcm(solvent=water)")
         conflict = reserved.get(call.name, set()).intersection(call.kwargs)
@@ -2020,6 +2374,7 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             optional_input_owners = {
                 "library": "library", "ispher": "ispher", "perf": "perf",
                 "d4": "d4", "qmmm_flag": "qmmm_flag", "omp_threads": "omp_threads",
+                "verbose": "verbose",
             }
             duplicate = [
                 key for key, option in optional_input_owners.items()
@@ -2043,106 +2398,6 @@ def _validate_semantics(spec: CalculationSpec) -> None:
                 "Option '%s' is specified in both %s(...) and %s(...)"
                 % (sorted(overlap)[0], driver.name, call.name)
             )
-
-    oqp_call = modifier_by_name.get("oqp")
-    if oqp_call is not None:
-        allowed_oqp = OQP_DRIVER_OPTIONS.get(driver.name, set())
-        ignored = set(oqp_call.kwargs) - allowed_oqp
-        if ignored:
-            key = sorted(ignored)[0]
-            raise OQPInputError(
-                "oqp.%s is not used by the native %s workflow"
-                % (key, driver.name)
-            )
-        if "init_hessian" in oqp_call.kwargs:
-            policy = str(oqp_call.kwargs["init_hessian"]).strip().lower()
-            if policy not in {"model", "numerical", "analytical"}:
-                raise OQPInputError(
-                    "oqp.init_hessian must be model, numerical, or analytical"
-                )
-        if "irc_direction" in oqp_call.kwargs:
-            direction = str(oqp_call.kwargs["irc_direction"]).strip().lower()
-            if direction not in {"forward", "backward", "reverse"}:
-                raise OQPInputError(
-                    "oqp.irc_direction must be forward or backward"
-                )
-        if "coordsys" in oqp_call.kwargs:
-            coordsys = str(oqp_call.kwargs["coordsys"]).strip().lower()
-            if coordsys not in {
-                "auto", "tric", "dlc", "ric", "internal", "cart", "cartesian",
-            }:
-                raise OQPInputError(
-                    "oqp.coordsys must be auto, tric, dlc, ric, internal, cart, or cartesian"
-                )
-        if {"trust", "trust_max"}.intersection(oqp_call.kwargs):
-            try:
-                trust = float(oqp_call.kwargs.get("trust", 0.2))
-                trust_max = float(oqp_call.kwargs.get("trust_max", 0.5))
-            except (TypeError, ValueError) as exc:
-                raise OQPInputError("oqp.trust and oqp.trust_max must be positive numbers") from exc
-            if (not math.isfinite(trust) or not math.isfinite(trust_max)
-                    or trust <= 0 or trust_max <= 0 or trust > trust_max):
-                raise OQPInputError("oqp trust controls require 0 < trust <= trust_max")
-        if "freeze" in oqp_call.kwargs:
-            _validate_freeze_spec(oqp_call.kwargs["freeze"])
-        if "follow" in oqp_call.kwargs:
-            if not _is_non_negative_integer(oqp_call.kwargs["follow"]):
-                raise OQPInputError("oqp.follow must be a non-negative mode index")
-        for key in {
-            "spring", "fmax", "frms", "climb_fmax", "neb_dt", "maxmove",
-            "end_fmax", "irc_step", "mep_step", "path_gtol",
-        }.intersection(oqp_call.kwargs):
-            try:
-                value = float(oqp_call.kwargs[key])
-                if not math.isfinite(value) or value <= 0:
-                    raise ValueError
-            except (TypeError, ValueError) as exc:
-                raise OQPInputError("oqp.%s must be a positive number" % key) from exc
-        for key in {"climb", "align", "opt_ends"}.intersection(oqp_call.kwargs):
-            if not isinstance(oqp_call.kwargs[key], bool):
-                raise OQPInputError("oqp.%s must be true or false" % key)
-        native_aliases = {
-            "coordsys": "coordsys", "trust": "trust", "trust_max": "trust_max",
-        }
-        if driver.name == "optimize":
-            native_aliases.update({"freeze": "freeze"})
-        elif driver.name == "ts":
-            native_aliases.update({"follow": "follow", "hessian": "init_hessian"})
-        elif driver.name == "mep":
-            native_aliases.update({"step": "mep_step", "mep_step": "mep_step"})
-        elif driver.name == "irc":
-            native_aliases.update({
-                "direction": "irc_direction", "step": "irc_step", "irc_step": "irc_step",
-            })
-        elif driver.name == "neb":
-            native_aliases.update({
-                "spring": "spring", "climb": "climb", "fmax": "fmax",
-                "frms": "frms", "climb_fmax": "climb_fmax", "dt": "neb_dt",
-                "neb_dt": "neb_dt", "maxmove": "maxmove", "align": "align",
-                "opt_ends": "opt_ends", "end_fmax": "end_fmax",
-                "output": "neb_output",
-            })
-        for public_key, section_key in native_aliases.items():
-            if public_key in options and section_key in oqp_call.kwargs:
-                raise OQPInputError(
-                    "%s and oqp.%s specify the same native control; use one form"
-                    % (public_key, section_key)
-                )
-        if driver.name == "neb":
-            effective_climb = oqp_call.kwargs.get(
-                "climb", options.get("climb", True)
-            )
-            effective_fmax = float(oqp_call.kwargs.get(
-                "fmax", options.get("fmax", 2.0e-3)
-            ))
-            effective_climb_fmax = float(oqp_call.kwargs.get(
-                "climb_fmax", options.get("climb_fmax", 0.05)
-            ))
-            if effective_climb and effective_climb_fmax < effective_fmax:
-                raise OQPInputError(
-                    "neb climb_fmax must be greater than or equal to fmax when climb=true"
-                )
-
 
 def _internal_root(model: str, state: StateRef) -> int:
     if state.root is not None:
@@ -2395,7 +2650,8 @@ def rebase_calculation_paths(
             if (call.name, key) == ("input", "system2"):
                 kwargs[key] = _normalize_geometry(value, source_dir)
             elif (call.name, key) in {
-                ("neb", "product"), ("guess", "file"), ("guess", "file2"),
+                ("neb", "product"), ("oqp", "ts_product"), ("oqp", "ts_guess"),
+                ("guess", "file"), ("guess", "file2"),
                 ("dftb", "parameter_path"), ("dftb", "library_path"),
                 ("geometric", "constraints_file"), ("oqp", "neb_output"),
             }:
@@ -2409,8 +2665,10 @@ def rebase_calculation_paths(
                 "forcefield", "forcefield_files",
             }:
                 kwargs[key] = _resolve_search_path_list(value, source_dir)
-            elif call.name == "namd" and key == "velocity":
+            elif call.name in {"md", "namd"} and key == "velocity":
                 kwargs[key] = _resolve_velocity_source(value, source_dir)
+            elif call.name in {"md", "namd"} and key == "snapshot":
+                kwargs[key] = _resolve_path(value, source_dir)
         return CallSpec(call.name, call.args, kwargs, call.explicit)
 
     return CalculationSpec(
@@ -2440,6 +2698,77 @@ def lower_to_legacy(
     def put(section: str, key: str, value: Any) -> None:
         config.setdefault(section, {})[key] = _as_config_string(value)
 
+    def put_md_options(options: Mapping[str, Any]) -> None:
+        """Lower the concise common nuclear controls to legacy [md] keys."""
+        if "ensemble" in options and "thermostat" in options:
+            ensemble = str(options["ensemble"]).strip().lower()
+            thermostat = str(options["thermostat"]).strip().lower()
+            expected = "langevin" if ensemble == "nvt" else "off"
+            if ensemble not in {"nve", "nvt"}:
+                if ensemble == "npt":
+                    raise OQPInputError(
+                        "md ensemble=npt is not available: a QM/MM barostat would "
+                        "need the QM/MM energy at each barostat trial box. "
+                        "Equilibrate the cell classically and start from it "
+                        "with md(snapshot=...)"
+                    )
+                raise OQPInputError("md ensemble must be nve or nvt")
+            if thermostat not in {"off", "langevin"}:
+                raise OQPInputError("md thermostat must be off or langevin")
+            if thermostat != expected:
+                raise OQPInputError(
+                    "md ensemble and legacy thermostat are inconsistent; "
+                    "use ensemble only"
+                )
+        put("md", "common_controls", True)
+        existing_keys = {
+            key.strip()
+            for key in config.get("md", {}).get(
+                "common_control_keys", ""
+            ).replace(",", " ").split()
+            if key.strip()
+        }
+        existing_keys.update(options)
+        put("md", "common_control_keys", ",".join(sorted(existing_keys)))
+        for key, value in options.items():
+            if key == "velocity":
+                value = _resolve_velocity_source(value, source_dir)
+                put("md", key, value)
+            elif key == "snapshot":
+                # an input file, looked up next to the deck like velocity=
+                put("md", key, _resolve_path(value, source_dir))
+            elif key == "temperature":
+                put("md", "init_temp", value)
+                put("md", "thermostat_temperature", value)
+            elif key == "friction":
+                put("md", "thermostat_friction", value)
+            elif key == "ensemble":
+                ensemble = str(value).strip().lower()
+                if ensemble not in {"nve", "nvt"}:
+                    if ensemble == "npt":
+                        raise OQPInputError(
+                            "md ensemble=npt is not available: a QM/MM barostat would "
+                            "need the QM/MM energy at each barostat trial box. "
+                            "Equilibrate the cell classically and start from it "
+                            "with md(snapshot=...)"
+                        )
+                    raise OQPInputError("md ensemble must be nve or nvt")
+                put("md", "ensemble", ensemble)
+                put(
+                    "md", "thermostat",
+                    "langevin" if ensemble == "nvt" else "off",
+                )
+            elif key == "thermostat":
+                thermostat = str(value).strip().lower()
+                if thermostat not in {"off", "langevin"}:
+                    raise OQPInputError(
+                        "md thermostat must be off or langevin"
+                    )
+                put("md", "thermostat", thermostat)
+                put("md", "ensemble", "nvt" if thermostat == "langevin" else "nve")
+            else:
+                put("md", key, value)
+
     put("input", "system", _normalize_geometry(spec.options["geom"], source_dir))
     if "geom2" in spec.options:
         put("input", "system2", _normalize_geometry(spec.options["geom2"], source_dir))
@@ -2448,7 +2777,7 @@ def lower_to_legacy(
         put("input", "basis", spec.basis)
     if spec.functional:
         put("input", "functional", spec.functional)
-    for key in ("library", "ispher", "perf", "d4", "qmmm_flag", "omp_threads"):
+    for key in ("library", "ispher", "perf", "d4", "qmmm_flag", "omp_threads", "verbose"):
         if key in spec.options:
             put("input", key, spec.options[key])
 
@@ -2471,6 +2800,9 @@ def lower_to_legacy(
         method = "tdhf"
 
     states = list(_driver_states(spec.driver))
+    # Whether the driver itself named its states; a route default below is not
+    # a gradient request in a spin-orbit run (see the post-pass at the end).
+    driver_named_states = bool(states)
     if not states:
         default = _default_state(spec)
         if default is not None:
@@ -2565,6 +2897,9 @@ def lower_to_legacy(
     # Apply advanced section calls.  Semantic/internal state keys were rejected
     # by _validate_semantics, so these cannot undo the safe route mapping.
     for call in spec.modifiers:
+        if call.name == "md" and spec.driver.name == "namd":
+            put_md_options(call.kwargs)
+            continue
         if call.name == "d4":
             put("input", "d4", True)
             for key, value in call.kwargs.items():
@@ -2584,9 +2919,39 @@ def lower_to_legacy(
             # The new concise surface defaults to gauge-origin-independent
             # shielding. Legacy .inp retains its established CGO default.
             props["nmr_gauge"] = _as_config_string(gauge if gauge is not None else "giao")
-            unknown = set(call.kwargs) - {"gauge", "nmr_gauge"}
+            # acid rides on the shielding call because it consumes the GIAO
+            # density response that call produces.
+            acid_raw = call.kwargs.get("acid")
+            if acid_raw is not None:
+                text = str(acid_raw).strip().lower()
+                if text in {"true", "yes", "on", "1"}:
+                    acid = True
+                elif text in {"false", "no", "off", "0"}:
+                    acid = False
+                else:
+                    # Silently reading a typo as "no" would hand back a run with
+                    # no cubes and no complaint.
+                    raise OQPInputError(
+                        f"nmr acid= expects true or false, got {acid_raw!r}")
+                if acid:
+                    if str(props["nmr_gauge"]).strip().lower() != "giao":
+                        raise OQPInputError("nmr(acid=true) requires gauge=giao")
+                    if "acid" not in current:
+                        current.append("acid")
+                    props["scf_prop"] = ",".join(current)
+            grid = {k: v for k, v in call.kwargs.items()
+                    if k in {"acid_spacing", "acid_padding"}}
+            if grid and "acid" not in current:
+                raise OQPInputError(
+                    "nmr acid_spacing/acid_padding require acid=true")
+            for key, value in grid.items():
+                props[key] = _as_config_string(value)
+            unknown = set(call.kwargs) - {"gauge", "nmr_gauge", "acid",
+                                          "acid_spacing", "acid_padding"}
             if unknown or call.args:
-                raise OQPInputError("nmr accepts only gauge=...")
+                raise OQPInputError(
+                    "nmr accepts only gauge=..., acid=..., acid_spacing=... "
+                    "and acid_padding=...")
             continue
         if call.name == "pcm":
             put("pcm", "enabled", True)
@@ -2630,21 +2995,22 @@ def lower_to_legacy(
     roots = [_internal_root(spec.model, state) for state in states]
     driver_options = _driver_options(spec.driver)
     name = spec.driver.name
+    if name == "namd":
+        driver_options = normalize_namd_policy_options(driver_options)
+        driver_options = expand_namd_scheme(driver_options)
     if name == "grad":
         put("properties", "grad", roots[0] if roots else 0)
         for key, value in driver_options.items():
             put("properties", key, value)
     elif name in {"optimize", "mep", "ts", "irc", "neb"}:
         put("optimize", "istate", roots[0] if roots else 0)
-        optimizer_backend = str(
-            driver_options.get("lib", "oqp")
-        ).strip().lower()
         for key, value in driver_options.items():
-            if name == "optimize" and key == "lib":
-                put("optimize", "lib", optimizer_backend)
-            elif (name == "optimize" and optimizer_backend == "geometric"
-                  and key in _GEOMETRIC_ENGINE_OPTIONS):
-                put("geometric", key, value)
+            if name == "ts" and key in {"search", "product", "guess"}:
+                if key != "search":
+                    value = _resolve_path(value, source_dir)
+                put("oqp", "ts_" + key, value)
+            elif name == "neb" and key == "interpolation":
+                put("oqp", "neb_interpolation", value)
             elif name == "neb" and key in {"product", "images", "nimage"}:
                 target_key = "nimage" if key in {"images", "nimage"} else "product"
                 if target_key == "product":
@@ -2676,10 +3042,11 @@ def lower_to_legacy(
                     put("oqp", "mep_step", value)
                 elif key == "gtol":
                     put("oqp", "path_gtol", value)
-            elif name == "ts" and key in {"coordsys", "trust", "trust_max", "follow", "hessian"}:
+            elif name == "ts" and key in (
+                    _NATIVE_ENGINE_OPTIONS | _NATIVE_CURVATURE_OPTIONS | {"follow", "hessian"}):
                 put("oqp", "init_hessian" if key == "hessian" else key, value)
             elif name == "optimize" and key in (
-                    _NATIVE_ENGINE_OPTIONS | _NATIVE_CONSTRAINT_OPTIONS):
+                    _NATIVE_ENGINE_OPTIONS | _NATIVE_CURVATURE_OPTIONS | _NATIVE_CONSTRAINT_OPTIONS):
                 put("oqp", key, value)
             else:
                 put("optimize", key, value)
@@ -2730,16 +3097,24 @@ def lower_to_legacy(
             put("nac", key, value)
     elif name == "md":
         put("properties", "grad", roots[0] if roots else 0)
+        put_md_options(driver_options)
     elif name == "namd":
+        # Surface hopping needs converged SCF and response states.
+        for section, key in (("scf", "conv"), ("tdhf", "conv"), ("tdhf", "zvconv")):
+            config.setdefault(section, {}).setdefault(key, "1e-8")
         if roots:
             if driver_options.get("soc") and states[0].label:
                 put("md", "init_state", states[0].label)
             else:
                 put("md", "active", roots[0])
+        common = {
+            key: value for key, value in driver_options.items()
+            if key in MD_COMMON_OPTIONS
+        }
+        put_md_options(common)
         for key, value in driver_options.items():
-            if key == "velocity":
-                value = _resolve_velocity_source(value, source_dir)
-            put("md", key, value)
+            if key not in MD_COMMON_OPTIONS:
+                put("md", key, value)
     elif name == "ekt":
         if roots:
             put("tdhf", "target", roots[0])
@@ -2765,6 +3140,51 @@ def lower_to_legacy(
             put("properties", key, value)
     elif driver_options:
         raise OQPInputError("%s does not accept driver options" % name)
+
+    # A spin-orbit run solves two response ladders, so a gradient index has to
+    # say which one it belongs to.  The spin letter of the state label picks the
+    # key: prop(S1, soc=true) asks for the singlet manifold and prop(T1,
+    # soc=true) for the triplet one.  prop() takes one target state, so a deck
+    # that wants both names the other ladder explicitly, e.g.
+    # prop(S1) properties(soc=true, grad_t=2).
+    #
+    # Only states the driver named are requests: the route default that fills
+    # an empty prop()/data() is not, so prop(soc=true) properties(grad_t=2)
+    # asks for the triplet gradient alone.  An explicit properties(grad_s=...)
+    # or grad_t=... is the user's list for that ladder; a driver state that
+    # disagrees with it is a contradiction and is refused, never overwritten.
+    properties = config.get("properties", {})
+    if str(properties.get("soc", "")).strip().lower() in ("true", "1", "yes", "on") \
+            and "grad" in properties:
+        properties.pop("grad")
+        by_key: Dict[str, List[int]] = {}
+        for state, root in zip(states if driver_named_states else [], roots):
+            letter = (state.label or "S")[0].upper()
+            if letter not in ("S", "T"):
+                raise OQPInputError(
+                    "A spin-orbit run takes gradient selectors per spin ladder, "
+                    "so %s has no key to lower to; use an S or T state"
+                    % state.label)
+            by_key.setdefault("grad_s" if letter == "S" else "grad_t", []).append(root)
+        for key, values in by_key.items():
+            if key in properties:
+                try:
+                    explicit = [int(item) for item in
+                                str(properties[key]).replace(",", " ").split()]
+                except ValueError:
+                    raise OQPInputError(
+                        "properties(%s=%s) must list integer response roots"
+                        % (key, properties[key])) from None
+                if sorted(set(values)) != sorted(set(explicit)):
+                    raise OQPInputError(
+                        "The %s gradient is requested twice with different "
+                        "roots: the driver state gives %s and properties(%s=%s) "
+                        "gives %s; name it in one place"
+                        % ("singlet" if key == "grad_s" else "triplet",
+                           ",".join(str(v) for v in values), key,
+                           properties[key], ",".join(str(v) for v in explicit)))
+                continue
+            put("properties", key, ",".join(str(value) for value in values))
 
     # Defensive final pass: ConfigParser.load_dict requires strings.
     return {
@@ -2898,6 +3318,21 @@ def _normalize_typed_value(type_name: str, value: Any) -> Any:
     return text.lower()
 
 
+#: PT2 methods that name their own zeroth-order Hamiltonian and contraction
+#: (``input.method`` -> ``([pt2] h0, [pt2] contraction)``).  ``[pt2] h0`` and
+#: ``contraction`` have blank schema defaults meaning "the method's own value";
+#: every PT2 method not listed here resolves a blank h0 to ``fock`` and a blank
+#: contraction to uncontracted.  The single source for the runtime option
+#: reader (oqp.library.caspt2_dyall), preflight (oqp.utils.input_checker) and
+#: the effective-config comparison below; it lives here because this module
+#: must stay importable without liboqp.
+PT2_METHOD_IMPLIED = {
+    "nevpt2": ("dyall", "none"),
+    "sc-nevpt2": ("dyall", "strong"),
+    "scnevpt2": ("dyall", "strong"),
+}
+
+
 def _effective_config(
     config: Mapping[str, Mapping[str, str]],
     schema: Mapping[str, Mapping[str, Tuple[str, Any]]],
@@ -2916,6 +3351,15 @@ def _effective_config(
         for key, raw in values.items():
             if section not in schema or key not in schema[section]:
                 effective[(section, key)] = ("explicit", str(raw))
+    # A blank [pt2] h0 / contraction is the method's own value; resolve it the
+    # way the runtime does, so restating that value is recognized as a default.
+    method = str(effective.get(("input", "method"), "")).strip().lower()
+    implied_h0, implied_contraction = PT2_METHOD_IMPLIED.get(method, (None, None))
+    if effective.get(("pt2", "h0")) == "":
+        effective[("pt2", "h0")] = implied_h0 or "fock"
+    if effective.get(("pt2", "contraction")) == "":
+        effective[("pt2", "contraction")] = (
+            "strong" if implied_contraction == "strong" else "uncontracted")
     return effective
 
 
@@ -3079,7 +3523,7 @@ def render_canonical_oqp(spec: CalculationSpec, *, strip_defaults: bool = True) 
         route += "/" + route_basis
     option_order = (
         "charge", "mult", "library", "ispher", "perf", "d4", "qmmm_flag",
-        "omp_threads",
+        "omp_threads", "verbose",
     )
     option_parts = [
         "%s=%s" % (key, _render_value(spec.options[key]))
@@ -3304,6 +3748,16 @@ def compile_natural_request(text: str) -> CalculationSpec:
     args: List[Any] = state_labels[:required]
 
     driver_kwargs: Dict[str, Any] = {}
+    if driver_name == "namd":
+        scheme = re.search(
+            r"\bscheme\s*=\s*(?:\"([^\"]+)\"|'([^']+)'|([A-Za-z][\w-]*))",
+            text,
+            re.I,
+        )
+        if scheme:
+            driver_kwargs["scheme"] = next(
+                value for value in scheme.groups() if value is not None
+            )
     maxit = re.search(r"\bmaxit\s*=\s*(\d+)\b|최대\s*(?:반복|iteration)?\s*(\d+)\s*회", text, re.I)
     if maxit and driver_name in {"optimize", "meci", "mecp", "tci", "mep", "ts", "irc", "neb"}:
         driver_kwargs["maxit"] = int(maxit.group(1) or maxit.group(2))
@@ -3422,8 +3876,10 @@ __all__ = [
     "SCHEMA_KEY_OWNERS",
     "StateRef",
     "compile_natural_request",
+    "expand_namd_scheme",
     "looks_canonical",
     "lower_to_legacy",
+    "normalize_namd_policy_options",
     "parse_canonical_oqp",
     "rebase_calculation_paths",
     "render_canonical_oqp",

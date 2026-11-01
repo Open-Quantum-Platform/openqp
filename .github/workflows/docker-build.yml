@@ -4,9 +4,10 @@ name: Build Docker Release Candidate
   release:
     types:
       - published
-  pull_request:
-    branches:
-      - main
+  # On demand only (Actions > Run workflow, or `gh workflow run docker-build.yml
+  # --ref <branch>`).  The attested build takes ~18 min of a hosted runner, and
+  # running it on every pull request held runner slots the CI matrix needed.
+  workflow_dispatch:
 
 # Build-only: no registry credentials, package write permission, login, push,
 # release attachment, retained image artifact, or exported build cache.

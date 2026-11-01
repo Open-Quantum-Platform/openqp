@@ -15,6 +15,11 @@ from oqp.utils.geometry import (
 )
 from oqp.utils.input_parser import OQPConfigParser
 from oqp.utils.kword_map import resolve_param_key
+from oqp.utils.oqp_input import (
+    MD_COMMON_OPTIONS,
+    expand_namd_scheme,
+    normalize_namd_policy_options,
+)
 from oqp.utils.tb_backends import is_tb_method
 from oqp.utils.state_labels import canonical_dftb_type
 
@@ -30,6 +35,12 @@ def dump_strings_from_parser(parser):
 
 
 OPTIMIZER_RUNTYPES = {"optimize", "meci", "mecp", "tci", "mep", "ts", "irc", "neb"}
+_MD_COMMON_SCHEMA_OPTIONS = frozenset(MD_COMMON_OPTIONS) | {
+    "ensemble",
+    "init_temp",
+    "thermostat_temperature",
+    "thermostat_friction",
+}
 # Spellings `theory()` accepts for the CASPT2 family -> the input `method`.
 # Both the hyphenated and the run-together forms, since `[input] method`
 # accepts both.
@@ -73,6 +84,12 @@ class _SectionProxy:
         schema = OQP_CONFIG_SCHEMA.get(self._section, {})
         if option in schema:
             return self._owner.config_typed.get(self._section, {}).get(option)
+        try:
+            section, canonical = resolve_param_key(f"{self._section}.{option}")
+        except KeyError:
+            pass
+        else:
+            return self._owner.config_typed.get(section, {}).get(canonical)
         if self._section == "optimize":
             backend = self._owner._optimizer_backend_section()
             backend_schema = OQP_CONFIG_SCHEMA.get(backend, {})
@@ -215,10 +232,48 @@ class _WorkflowNmrProxy:
     def __init__(self, owner):
         self._owner = owner
 
-    def __call__(self, gauge=None, **kwargs):
+    _TRUE = {"true", "yes", "on", "1"}
+    _FALSE = {"false", "no", "off", "0"}
+
+    @classmethod
+    def _as_bool(cls, value):
+        """Accept the spellings a config file uses, reject anything else.
+
+        Plain truthiness would read the string "false" as enabled and quietly
+        write four cube files.  ``None`` means "not asked for" and is the one
+        non-string spelling of off; an empty or unrecognised string is a typo
+        and is refused, which is what the .oqp surface does with the same text.
+        """
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return False
+        text = str(value).strip().lower()
+        if text in cls._TRUE:
+            return True
+        if text in cls._FALSE:
+            return False
+        raise ValueError(f"acid expects true or false, got {value!r}")
+
+    def __call__(self, gauge=None, acid=False, **kwargs):
+        acid = self._as_bool(acid)
+        # The grid controls only describe an ACID box, so asking for one
+        # without asking for ACID is a request this call cannot honour: it
+        # would store them, write no cubes and say nothing.  The .oqp modifier
+        # refuses the same combination; this is the other half of it.
+        grid = sorted(k for k in ("acid_spacing", "acid_padding") if k in kwargs)
+        if grid and not acid:
+            raise ValueError(
+                f"{' and '.join(grid)} require acid=true; without it no cubes "
+                f"are written and the grid is ignored.")
         self._owner._require_reference_scf_theory_for("NMR")
         if gauge is not None:
             kwargs["nmr_gauge"] = gauge
+        # ACID exists only on the GIAO path, so asking for it without naming a
+        # gauge selects one, as the concise surface already does.  Naming cgo
+        # explicitly still fails below rather than being quietly overridden.
+        if acid and "nmr_gauge" not in kwargs:
+            kwargs["nmr_gauge"] = "giao"
         nmr_gauge = str(kwargs.get("nmr_gauge", "cgo")).lower()
         scf_type = str(self._owner.config_typed.get("scf", {}).get("type", "rhf")).lower()
         if nmr_gauge not in {"cgo", "giao"}:
@@ -226,7 +281,14 @@ class _WorkflowNmrProxy:
         if nmr_gauge == "cgo" and scf_type != "rhf":
             raise ValueError("CGO NMR shielding supports closed-shell RHF references only.")
         self._owner._reject_nmr_unsupported_functionals()
-        kwargs["scf_prop"] = "nmr"
+        # ACID is drawn from the GIAO magnetic density response, so it is a
+        # modifier on the shielding call rather than a separate request: that
+        # puts the dependency in the signature instead of in list ordering.
+        if acid and nmr_gauge != "giao":
+            raise ValueError(
+                "ACID cubes require gauge='giao'; a common gauge origin leaves "
+                "the map gauge-contaminated.")
+        kwargs["scf_prop"] = "nmr,acid" if acid else "nmr"
         return self._owner.section("properties", **kwargs)
 
 
@@ -261,6 +323,8 @@ class _WorkflowNAMDProxy(_WorkflowMrsfSectionProxy):
         super().__init__(owner, "md", runtype="namd", workflow_name="NAMD")
 
     def __call__(self, **kwargs):
+        kwargs = normalize_namd_policy_options(kwargs)
+        kwargs = expand_namd_scheme(kwargs)
         current = self._owner.config_typed.get("md", {})
         soc = kwargs.get("soc", current.get("soc", False))
         nacme_explicit = "nacme_check" in kwargs
@@ -277,6 +341,75 @@ class _WorkflowNAMDProxy(_WorkflowMrsfSectionProxy):
             # The global default is the same-spin Baeck-An diagnostic.  SOC
             # stores its complex spin-adiabatic overlap/TDC instead.
             kwargs["nacme_check"] = "off"
+        return super().__call__(**kwargs)
+
+
+class _WorkflowMDProxy(_WorkflowSectionProxy):
+    """Ground-state MD selector and common nuclear-propagation controls."""
+
+    def __init__(self, owner):
+        super().__init__(owner, "md", runtype="md")
+
+    def __call__(self, **kwargs):
+        kwargs = dict(kwargs)
+        if "ensemble" in kwargs and "thermostat" in kwargs:
+            raise ValueError(
+                "Use ensemble, not ensemble together with legacy thermostat."
+            )
+        explicit_controls = set(kwargs)
+        kwargs["common_controls"] = True
+        if "temperature" in kwargs:
+            temperature = kwargs.pop("temperature")
+            if "init_temp" in kwargs or "thermostat_temperature" in kwargs:
+                raise ValueError(
+                    "Use temperature, not temperature together with legacy "
+                    "init_temp/thermostat_temperature."
+                )
+            kwargs["init_temp"] = temperature
+            kwargs["thermostat_temperature"] = temperature
+        if "friction" in kwargs:
+            if "thermostat_friction" in kwargs:
+                raise ValueError(
+                    "Use friction or legacy thermostat_friction, not both."
+                )
+            kwargs["thermostat_friction"] = kwargs.pop("friction")
+        if "ensemble" in kwargs:
+            ensemble = str(kwargs["ensemble"]).strip().lower()
+            if ensemble not in {"nve", "nvt"}:
+                if ensemble == "npt":
+                    raise ValueError(
+                        "ensemble='npt' is not available: a QM/MM barostat "
+                        "would need the QM/MM energy at each barostat trial "
+                        "box. Equilibrate the cell classically and start from "
+                        "it with md(snapshot=...)."
+                    )
+                raise ValueError("ensemble must be 'nve' or 'nvt'.")
+            kwargs["ensemble"] = ensemble
+            kwargs["thermostat"] = (
+                "langevin" if ensemble == "nvt" else "off"
+            )
+        elif "thermostat" in kwargs:
+            thermostat = str(kwargs["thermostat"]).strip().lower()
+            if thermostat not in {"off", "langevin"}:
+                raise ValueError("thermostat must be 'off' or 'langevin'.")
+            kwargs["thermostat"] = thermostat
+            kwargs["ensemble"] = "nvt" if thermostat == "langevin" else "nve"
+        current_keys = str(
+            self._owner.config_typed.get("md", {}).get(
+                "common_control_keys", "")
+        )
+        explicit_controls.update(
+            key.strip() for key in current_keys.replace(",", " ").split()
+            if key.strip()
+        )
+        kwargs["common_control_keys"] = ",".join(sorted(explicit_controls))
+        current_runtype = str(
+            self._owner.config_typed.get("input", {}).get("runtype", "energy")
+        ).strip().lower()
+        if current_runtype == "namd":
+            # ``md`` composes common nuclear controls with NAMD.  Preserve the
+            # electronic-dynamics driver regardless of Python call order.
+            return _SectionProxy.__call__(self, **kwargs)
         return super().__call__(**kwargs)
 
 
@@ -395,10 +528,13 @@ class _WorkflowProxy:
         object.__setattr__(self, "pcm", _WorkflowPcmProxy(owner))
         object.__setattr__(self, "nmr", _WorkflowNmrProxy(owner))
         object.__setattr__(self, "soc", _WorkflowSocProxy(owner))
+        object.__setattr__(self, "md", _WorkflowMDProxy(owner))
         # Nonadiabatic MD (Tully surface hopping); MRSF-TDDFT only, [md] section.
         # Gas-phase by default; combine with job.qmmm(...) for QM/MM NAMD and
         # pass soc=True (with optional soc_basis) for SOC-NAMD.
         object.__setattr__(self, "namd", _WorkflowNAMDProxy(owner))
+        # External CCpy coupled cluster on the HF orbitals; returns the driver.
+        object.__setattr__(self, "ccpy", owner.ccpy)
 
     def __call__(self, runtype=None, **kwargs):
         return self._owner._control(
@@ -439,11 +575,13 @@ class _ControlProxy:
     def __init__(self, owner):
         object.__setattr__(self, "_owner", owner)
 
-    def __call__(self, runtype=None, omp_threads=None, usempi=None, **kwargs):
+    def __call__(self, runtype=None, omp_threads=None, usempi=None, verbose=None,
+                 **kwargs):
         return self._owner._control(
             runtype=runtype,
             omp_threads=omp_threads,
             usempi=usempi,
+            verbose=verbose,
             **kwargs,
         )
 
@@ -473,6 +611,7 @@ class OpenQP:
         self.unit = "Angstrom"
         self.runner = None
         self.mol = None
+        self._mol_config = None
         self.theory = _TheoryProxy(self)
         self.workflow = _WorkflowProxy(self)
         self.settings = _SettingsProxy(self)
@@ -583,12 +722,22 @@ class OpenQP:
 
         ``frontier_scheme`` sets the MM frontier-host (M1) charge treatment when
         the QM/MM partition cuts a covalent bond in the ESPF path:
-        ``'none'`` (default, the validated full-field ESPF baseline), or the
-        optional redistributions ``'rcd'`` / ``'rc'`` / ``'z1'``. It is a no-op
-        for whole-molecule QM regions. Covalent QM/MM boundaries are handled by
-        the ground-state QM/MM MD path (``QMMM_MD``); the nonadiabatic
-        ``runtype=namd`` path does not yet append link atoms to its QM molecule
-        and raises on a covalent cut.
+        ``'rcd'`` (default), ``'rc'`` or ``'z1'`` redistribute or delete the M1
+        charge; ``'none'`` keeps the full M1 charge next to the link hydrogen,
+        which makes the ESPF energy unbounded below (issue #551) and is kept
+        for comparisons only. It is a no-op for whole-molecule QM regions. Covalent QM/MM boundaries (hydrogen
+        link atoms) are handled by single-point energies, the ground-state
+        QM/MM MD path (``QMMM_MD``) and the nonadiabatic ``runtype=namd``
+        paths (FSSH and SOC-NAMD); for NAMD the QM molecule must be built from
+        the PDB (``job.molecule("file.pdb <1-based indices>")``) so the link
+        hydrogens are appended.
+
+        Periodic solvated systems (``cutoff='PME'`` / ``'Ewald'``) use Ewald
+        electrostatics with a self-consistent QM-image term. Related
+        ``[qmmm]`` keys: ``ewald_tol`` (OpenMM PME tolerance), ``lj_switch``
+        (switched Lennard-Jones cutoff), ``h_lj`` (Lennard-Jones parameters on
+        MM hydrogens that have none) and ``mm_charge_width`` (Gaussian-smeared
+        MM charges, width in Angstrom).
 
         Any other ``[qmmm]`` keyword can be passed through as a keyword argument.
         """
@@ -603,8 +752,11 @@ class OpenQP:
         inferred_pdb, inferred_qm_atoms = self._qmmm_selection_from_system(system)
         if pdb_file is None:
             pdb_file = inferred_pdb
-        if qm_atoms is None:
-            qm_atoms = inferred_qm_atoms
+        if qm_atoms is None and inferred_qm_atoms is not None:
+            # the selector after the PDB path in [input] system is one-based
+            # (the Fortran-side convention); [qmmm] qm_atoms is a zero-based
+            # OpenMM topology selection, so an inferred selector is shifted
+            qm_atoms = self._zero_based_selector(inferred_qm_atoms)
 
         self.set(**{"input.qmmm_flag": True})
         updates = {}
@@ -626,6 +778,21 @@ class OpenQP:
         if updates:
             self.section("qmmm", **updates)
         return self
+
+    @staticmethod
+    def _zero_based_selector(selector):
+        """``"9 10 17-19"`` (one-based, as written after a PDB path in
+        ``[input] system``) -> ``"8 9 16-18"`` (zero-based ``[qmmm] qm_atoms``)."""
+        out = []
+        for token in str(selector).replace(",", " ").split():
+            lo, hi = (token.split("-", 1) if "-" in token else (token, token))
+            lo, hi = int(lo), int(hi)
+            if lo < 1 or hi < lo:
+                raise ValueError(
+                    f"QM atom selector {token!r} after the PDB path is one-based "
+                    "(first atom = 1); pass qm_atoms=[...] to give zero-based indices")
+            out.append(f"{lo - 1}-{hi - 1}" if "-" in token else str(lo - 1))
+        return " ".join(out)
 
     @staticmethod
     def _qmmm_selection_from_system(system):
@@ -653,8 +820,10 @@ class OpenQP:
             return False
         return bool(text and "\n" not in text and ";" not in text and " " not in text)
 
-    def _control(self, runtype=None, omp_threads=None, usempi=None, **kwargs):
-        """Set run-level controls such as runtype, OpenMP, and optimization options."""
+    def _control(self, runtype=None, omp_threads=None, usempi=None, verbose=None,
+                 **kwargs):
+        """Set run-level controls such as runtype, OpenMP, log verbosity, and
+        optimization options."""
         updates = {}
         section_runtype = runtype
         if runtype is not None and str(runtype).lower() == "pcm":
@@ -664,6 +833,9 @@ class OpenQP:
             updates["input.runtype"] = runtype
         if omp_threads is not None:
             updates["input.omp_threads"] = omp_threads
+        if verbose is not None:
+            # [input] verbose: 0 quiet, 1 normal, 2 detailed, 3 debug.
+            updates["input.verbose"] = verbose
         if usempi is not None:
             self.usempi = self._as_bool(usempi, option="usempi")
         if updates:
@@ -1031,10 +1203,45 @@ class OpenQP:
         kwargs["triples"] = True
         return self.ccsd(**kwargs)
 
+    def ccpy(self, nfrozen=0, ndelete=0, **kwargs):
+        """Return a driver of the external CCpy coupled-cluster library.
+
+        Runs the job first when it has not run yet, or when its configuration
+        changed since the last run; the job must then be a
+        Hartree-Fock (RHF, ROHF or UHF) single point, the default of
+        ``molecule(...)``. CCpy is downloaded on first use; see
+        :mod:`oqp.interop.ccpy`. Unlike the setup helpers this returns the
+        CCpy driver, not ``self``::
+
+            driver = OpenQP("h2o").molecule(geometry="water", basis="cc-pvdz").ccpy(nfrozen=1)
+            driver.run_cc(method="ccsd")
+        """
+        # Reuse a finished run only when the job has not been changed since;
+        # set()/molecule() edit config_str but leave the old integrals,
+        # orbitals and SCF energy on self.mol.
+        # Checked for a finished run too: a completed method=ccsd job holds a
+        # correlated energy, and nothing may be downloaded for it.
+        config = self.config_str
+        method = str(config.get("input", {}).get("method", "hf")).lower()
+        functional = str(config.get("input", {}).get("functional", "") or "")
+        if method != "hf" or functional:
+            raise ValueError(
+                "OpenQP.ccpy() needs a Hartree-Fock reference: use method='hf' "
+                f"without a functional (got method={method!r}, "
+                f"functional={functional!r}).")
+        if self.mol is None or self._mol_config != config:
+            self.run()
+        from oqp.interop.ccpy import driver_from_openqp
+        return driver_from_openqp(self.mol, nfrozen=nfrozen, ndelete=ndelete, **kwargs)
+
     def mp2(self, reference="rhf", runtype=None, multiplicity=None,
             basis=None, variant=None, same_spin_scale=None,
-            opposite_spin_scale=None, **scf_keywords):
+            opposite_spin_scale=None, transform=None, **scf_keywords):
         """Use a compact OpenQP MP2 setup for energy or analytic-gradient jobs."""
+        if transform is not None:
+            transform = str(transform).strip().lower()
+            if transform not in {"auto", "direct", "n5"}:
+                raise ValueError("mp2.transform must be auto, direct, or n5")
         if runtype is None:
             runtype = "energy"
         elif str(runtype).lower() not in {"energy", "grad", "optimize", "ts", "mep", "irc"}:
@@ -1079,6 +1286,8 @@ class OpenQP:
             self._set_optimize_options(istate=0)
 
         mp2_updates = {}
+        if transform is not None:
+            mp2_updates["transform"] = transform
         if variant is not None:
             mp2_updates["variant"] = variant
         if same_spin_scale is not None:
@@ -1539,8 +1748,14 @@ class OpenQP:
 
     def _response_theory(self, functional="", basis=None, runtype=None,
                          nstate=3, reference="rhf", multiplicity=1,
-                         response_type=None, **tdhf_keywords):
-        """Use a compact OpenQP TDHF/TDDFT response setup."""
+                         response_type=None, state_multiplicity=None,
+                         **tdhf_keywords):
+        """Use a compact OpenQP TDHF/TDDFT response setup.
+
+        ``multiplicity`` is the SCF reference multiplicity ([scf]);
+        ``state_multiplicity`` is the excited-state multiplicity ([tdhf]), e.g.
+        3 for closed-shell triplet RPA/TDA on an RHF/RKS reference.
+        """
         input_updates = {"method": "tdhf", "functional": functional or ""}
         if runtype is not None:
             input_updates["runtype"] = runtype
@@ -1557,6 +1772,8 @@ class OpenQP:
             self.scf(**scf_updates)
 
         updates = {"nstate": nstate}
+        if state_multiplicity is not None:
+            updates["multiplicity"] = state_multiplicity
         if response_type is not None:
             requested_type = tdhf_keywords.pop("type", response_type)
             if str(requested_type).lower() != str(response_type).lower():
@@ -1872,6 +2089,10 @@ class OpenQP:
             "beta_schedule": "pen_jump",
             "gap": "energy_gap",
         }
+        if active_runtype == "ts":
+            public_aliases.update(search="ts_search", product="ts_product", guess="ts_guess")
+        elif active_runtype == "neb":
+            public_aliases.update(interpolation="neb_interpolation")
         for public, internal in public_aliases.items():
             if public not in requested:
                 continue
@@ -1983,6 +2204,38 @@ class OpenQP:
             else:
                 flat_updates[key] = value
 
+        marker_key = "md.common_control_keys"
+        existing_controls = {
+            key.strip()
+            for key in str(
+                self.config_typed.get("md", {}).get(
+                    "common_control_keys", ""
+                ) or ""
+            ).replace(",", " ").split()
+            if key.strip()
+        }
+        marker_provided = marker_key in flat_updates
+        if marker_provided:
+            existing_controls.update(
+                key.strip()
+                for key in str(flat_updates[marker_key] or "")
+                .replace(",", " ").split()
+                if key.strip()
+            )
+        else:
+            for key in tuple(flat_updates):
+                canonical_key, _ = self._canonicalize_key_value(
+                    key, flat_updates[key]
+                )
+                section, option = resolve_param_key(canonical_key)
+                if (section == "md"
+                        and option in _MD_COMMON_SCHEMA_OPTIONS):
+                    existing_controls.add(option)
+            if existing_controls:
+                flat_updates["md.common_controls"] = True
+        if marker_provided or existing_controls:
+            flat_updates[marker_key] = ",".join(sorted(existing_controls))
+
         for key, value in flat_updates.items():
             canonical_key, canonical_value = self._canonicalize_key_value(key, value)
             sec, opt = resolve_param_key(canonical_key)
@@ -2028,6 +2281,9 @@ class OpenQP:
         )
         self.runner.run()
         self.mol = self.runner.mol
+        # The configuration this molecule was computed with; consumers of the
+        # finished run (ccpy) compare it with the current one.
+        self._mol_config = deepcopy(self.config_str)
         return self.mol
 
     def _canonicalize_key_value(self, key, value):
@@ -2041,7 +2297,7 @@ OQP = OpenQP
 
 
 class OPENQP:
-    def __init__(self, cfg: dict, silent: bool = False):
+    def __init__(self, cfg: dict, silent: bool = False, append_log: bool = False):
         parser = OQPConfigParser(schema=OQP_CONFIG_SCHEMA)
         for k, v in cfg.items():
             if k == "input.system":
@@ -2054,14 +2310,18 @@ class OPENQP:
         self.config_str = self._dump_strings_from_parser(parser)
         self.config_typed = parser.validate()
 
-        self.runner = Runner(
+        runner_kwargs = dict(
             project="oqp_project",
             input_file=None,
             log="oqp_project.log",
             input_dict=self.config_str,
             silent=1 if silent else 0,
-            usempi=True
+            usempi=True,
         )
+        if append_log:
+            # only when used, so Runner stand-ins with the older signature work
+            runner_kwargs["append_log"] = True
+        self.runner = Runner(**runner_kwargs)
         self.mol = self.runner.mol
 
     @property

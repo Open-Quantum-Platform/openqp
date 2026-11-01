@@ -121,17 +121,26 @@ REGISTRY = (
     # sidecar. 'hess' is the raw matrix (mapped from sidecar 'hessian').
     RegKey('hess', runtypes=frozenset({'hess'}), required=True, source='sidecar',
            sidecar_field='hessian'),
-    RegKey('freqs', runtypes=frozenset({'hess'}), required=True, source='sidecar'),
+    # Frequencies of 10^3-10^4 cm^-1 under the absolute round(diff,4) gate
+    # demand ~9 significant figures. A finite-difference Hessian cannot hold
+    # that from run to run: gradient noise at the 1e-10 convergence level
+    # divided by dx moves H2 RPA S1 (4884.88 cm^-1, dx=0.001) by up to 4e-4
+    # cm^-1 between otherwise identical threaded runs. A relative 1e-6
+    # (5e-3 cm^-1 at 5000 cm^-1) is still far below any physically meaningful
+    # or regression-sized change (>= 0.1 cm^-1).
+    RegKey('freqs', runtypes=frozenset({'hess'}), required=True, source='sidecar',
+           rtol=1e-6),
     # IR intensities and Raman activities are second-order response properties
-    # (dipole / polarizability derivatives over the analytic Hessian). They are
-    # far more sensitive to the SCF convergence *path* than the energy or the
-    # Hessian itself: an SCF that converges to the same energy via a different
-    # route (e.g. the coarse->fine XC grid ramp, integral screening, a different
-    # guess/BLAS order) shifts the converged density at ~1e-6 and these
-    # quantities amplify that to ~1e-4 (IR) / ~1e-3 (Raman) -- above the global
-    # round(diff,4) ~5e-5 gate, while the energy stays bit-identical. Compare
-    # them with a small relative tolerance (a genuine regression is orders of
-    # magnitude larger). Same rationale as the SOC rtol below.
+    # (dipole / polarizability derivatives over the analytic Hessian) with
+    # magnitudes up to ~1e3, so the absolute round(diff,4) gate alone would
+    # demand 7-8 significant figures; a different SCF convergence path (XC grid
+    # ramp, integral screening, guess or BLAS order) moves them more than the
+    # energy.  Measured 2026-10-10 on the default path (26 HESS/ECP example
+    # outputs from two zeus x86_64 builds against these references): max
+    # relative drift 3.3e-7 (IR) and 2.1e-7 (Raman).  Both tolerances below
+    # therefore keep a >=300x margin over that drift, while a genuine
+    # regression (a wrong derivative or missing response term) is many orders
+    # of magnitude larger.  Same rationale as the SOC rtol below.
     RegKey('infrared_intensities', runtypes=frozenset({'hess'}),
            required=True, source='sidecar', rtol=1e-3),
     RegKey('raman_activities', runtypes=frozenset({'hess'}),
@@ -159,11 +168,14 @@ REGISTRY = (
     # (Debug vs Release, OpenBLAS vs Accelerate, response integral cutoff). Use a
     # relative tolerance instead; a real SOC regression is >>1e-6 relative, and
     # the response itself stays exact-checked via td_*_energies below.
-    RegKey('soc', runtypes=frozenset({'soc'}), required=True, rtol=1e-6),
+    RegKey('soc', runtypes=frozenset({'soc', 'prop', 'data'}), required=False, rtol=1e-6),
     # A SOC run computes both spin-resolved excitation ladders; the public
     # td_energies mirrors only one, so test the singlet and triplet explicitly.
-    RegKey('td_singlet_energies', runtypes=frozenset({'soc'}), required=True),
-    RegKey('td_triplet_energies', runtypes=frozenset({'soc'}), required=True),
+    # Not `required`: the prop/data references predate properties.soc, and a
+    # key that is missing there must not fail -- it is still compared wherever
+    # a run publishes it.
+    RegKey('td_singlet_energies', runtypes=frozenset({'soc', 'prop', 'data'}), required=False),
+    RegKey('td_triplet_energies', runtypes=frozenset({'soc', 'prop', 'data'}), required=False),
     # Non-adiabatic / derivative couplings are sign/phase ambiguous between
     # runs, so compare magnitudes.
     RegKey('nac', runtypes=frozenset({'nac', 'nacme'}), required=True,
@@ -174,6 +186,45 @@ REGISTRY = (
     # above, is sensitive to the SCF convergence path well beyond the energy;
     # compare with a small relative tolerance (a real regression is far larger).
     RegKey('nmr_shielding', runtypes='*', required=True, needs_prop='nmr', rtol=1e-4),
+    # Multi-root wavefunction results.  Not `required`: the correlated
+    # references predate these keys and are skipped until regenerated, exactly
+    # as td_trans_dipole above.  Without them a multistate reference pins only
+    # the lowest mixed root, so a regression in any higher root, in a
+    # state-specific correction, or in the off-diagonal couplings of the
+    # effective Hamiltonian is invisible.
+    RegKey('casscf_energies', runtypes='*', required=False),
+    RegKey('caspt2_energies', runtypes='*', required=False),
+    RegKey('caspt2_reference_energies', runtypes='*', required=False),
+    RegKey('caspt2_ss_energies', runtypes='*', required=False),
+    RegKey('caspt2_state_specific_corrections', runtypes='*', required=False),
+    # Compared ABSOLUTELY, unlike the other response-path quantities above: the
+    # symmetry-forbidden off-diagonals of Heff are exact zeros carrying only
+    # round-off, so a relative test on them is meaningless -- 6.5e-18 against
+    # -2.9e-16 is a factor of 45 and a green run looks like a regression. The
+    # elements that mean anything are O(1) Hartree, where the default
+    # round(diff, 4) gate sits far above the ~4e-12 run-to-run noise and far
+    # below any real regression.
+    # Compared WITH its sign, unlike nac and td_trans_dipole. An off-diagonal
+    # H_IJ does carry the product of two CI-root phases, and those phases used
+    # to be whatever the diagonalization happened to return -- H4_MCQDPT2 gave
+    # +6.085e-03 on one and two OpenMP threads of one build and -6.085e-03 on
+    # four, a 2x6.085e-03 "regression" on a calculation that had not moved.
+    # That is now fixed where it arises rather than hidden here: the canonical
+    # CI phase (canonical_phase in fci_driver.F90, canonicalize_ci_phase in
+    # fci.py) pins every root, and _xms_rotation pins the XMS rotation columns.
+    # The sign is therefore a property of the calculation again, and a flip is
+    # a real regression rather than a coin toss.
+    RegKey('caspt2_effective_hamiltonian', runtypes='*', required=False),
+    # Determinant-CI roots and their <S^2>.  Not `required`, as above: the
+    # existing FCI/CASCI references predate the keys.  <S^2> is compared
+    # because inside a degenerate cluster it is the ONLY thing that separates
+    # the roots -- a singlet and a triplet there have the same energy to
+    # solver precision, so an energy-only reference passes whichever one a
+    # target_spin request returns.
+    RegKey('fci_energies', runtypes='*', required=False),
+    RegKey('fci_s2', runtypes='*', required=False),
+    RegKey('casci_energies', runtypes='*', required=False),
+    RegKey('casci_s2', runtypes='*', required=False),
     # SCF property results, each gated on its requested scf_prop value.
     RegKey('dipole', runtypes='*', required=True, needs_prop='el_mom'),
     RegKey('mulliken_charges', runtypes='*', required=True, needs_prop='mulliken'),
@@ -262,7 +313,8 @@ def _context_from_input(inp_path):
         props = [p.strip().lower() for p in re.split(r'[,\s]+', raw_props) if p.strip()]
         return runtype, excited, props
     try:
-        text = open(inp_path, 'r').read()
+        with open(inp_path, 'r') as handle:
+            text = handle.read()
     except OSError:
         return 'energy', False, []
     m = re.search(r'^\s*runtype\s*=\s*(\w+)', text, re.I | re.M)
@@ -361,6 +413,7 @@ EXEMPT_FLAGS = {
     'guess.continue_geom': 'JSON-restart geometry-selection IO convenience',
     'symmetry.strict': 'validation guard (mismatch -> fatal error), not a capability',
     'scf.trh_ls': 'TRAH line-search numerical sub-knob',
+    'flexible.keep_below_threshold': 'numerical sub-knob of the FlexiBLE partition-sum truncation (an option of the authors\' reference kernel); compared with that plugin in tests/test_flexible_boundary.py',
     'properties.td_prop': 'unfinished placeholder; input checker warns to disable',
     'properties.export': 'writes already-computed data to text (pure IO toggle)',
     'properties.back_door': 'programmatic data-injection hook for external drivers',
@@ -370,6 +423,9 @@ EXEMPT_FLAGS = {
     'nac.restart': 'reload cached .dcme scratch in numerical NAC (IO restart)',
     'nac.clean': 'rmtree numerical-NAC scratch after run (IO cleanup)',
     'tests.exception': 'test-harness toggle (raise vs exit on non-convergence)',
+    'md.common_controls': 'internal lowering marker that distinguishes explicit '
+                          'md(...) controls from legacy qmmm defaults; not a '
+                          'user-selectable dynamics capability',
     'md.restart': 'reload saved NAMD trajectory state (IO restart)',
     'md.econs': 'per-step velocity rescale to conserve E_tot; numerical stabilizer sub-knob',
     'md.soc_du_dt_corr': 'SOC adiabatic-basis dU/dt gradient correction; diagnostic numerical sub-knob',
@@ -412,7 +468,8 @@ def _optin_bool_flags(schema_file=None):
     """{`section.option`: default} for every bool schema keyword default False."""
     import ast
     src = schema_file or _SCHEMA_FILE
-    tree = ast.parse(open(src).read())
+    with open(src) as handle:
+        tree = ast.parse(handle.read())
     node = next((n.value for n in ast.walk(tree)
                  if isinstance(n, ast.Assign)
                  and any(getattr(t, 'id', '') == 'OQP_CONFIG_SCHEMA'
@@ -444,8 +501,9 @@ def _flag_exercised_true(option, examples_dir):
                      r'(true|t|1|yes|\.true\.)\s*(#.*)?$', re.I | re.M)
     for inp in glob.glob(os.path.join(examples_dir, '**', '*.inp'), recursive=True):
         try:
-            if pat.search(open(inp).read()):
-                return True
+            with open(inp) as handle:
+                if pat.search(handle.read()):
+                    return True
         except OSError:
             continue
     return False

@@ -5,6 +5,8 @@ module int1e_mod
   character(len=*), parameter :: module_name = "int1e_mod"
 
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: int1e_C
   public int1e
 
 contains

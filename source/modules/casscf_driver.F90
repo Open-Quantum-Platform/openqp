@@ -137,6 +137,8 @@ module casscf_driver_mod
   use oqp_linalg
   implicit none
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: casscf_energy_C
 
   integer, parameter :: i8 = c_int64_t
   integer, parameter :: dp = c_double
@@ -937,9 +939,9 @@ contains
     call cas_fused_core_sweep(n, na, nc, ctx%eri_ao, ctx%hcore, cbuf, &
                               ctx%dcore, ctx%js, ctx%ks, ctx%fao, ctx%tp1)
     ! W_core = C^T F_core C
-    call dgemm('N', 'N', n, n, n, 1.0_dp, cbuf(0, 0), n, ctx%fao(0, 0), n, &
+    call dgemm('N', 'N', n, n, n, 1.0_dp, cbuf, n, ctx%fao(0, 0), n, &
                0.0_dp, ctx%tmw(0, 0), n)
-    call dgemm('N', 'T', n, n, n, 1.0_dp, ctx%tmw(0, 0), n, cbuf(0, 0), n, &
+    call dgemm('N', 'T', n, n, n, 1.0_dp, ctx%tmw(0, 0), n, cbuf, n, &
                0.0_dp, ctx%wcore(0, 0), n)
     efold = 0.0_dp
     do b = 0_i8, int(n, i8) - 1_i8
@@ -1016,9 +1018,9 @@ contains
       call cas_act_fock(n, na, ctx%tp2, ctx%yten, ctx%g1(off1), ctx%fao, &
                         ctx%js, ctx%ks, ctx%dwork)
       ! W_k = C^T F_k C
-      call dgemm('N', 'N', n, n, n, 1.0_dp, cbuf(0, 0), n, ctx%dwork(0, 0), &
+      call dgemm('N', 'N', n, n, n, 1.0_dp, cbuf, n, ctx%dwork(0, 0), &
                  n, 0.0_dp, ctx%tmw(0, 0), n)
-      call dgemm('N', 'T', n, n, n, 1.0_dp, ctx%tmw(0, 0), n, cbuf(0, 0), n, &
+      call dgemm('N', 'T', n, n, n, 1.0_dp, ctx%tmw(0, 0), n, cbuf, n, &
                  0.0_dp, ctx%wmo(int(k, i8) * int(n, i8)**2), n)
     end do
     call casscf_gfock_grad_w(n, nc, na, ctx%nstate, ctx%weights, ctx%g1, &
@@ -1081,6 +1083,7 @@ contains
     prov%nparam = npar
     prov%ctx => ctx
     prov%mode = hessmode
+    prov%hess_vec_is_linear = hessmode == 1
     prov%fdstep = fdstep
     allocate(prov%cbuf(0:n-1, 0:n-1), prov%ctry(0:n-1, 0:n-1), &
              prov%gcur(0:npar-1), prov%gp(0:npar-1), prov%gm(0:npar-1), &
@@ -2347,11 +2350,17 @@ contains
   !>
   !> Note the density: the Python uses the ROOT-0 CI density with weight 1.0
   !> even for SA-CASSCF (`_solve_active(..., [1.0], [0])`), so this does too.
+  !> The two paths must move together or the default native converger and the
+  !> Python fallback would publish different orbitals.  No energy depends on
+  !> the choice and the PT2 modules semicanonicalize for themselves; it decides
+  !> only what the published orbitals mean.  Documented for users in
+  !> openqp-devkit docs/casscf_orbital_conventions.md (issue #338).
   subroutine canonicalize(ctx, cbuf, status)
     type(cas_ctx_t), intent(inout) :: ctx
-    real(dp), contiguous, intent(inout) :: cbuf(0:,0:)
+    real(dp), contiguous, target, intent(inout) :: cbuf(0:,0:)
     integer(i8), intent(inout) :: status
 
+    real(dp), contiguous, pointer :: cstorage(:)
     real(dp), allocatable :: dmat(:), feff(:), sub(:,:), evals(:), blk(:,:)
     integer :: n, nc, na, i, j, ierr, lo, hi, m, b
     integer(i8) :: rc, jd
@@ -2437,7 +2446,10 @@ contains
       end if
       ! Cnew[:, idx] = C[:, idx] @ V, i.e. in the C-order buffer (MO index
       ! first) blk = V^T * cbuf(lo:hi, :).
-      call dgemm('T', 'N', m, n, m, 1.0_dp, sub, m, cbuf(lo, 0), n, &
+      ! Borrow the contiguous storage with its original column stride. The
+      ! view stays inside this call and adds no row-section packing allocation.
+      cstorage(1:n*n) => cbuf
+      call dgemm('T', 'N', m, n, m, 1.0_dp, sub, m, cstorage(lo+1:), n, &
                  0.0_dp, blk, m)
       do i = 1, m
         do j = 0, n - 1

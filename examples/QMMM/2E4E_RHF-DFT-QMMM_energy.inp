@@ -1,9 +1,20 @@
+# QM/MM on a real peptide (2E4E, 129 atoms, AMBER-14), legacy-section form of
+# 2E4E_RHF-DFT-QMMM_energy.oqp: one step of ground-state QM/MM dynamics, i.e.
+# the embedded QM/MM energy and forces at the input geometry.
+# QM = GLY1 plus the TYR2 backbone N/CA, so the partition cuts the TYR2 CA-CB
+# bond; it is capped with a hydrogen link atom.  The N-terminal NH3+ gives the
+# QM region charge +1.  Takes about a minute; requires OpenMM.
+#
+# This used to be a runtype=energy deck.  The plain single-point route never
+# builds the ESPF embedding records (OQP::ESPF_CORR / OQP::POTQM) -- only the
+# force-based QM/MM driver behind runtype=md/optimize/namd does -- so it
+# aborted inside the SCF.  One md step is the supported spelling.
 [input]
-system=2E4E.pdb 1 2 5 6 7 8 9 3 4 10 22 11 23
+system=2E4E.pdb 1 2 3 4 5 6 7 8 9 10 11 22 23
 charge=1
-runtype=energy
+runtype=md
 functional=bhhlyp
-basis=6-31gs
+basis=6-31g*
 method=hf
 qmmm_flag=True
 
@@ -17,3 +28,12 @@ type=rhf
 [dftgrid]
 rad_type=becke
 
+[qmmm]
+pdb_file=2E4E.pdb
+forcefield_files=amber14-all.xml
+qm_atoms=0-10,21,22
+cutoff=NoCutoff
+embedding=electrostatic
+n_steps=1
+timestep=0.5
+ensemble=nve
