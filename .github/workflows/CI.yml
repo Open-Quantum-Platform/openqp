@@ -363,7 +363,11 @@ jobs:
             # unrelated tests, so the set of failures depends on execution
             # order. One process per test makes the result deterministic.
             # xdist on top of it recovers the wall-clock the isolation costs.
-            pip install pytest pytest-xdist pytest-forked
+            # pytest < 9.2: pytest 9.2.0 keeps a report's node ID as a NodeId
+            # object, which pytest-forked 1.7.5 cannot marshal, so every test
+            # ends with "EXITED with status 3".  Drop the bound once a
+            # pytest-forked release handles it.
+            pip install 'pytest<9.2' pytest-xdist pytest-forked
             # Tests that need a build gate on OPENQP_ROOT. The installed package
             # self-locates via resolve_oqp_root(), so point the variable at the
             # package directory to opt those integration tests in rather than
